@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 enum SpatialTrackingState { tracking, limited, paused, stopped }
 
 class SpatialAnchor {
@@ -40,6 +42,53 @@ class SpatialAnchor {
         ),
         updatedAt: DateTime.parse(json['updatedAt']! as String),
       );
+}
+
+class NativeSpatialTransform {
+  NativeSpatialTransform._({
+    required this.matrixColumnMajor,
+    required this.widthMeters,
+    required this.heightMeters,
+    required this.depthMeters,
+  });
+
+  final List<double> matrixColumnMajor;
+  final double widthMeters;
+  final double heightMeters;
+  final double depthMeters;
+
+  factory NativeSpatialTransform.forFloorPlacement(SpatialPlacement value) {
+    if (value.plane != 'floor') {
+      throw ArgumentError.value(value.plane, 'plane',
+          'A floor anchor transform requires floor placement.');
+    }
+    final radians = value.rotationDegrees * math.pi / 180;
+    final cosine = math.cos(radians);
+    final sine = math.sin(radians);
+    return NativeSpatialTransform._(
+      matrixColumnMajor: List<double>.unmodifiable(<num>[
+        cosine,
+        0,
+        -sine,
+        0,
+        0,
+        1,
+        0,
+        0,
+        sine,
+        0,
+        cosine,
+        0,
+        value.offsetXMm / 1000,
+        value.offsetZMm / 1000,
+        -value.offsetYMm / 1000,
+        1,
+      ].map((value) => value.toDouble())),
+      widthMeters: value.widthMm / 1000,
+      heightMeters: value.heightMm / 1000,
+      depthMeters: value.depthMm / 1000,
+    );
+  }
 }
 
 class SpatialPlacement {
@@ -109,6 +158,8 @@ class SpatialPlacement {
         isLocked: isLocked ?? this.isLocked,
         anchor: anchor ?? this.anchor,
       );
+  NativeSpatialTransform toFloorAnchorTransform() =>
+      NativeSpatialTransform.forFloorPlacement(this);
   SpatialPlacement attachAnchor(SpatialAnchor value) => copyWith(anchor: value);
 
   SpatialPlacement detachAnchor() => SpatialPlacement(

@@ -139,4 +139,51 @@ void main() {
     expect(restored.detachAnchor().anchor, isNull);
     expect(restored.detachAnchor().isLocked, isFalse);
   });
+
+  test('floor placement converts millimetres to shared native AR transform',
+      () {
+    final placement = SpatialPlacement(
+      id: 'transform-1',
+      name: 'Floor unit',
+      createdAt: DateTime.utc(2026, 7, 14),
+      source: 'camera_ar',
+      plane: 'floor',
+      widthMm: 1200,
+      heightMm: 800,
+      depthMm: 600,
+      offsetXMm: 1500,
+      offsetYMm: 2000,
+      offsetZMm: 250,
+      rotationDegrees: 90,
+    );
+    final native = placement.toFloorAnchorTransform();
+    expect(native.widthMeters, 1.2);
+    expect(native.heightMeters, 0.8);
+    expect(native.depthMeters, 0.6);
+    expect(native.matrixColumnMajor[12], 1.5);
+    expect(native.matrixColumnMajor[13], 0.25);
+    expect(native.matrixColumnMajor[14], -2.0);
+    expect(native.matrixColumnMajor[0], closeTo(0, 1e-12));
+    expect(native.matrixColumnMajor[2], closeTo(-1, 1e-12));
+    expect(native.matrixColumnMajor[8], closeTo(1, 1e-12));
+    expect(native.matrixColumnMajor[15], 1);
+  });
+
+  test('floor transform rejects a mismatched anchor plane', () {
+    final placement = SpatialPlacement(
+      id: 'transform-wall',
+      name: 'Wall unit',
+      createdAt: DateTime.utc(2026, 7, 14),
+      source: 'manual',
+      plane: 'wall',
+      widthMm: 100,
+      heightMm: 100,
+      depthMm: 100,
+      offsetXMm: 0,
+      offsetYMm: 0,
+      offsetZMm: 0,
+      rotationDegrees: 0,
+    );
+    expect(placement.toFloorAnchorTransform, throwsArgumentError);
+  });
 }
