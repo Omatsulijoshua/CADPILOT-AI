@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-enum SketchTool { select, line, rectangle, circle, arc }
+enum SketchTool { select, rough, line, rectangle, circle, arc }
 
 enum SketchEntityKind { line, rectangle, circle, arc }
 
@@ -16,20 +16,23 @@ class SketchEntity {
       required this.start,
       required this.end,
       this.constraint,
-      this.dimensionLocked = false});
+      this.dimensionLocked = false,
+      this.recognitionConfidence});
   final String id;
   final SketchEntityKind kind;
   final Offset start;
   final Offset end;
   final SketchConstraint? constraint;
   final bool dimensionLocked;
+  final double? recognitionConfidence;
 
   SketchEntity copyWith(
           {Offset? start,
           Offset? end,
           SketchConstraint? constraint,
           bool clearConstraint = false,
-          bool? dimensionLocked}) =>
+          bool? dimensionLocked,
+          double? recognitionConfidence}) =>
       SketchEntity(
         id: id,
         kind: kind,
@@ -37,6 +40,8 @@ class SketchEntity {
         end: end ?? this.end,
         constraint: clearConstraint ? null : constraint ?? this.constraint,
         dimensionLocked: dimensionLocked ?? this.dimensionLocked,
+        recognitionConfidence:
+            recognitionConfidence ?? this.recognitionConfidence,
       );
   SketchEntity translated(Offset delta) =>
       copyWith(start: start + delta, end: end + delta);
@@ -130,6 +135,8 @@ class SketchEntity {
         'end': [end.dx, end.dy],
         if (constraint != null) 'constraint': constraint!.name,
         'dimensionLocked': dimensionLocked,
+        if (recognitionConfidence != null)
+          'recognitionConfidence': recognitionConfidence,
       };
   factory SketchEntity.fromJson(Map<String, Object?> json) {
     final start = json['start']! as List<Object?>;
@@ -144,6 +151,8 @@ class SketchEntity {
           ? null
           : SketchConstraint.values.byName(json['constraint']! as String),
       dimensionLocked: (json['dimensionLocked'] as bool?) ?? false,
+      recognitionConfidence:
+          (json['recognitionConfidence'] as num?)?.toDouble(),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'sketch_models.dart';
+import 'sketch_recognition.dart';
 
 class SketchCanvas extends StatefulWidget {
   const SketchCanvas(
@@ -20,6 +21,8 @@ class _SketchCanvasState extends State<SketchCanvas> {
   Offset moveDelta = Offset.zero;
   Offset? hoverPoint;
   bool snapping = true;
+  final roughPoints = <Offset>[];
+  static const recognizer = RoughStrokeRecognizer();
   static const snapper = SketchSnapper();
   @override
   void initState() {
@@ -35,38 +38,53 @@ class _SketchCanvasState extends State<SketchCanvas> {
         moveDelta = Offset.zero;
       });
   void down(PointerDownEvent event) {
-    final point = tool == SketchTool.select || !snapping
-        ? event.localPosition
-        : snapper.snap(event.localPosition, history.document);
+    final point =
+        tool == SketchTool.select || tool == SketchTool.rough || !snapping
+            ? event.localPosition
+            : snapper.snap(event.localPosition, history.document);
     setState(() {
       pointerStart = point;
       pointerCurrent = point;
       moveDelta = Offset.zero;
       if (tool == SketchTool.select) history.selectAt(point);
+      if (tool == SketchTool.rough) roughPoints.add(point);
     });
   }
 
   void move(PointerMoveEvent event) {
     if (pointerStart == null) return;
     setState(() {
-      pointerCurrent = tool == SketchTool.select || !snapping
-          ? event.localPosition
-          : snapper.snap(event.localPosition, history.document);
+      pointerCurrent =
+          tool == SketchTool.select || tool == SketchTool.rough || !snapping
+              ? event.localPosition
+              : snapper.snap(event.localPosition, history.document);
+      if (tool == SketchTool.rough) roughPoints.add(event.localPosition);
       if (tool == SketchTool.select && history.selectedId != null) {
         moveDelta = pointerCurrent! - pointerStart!;
       }
     });
   }
 
-  void up(PointerUpEvent event) {
+  Future<void> up(PointerUpEvent event) async {
     if (pointerStart == null) return;
     if (tool == SketchTool.select) {
       if (history.selectedId != null && moveDelta.distance > 1) {
         history.moveSelected(moveDelta);
       }
+    } else if (tool == SketchTool.rough) {
+      final recognition = recognizer.recognize(roughPoints);
+      if (recognition != null && mounted) {
+        final corrected = await _confirmRecognition(recognition);
+        if (!mounted) return;
+        if (corrected != null) {
+          history.add(recognition.toEntity(const Uuid().v4(),
+              correctedKind: corrected));
+        }
+      }
     } else if (pointerCurrent != null &&
         (pointerCurrent! - pointerStart!).distance > 3) {
       final kind = switch (tool) {
+        SketchTool.rough => throw StateError('rough uses recognition'),
         SketchTool.line => SketchEntityKind.line,
         SketchTool.rectangle => SketchEntityKind.rectangle,
         SketchTool.circle => SketchEntityKind.circle,
@@ -83,8 +101,32 @@ class _SketchCanvasState extends State<SketchCanvas> {
       pointerStart = null;
       pointerCurrent = null;
       moveDelta = Offset.zero;
+      roughPoints.clear();
     });
     persist();
+  }
+
+  Future<SketchEntityKind?> _confirmRecognition(SketchRecognition recognition) {
+    return showDialog<SketchEntityKind>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm detected shape'),
+        content: Text(
+            '${recognition.kind.name} - ${(recognition.confidence * 100).round()}% confidence. Choose the intended editable shape.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Discard')),
+          OutlinedButton(
+              onPressed: () =>
+                  Navigator.pop(context, SketchEntityKind.rectangle),
+              child: const Text('Rectangle')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, SketchEntityKind.circle),
+              child: const Text('Circle')),
+        ],
+      ),
+    );
   }
 
   void undo() {
@@ -182,14 +224,20 @@ class _SketchCanvasState extends State<SketchCanvas> {
                   onPointerUp: up,
                   onPointerHover: (event) =>
                       setState(() => hoverPoint = event.localPosition),
-                  onPointerCancel: (_) => setState(() => hoverPoint = null),
+                  onPointerCancel: (_) => setState(() {
+                        hoverPoint = null;
+                        pointerStart = null;
+                        pointerCurrent = null;
+                        roughPoints.clear();
+                      }),
                   child: CustomPaint(
                       painter: SketchPainter(
                           document: history.document,
                           selectedId: history.selectedId,
                           preview: _preview(),
                           selectedDelta: moveDelta,
-                          hoverPoint: hoverPoint)))),
+                          hoverPoint: hoverPoint,
+                          roughStroke: roughPoints)))),
           Positioned(
               top: 16,
               left: 16,
@@ -198,6 +246,7 @@ class _SketchCanvasState extends State<SketchCanvas> {
                   scrollDirection: Axis.horizontal,
                   child: Row(children: [
                     _tool(Icons.near_me_outlined, 'Select', SketchTool.select),
+                    _tool(Icons.gesture, 'Rough', SketchTool.rough),
                     _tool(Icons.show_chart, 'Line', SketchTool.line),
                     _tool(Icons.rectangle_outlined, 'Rectangle',
                         SketchTool.rectangle),
@@ -276,11 +325,13 @@ class _SketchCanvasState extends State<SketchCanvas> {
           onSelectionChanged: (_) => choose(value)));
   SketchEntity? _preview() {
     if (tool == SketchTool.select ||
+        tool == SketchTool.rough ||
         pointerStart == null ||
         pointerCurrent == null) {
       return null;
     }
     final kind = switch (tool) {
+      SketchTool.rough => SketchEntityKind.line,
       SketchTool.line => SketchEntityKind.line,
       SketchTool.rectangle => SketchEntityKind.rectangle,
       SketchTool.circle => SketchEntityKind.circle,
@@ -298,12 +349,14 @@ class SketchPainter extends CustomPainter {
       required this.selectedId,
       required this.preview,
       required this.selectedDelta,
-      required this.hoverPoint});
+      required this.hoverPoint,
+      required this.roughStroke});
   final SketchDocument document;
   final String? selectedId;
   final SketchEntity? preview;
   final Offset selectedDelta;
   final Offset? hoverPoint;
+  final List<Offset> roughStroke;
   @override
   void paint(Canvas canvas, Size size) {
     final grid = Paint()
@@ -333,6 +386,18 @@ class SketchPainter extends CustomPainter {
       canvas.drawLine(hoverPoint! - const Offset(0, 11),
           hoverPoint! + const Offset(0, 11), hoverPaint);
     }
+    if (roughStroke.length > 1) {
+      final roughPaint = Paint()
+        ..color = const Color(0xffffbf69)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round;
+      final path = Path()..moveTo(roughStroke.first.dx, roughStroke.first.dy);
+      for (final point in roughStroke.skip(1)) {
+        path.lineTo(point.dx, point.dy);
+      }
+      canvas.drawPath(path, roughPaint);
+    }
     for (final entity in document.entities) {
       final displayed =
           entity.id == selectedId ? entity.translated(selectedDelta) : entity;
@@ -351,7 +416,10 @@ class SketchPainter extends CustomPainter {
           ? const Color(0xffffbf69)
           : previewing
               ? const Color(0xaa29d3b2)
-              : const Color(0xff29d3b2);
+              : entity.recognitionConfidence != null &&
+                      entity.recognitionConfidence! < 0.75
+                  ? const Color(0xffff7b7b)
+                  : const Color(0xff29d3b2);
     switch (entity.kind) {
       case SketchEntityKind.line:
         canvas.drawLine(entity.start, entity.end, paint);
