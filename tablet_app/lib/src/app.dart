@@ -178,9 +178,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     const SizedBox(height: 20),
                     FilledButton(
                         onPressed: busy ? null : submit,
-                        child: Text(busy
-                            ? 'Signing inÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦'
-                            : 'Sign in')),
+                        child: Text(busy ? 'Signing in...' : 'Sign in')),
                     const SizedBox(height: 12),
                     OutlinedButton(
                         onPressed: busy
@@ -343,7 +341,7 @@ class ProjectGrid extends ConsumerWidget {
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w700)),
                               Text(
-                                  'Revision ${project.revision} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ ${project.syncState == SyncState.synced ? 'Synced' : 'Saved locally'}',
+                                  'Revision ${project.revision} - ${project.syncState == SyncState.synced ? 'Synced' : 'Saved locally'}',
                                   style: Theme.of(context).textTheme.bodySmall),
                             ]),
                       )));
@@ -375,8 +373,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
   }
 
   void schedule(CadProject project) {
-    setState(() => status =
-        'SavingÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦');
+    setState(() => status = 'Saving...');
     autosave?.cancel();
     autosave = Timer(const Duration(milliseconds: 600), () async {
       await ref
@@ -527,7 +524,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                   sketch: project.sketch,
                   model: project.model,
                   onChanged: (model) async {
-                    setState(() => status = 'Saving model...');
+                    setState(() => status = 'Saving...');
                     await ref.read(projectsProvider.notifier).save(
                           project.copyWith(model: model),
                         );
@@ -537,7 +534,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
               : SketchCanvas(
                   document: project.sketch,
                   onChanged: (document) async {
-                    setState(() => status = 'Saving sketch...');
+                    setState(() => status = 'Saving...');
                     await ref.read(projectsProvider.notifier).save(
                           project.copyWith(sketch: document),
                         );
@@ -564,7 +561,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                           maxLines: 8,
                           decoration: const InputDecoration(
                               hintText:
-                                  'Add design intent, dimensions, or manufacturing notesÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦')),
+                                  'Add design intent, dimensions, or manufacturing notes...')),
                       const SizedBox(height: 20),
                       const Text('SYNC'),
                       const ListTile(
