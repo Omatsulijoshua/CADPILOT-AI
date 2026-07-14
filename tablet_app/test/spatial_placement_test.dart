@@ -102,4 +102,41 @@ void main() {
     expect(restored.copyWith(isLocked: false).isLocked, isFalse);
     expect(restored.copyWith(isLocked: false).id, placement.id);
   });
+
+  test('native anchor lifecycle persists and duplication can detach safely',
+      () {
+    final now = DateTime.utc(2026, 7, 14);
+    final placement = SpatialPlacement(
+      id: 'placement-anchor',
+      name: 'Pump',
+      createdAt: now,
+      source: 'camera_ar',
+      plane: 'floor',
+      widthMm: 500,
+      heightMm: 700,
+      depthMm: 400,
+      offsetXMm: 0,
+      offsetYMm: 0,
+      offsetZMm: 0,
+      rotationDegrees: 0,
+    );
+    final anchored = placement.attachAnchor(SpatialAnchor(
+      id: 'native-anchor-42',
+      platform: 'android',
+      trackingState: SpatialTrackingState.tracking,
+      updatedAt: now,
+    ));
+    final restored = SpatialPlacement.fromJson(anchored.toJson());
+    expect(restored.anchor?.id, 'native-anchor-42');
+    expect(restored.anchor?.trackingState, SpatialTrackingState.tracking);
+
+    final limited = restored.anchor!.copyWith(
+      trackingState: SpatialTrackingState.limited,
+      updatedAt: now.add(const Duration(seconds: 1)),
+    );
+    expect(restored.attachAnchor(limited).anchor?.trackingState,
+        SpatialTrackingState.limited);
+    expect(restored.detachAnchor().anchor, isNull);
+    expect(restored.detachAnchor().isLocked, isFalse);
+  });
 }

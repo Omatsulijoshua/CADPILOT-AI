@@ -1,3 +1,47 @@
+enum SpatialTrackingState { tracking, limited, paused, stopped }
+
+class SpatialAnchor {
+  const SpatialAnchor({
+    required this.id,
+    required this.platform,
+    required this.trackingState,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String platform;
+  final SpatialTrackingState trackingState;
+  final DateTime updatedAt;
+
+  SpatialAnchor copyWith({
+    SpatialTrackingState? trackingState,
+    DateTime? updatedAt,
+  }) =>
+      SpatialAnchor(
+        id: id,
+        platform: platform,
+        trackingState: trackingState ?? this.trackingState,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+
+  Map<String, Object?> toJson() => {
+        'id': id,
+        'platform': platform,
+        'trackingState': trackingState.name,
+        'updatedAt': updatedAt.toIso8601String(),
+      };
+
+  factory SpatialAnchor.fromJson(Map<String, Object?> json) => SpatialAnchor(
+        id: json['id']! as String,
+        platform: json['platform'] as String? ?? 'unknown',
+        trackingState: SpatialTrackingState.values.firstWhere(
+          (value) => value.name == json['trackingState'],
+          orElse: () => SpatialTrackingState.stopped,
+        ),
+        updatedAt: DateTime.parse(json['updatedAt']! as String),
+      );
+}
+
 class SpatialPlacement {
   const SpatialPlacement({
     required this.id,
@@ -13,6 +57,7 @@ class SpatialPlacement {
     required this.offsetZMm,
     required this.rotationDegrees,
     this.isLocked = false,
+    this.anchor,
   });
 
   final String id;
@@ -28,6 +73,7 @@ class SpatialPlacement {
   final double offsetZMm;
   final double rotationDegrees;
   final bool isLocked;
+  final SpatialAnchor? anchor;
 
   static const double trueScale = 1.0;
 
@@ -45,6 +91,7 @@ class SpatialPlacement {
     double? offsetZMm,
     double? rotationDegrees,
     bool? isLocked,
+    SpatialAnchor? anchor,
   }) =>
       SpatialPlacement(
         id: id ?? this.id,
@@ -60,6 +107,24 @@ class SpatialPlacement {
         offsetZMm: offsetZMm ?? this.offsetZMm,
         rotationDegrees: rotationDegrees ?? this.rotationDegrees,
         isLocked: isLocked ?? this.isLocked,
+        anchor: anchor ?? this.anchor,
+      );
+  SpatialPlacement attachAnchor(SpatialAnchor value) => copyWith(anchor: value);
+
+  SpatialPlacement detachAnchor() => SpatialPlacement(
+        id: id,
+        name: name,
+        createdAt: createdAt,
+        source: source,
+        plane: plane,
+        widthMm: widthMm,
+        heightMm: heightMm,
+        depthMm: depthMm,
+        offsetXMm: offsetXMm,
+        offsetYMm: offsetYMm,
+        offsetZMm: offsetZMm,
+        rotationDegrees: rotationDegrees,
+        isLocked: false,
       );
   Map<String, Object?> toJson() => {
         'id': id,
@@ -76,6 +141,7 @@ class SpatialPlacement {
         'rotationDegrees': rotationDegrees,
         'scale': trueScale,
         'isLocked': isLocked,
+        'anchor': anchor?.toJson(),
       };
 
   factory SpatialPlacement.fromJson(Map<String, Object?> json) =>
@@ -93,5 +159,8 @@ class SpatialPlacement {
         offsetZMm: (json['offsetZMm'] as num?)?.toDouble() ?? 0,
         rotationDegrees: (json['rotationDegrees'] as num?)?.toDouble() ?? 0,
         isLocked: json['isLocked'] as bool? ?? false,
+        anchor: json['anchor'] is Map<String, Object?>
+            ? SpatialAnchor.fromJson(json['anchor']! as Map<String, Object?>)
+            : null,
       );
 }

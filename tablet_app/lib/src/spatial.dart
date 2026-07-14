@@ -223,10 +223,12 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                   ),
                   ...placements.map((placement) => ListTile(
                         dense: true,
-                        leading: const Icon(Icons.place_outlined),
+                        leading: Icon(placement.anchor == null
+                            ? Icons.location_searching
+                            : Icons.location_on),
                         title: Text(placement.name),
                         subtitle: Text(
-                            '${placement.plane} plane - 1:1 scale - ${placement.widthMm} x ${placement.heightMm} x ${placement.depthMm} mm'),
+                            '${placement.plane} plane - 1:1 scale - ${placement.widthMm} x ${placement.heightMm} x ${placement.depthMm} mm\n${_anchorLabel(placement)}'),
                         trailing: Wrap(children: [
                           IconButton(
                               tooltip: 'Edit placement',
@@ -309,16 +311,24 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
     if (updated != null) _upsert(updated);
   }
 
+  String _anchorLabel(SpatialPlacement placement) {
+    final anchor = placement.anchor;
+    if (anchor == null) return 'Unanchored placement plan';
+    return '${anchor.platform.toUpperCase()} anchor - ${anchor.trackingState.name}';
+  }
+
   void _toggleLock(SpatialPlacement placement) {
     _upsert(placement.copyWith(isLocked: !placement.isLocked));
   }
 
   void _duplicatePlacement(SpatialPlacement placement) {
     final stamp = DateTime.now();
-    _upsert(placement.copyWith(
-        id: 'placement-${stamp.microsecondsSinceEpoch}',
-        name: '${placement.name} copy',
-        createdAt: stamp.toUtc()));
+    _upsert(placement
+        .copyWith(
+            id: 'placement-${stamp.microsecondsSinceEpoch}',
+            name: '${placement.name} copy',
+            createdAt: stamp.toUtc())
+        .detachAnchor());
   }
 
   Future<void> _deletePlacement(
