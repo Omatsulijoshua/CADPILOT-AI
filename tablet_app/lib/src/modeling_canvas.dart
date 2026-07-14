@@ -166,6 +166,45 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
     widget.onChanged(history.document);
   }
 
+  void booleanSubtract() {
+    final current = solid;
+    final baseProfileId = model.operations
+        .where((item) => item.kind == ModelOperationKind.extrude)
+        .firstOrNull
+        ?.profileId;
+    if (current == null || baseProfileId == null) {
+      message('Create a rectangular extrusion first.');
+      return;
+    }
+    final profiles = widget.sketch.entities
+        .where((item) =>
+            item.kind == SketchEntityKind.rectangle && item.id != baseProfileId)
+        .toList();
+    if (profiles.isEmpty) {
+      message('Draw a second rectangle in Sketch mode for subtraction.');
+      return;
+    }
+    final profile = profiles.firstWhere(
+        (item) => !model.operations.any((operation) =>
+            operation.kind == ModelOperationKind.booleanSubtract &&
+            operation.profileId == item.id &&
+            !operation.suppressed),
+        orElse: () => profiles.first);
+    final validation =
+        const BooleanSubtractValidator().validate(current, profile);
+    if (validation != null) {
+      message(validation);
+      return;
+    }
+    setState(() => history.add(ModelOperation(
+        id: const Uuid().v4(),
+        kind: ModelOperationKind.booleanSubtract,
+        profileId: profile.id,
+        depth: current.depth,
+        createdAt: DateTime.now().toUtc())));
+    widget.onChanged(history.document);
+  }
+
   Future<void> shell() async {
     final current = solid;
     final baseOperation = model.operations
@@ -620,6 +659,11 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                             label: const Text('Through cut')),
                         const SizedBox(width: 8),
                         FilledButton.tonalIcon(
+                            onPressed: booleanSubtract,
+                            icon: const Icon(Icons.indeterminate_check_box),
+                            label: const Text('Boolean cut')),
+                        const SizedBox(width: 8),
+                        FilledButton.tonalIcon(
                             onPressed: shell,
                             icon: const Icon(Icons.crop_square),
                             label: const Text('Shell')),
@@ -716,6 +760,9 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                               ModelOperationKind.circularCut =>
                                                 Icons.remove_circle_outline,
                                               ModelOperationKind
+                                                    .booleanSubtract =>
+                                                Icons.indeterminate_check_box,
+                                              ModelOperationKind
                                                     .linearPattern =>
                                                 Icons.grid_view,
                                               ModelOperationKind
@@ -782,7 +829,11 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                                     ModelOperationKind
                                                         .mirrorCut &&
                                                 operation.kind !=
-                                                    ModelOperationKind.revolve)
+                                                    ModelOperationKind
+                                                        .revolve &&
+                                                operation.kind !=
+                                                    ModelOperationKind
+                                                        .booleanSubtract)
                                               PopupMenuItem(
                                                   value: 'edit',
                                                   child: Text(operation.kind ==
@@ -1041,6 +1092,30 @@ class SolidPainter extends CustomPainter {
             ..style = PaintingStyle.fill);
       canvas.drawPath(polygon(cavityTop), edge);
       canvas.drawPath(polygon(cavityBottom), edge);
+    }
+    for (final cut in current.rectangularCuts) {
+      final relative = cut.bounds.shift(
+          -current.origin - Offset(current.width / 2, current.height / 2));
+      final points = <List<double>>[
+        [relative.left, relative.top, d],
+        [relative.right, relative.top, d],
+        [relative.right, relative.bottom, d],
+        [relative.left, relative.bottom, d],
+      ];
+      final path = Path();
+      for (var index = 0; index < points.length; index++) {
+        final point = project(points[index], size, scale);
+        index == 0
+            ? path.moveTo(point.dx, point.dy)
+            : path.lineTo(point.dx, point.dy);
+      }
+      path.close();
+      canvas.drawPath(
+          path,
+          Paint()
+            ..color = const Color(0xff071017)
+            ..style = PaintingStyle.fill);
+      canvas.drawPath(path, edge);
     }
     for (final cut in current.cuts) {
       final relative = Offset(

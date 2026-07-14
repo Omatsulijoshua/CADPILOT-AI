@@ -16,6 +16,7 @@ enum CadMaterial {
 enum ModelOperationKind {
   extrude,
   circularCut,
+  booleanSubtract,
   linearPattern,
   circularPattern,
   mirrorCut,
@@ -53,6 +54,7 @@ class ModelOperation {
       switch (kind) {
         ModelOperationKind.extrude => 'Extrude',
         ModelOperationKind.circularCut => 'Circular cut',
+        ModelOperationKind.booleanSubtract => 'Boolean subtract',
         ModelOperationKind.linearPattern => 'Linear pattern',
         ModelOperationKind.circularPattern => 'Circular pattern',
         ModelOperationKind.mirrorCut => 'Mirror cut',
@@ -173,6 +175,7 @@ class EvaluatedSolid {
       required this.height,
       required this.depth,
       required this.cuts,
+      this.rectangularCuts = const [],
       this.chamfer = 0,
       this.cornerRadius = 0,
       this.shellThickness = 0,
@@ -183,6 +186,7 @@ class EvaluatedSolid {
   final double height;
   final double depth;
   final List<CircularCut> cuts;
+  final List<RectangularCut> rectangularCuts;
   final double chamfer;
   final double cornerRadius;
   final double shellThickness;
@@ -231,11 +235,52 @@ class EvaluatedSolid {
     final outer = planArea * depth -
         cuts.fold(
             0, (sum, cut) => sum + math.pi * cut.radius * cut.radius * depth);
-    if (shellThickness <= 0) return outer;
+    final afterRectangles = outer -
+        rectangularCuts.fold(0,
+            (sum, cut) => sum + cut.bounds.width * cut.bounds.height * depth);
+    if (shellThickness <= 0) return afterRectangles;
     final innerWidth = width - 2 * shellThickness;
     final innerHeight = height - 2 * shellThickness;
     final cavityDepth = depth - shellThickness;
-    return outer - innerWidth * innerHeight * cavityDepth;
+    return afterRectangles - innerWidth * innerHeight * cavityDepth;
+  }
+}
+
+class BooleanSubtractValidator {
+  const BooleanSubtractValidator();
+
+  String? validate(EvaluatedSolid solid, SketchEntity profile) {
+    if (profile.kind != SketchEntityKind.rectangle) {
+      return 'Boolean subtraction requires a rectangular profile.';
+    }
+    if (solid.revolved || solid.shellThickness > 0) {
+      return 'Boolean subtraction requires a supported solid plate.';
+    }
+    final bounds = Rect.fromPoints(profile.start, profile.end);
+    if (bounds.width <= 0 || bounds.height <= 0) {
+      return 'The subtraction profile must have positive dimensions.';
+    }
+    for (final corner in [
+      bounds.topLeft,
+      bounds.topRight,
+      bounds.bottomRight,
+      bounds.bottomLeft
+    ]) {
+      if (!solid.containsPlanPoint(corner)) {
+        return 'The subtraction profile extends outside the solid.';
+      }
+    }
+    if (solid.rectangularCuts.any((cut) => cut.bounds.overlaps(bounds))) {
+      return 'The subtraction overlaps existing rectangular cut geometry.';
+    }
+    for (final cut in solid.cuts) {
+      final nearestX = cut.center.dx.clamp(bounds.left, bounds.right);
+      final nearestY = cut.center.dy.clamp(bounds.top, bounds.bottom);
+      if ((cut.center - Offset(nearestX, nearestY)).distance < cut.radius) {
+        return 'The subtraction overlaps existing circular cut geometry.';
+      }
+    }
+    return null;
   }
 }
 
@@ -264,7 +309,10 @@ class ShellValidator {
     if (!thickness.isFinite || thickness <= 0) {
       return 'Shell thickness must be greater than zero.';
     }
-    if (solid.cuts.isNotEmpty || solid.chamfer > 0 || solid.cornerRadius > 0) {
+    if (solid.cuts.isNotEmpty ||
+        solid.rectangularCuts.isNotEmpty ||
+        solid.chamfer > 0 ||
+        solid.cornerRadius > 0) {
       return 'Shell currently requires an unmodified base solid.';
     }
     final limit =
@@ -480,12 +528,18 @@ class SolidMeasurements {
             sum +
             2 * math.pi * cut.radius * solid.depth -
             2 * math.pi * cut.radius * cut.radius);
+    final rectangularCutAreaDelta = solid.rectangularCuts.fold<double>(
+        0,
+        (sum, cut) =>
+            sum +
+            2 * (cut.bounds.width + cut.bounds.height) * solid.depth -
+            2 * cut.bounds.width * cut.bounds.height);
     final mass = material.densityGramsPerCm3 == 0
         ? null
         : solid.volume / 1000 * material.densityGramsPerCm3;
     return SolidMeasurements(
         volumeMm3: solid.volume,
-        surfaceAreaMm2: outerArea + cutAreaDelta,
+        surfaceAreaMm2: outerArea + cutAreaDelta + rectangularCutAreaDelta,
         massGrams: mass);
   }
 
@@ -501,6 +555,11 @@ class SolidMeasurements {
     final innerWalls = 2 * (innerWidth + innerHeight) * cavityDepth;
     return outerBottom + outerWalls + rim + innerBottom + innerWalls;
   }
+}
+
+class RectangularCut {
+  const RectangularCut({required this.bounds});
+  final Rect bounds;
 }
 
 class CircularCut {
@@ -520,6 +579,7 @@ class ModelEvaluator {
     bool revolved = false;
     double revolveRadius = 0;
     final cuts = <CircularCut>[];
+    final rectangularCuts = <RectangularCut>[];
     final activeOperations = <String>{};
     for (final operation in model.operations) {
       if (operation.suppressed) continue;
@@ -541,6 +601,14 @@ class ModelEvaluator {
         depth = section.height;
         revolveRadius = section.width;
         revolved = true;
+      }
+      if (operation.kind == ModelOperationKind.booleanSubtract &&
+          profile.kind == SketchEntityKind.rectangle &&
+          base != null &&
+          !revolved &&
+          profile.id != base.id) {
+        rectangularCuts.add(RectangularCut(
+            bounds: Rect.fromPoints(profile.start, profile.end)));
       }
       if (operation.kind == ModelOperationKind.circularCut &&
           profile.kind == SketchEntityKind.circle &&
@@ -623,6 +691,7 @@ class ModelEvaluator {
         height: revolved ? revolveRadius * 2 : rect.height,
         depth: depth,
         cuts: cuts,
+        rectangularCuts: rectangularCuts,
         chamfer: chamfer,
         cornerRadius: cornerRadius,
         shellThickness: shellThickness,
@@ -674,7 +743,7 @@ class SolidMesher {
   SolidMesh tessellate(EvaluatedSolid solid) {
     if (solid.revolved) return _cylinder(solid);
     if (solid.shellThickness > 0) return _openTopShell(solid);
-    if (solid.cuts.isEmpty) {
+    if (solid.cuts.isEmpty && solid.rectangularCuts.isEmpty) {
       if (solid.cornerRadius > 0) return _filletedPrism(solid);
       return solid.chamfer > 0 ? _chamferedPrism(solid) : _cuboid(solid);
     }
@@ -690,7 +759,9 @@ class SolidMesher {
                   solid.origin.dy + (y + 0.5) * dy);
               return solid.containsPlanPoint(point) &&
                   solid.cuts.every(
-                      (cut) => (point - cut.center).distance >= cut.radius);
+                      (cut) => (point - cut.center).distance >= cut.radius) &&
+                  solid.rectangularCuts
+                      .every((cut) => !cut.bounds.contains(point));
             }));
     final triangles = <MeshTriangle>[];
     var cells = 0;

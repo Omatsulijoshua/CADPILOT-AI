@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'dart:ui' show Size;
+import 'dart:ui' show Rect, Size;
 import 'package:cadpilot_tablet/src/model_3d.dart';
 import 'package:cadpilot_tablet/src/modeling_canvas.dart';
 import 'package:cadpilot_tablet/src/sketch_models.dart';
@@ -790,6 +790,107 @@ void main() {
     final solid = const ModelEvaluator().evaluate(
         const SketchDocument(entities: [rectangle, circle]),
         ModelDocument(operations: [extrude, cut, pattern]))!;
+    final mesh = const SolidMesher(targetCells: 64).tessellate(solid);
+    expect(mesh.isClosedManifold, isTrue);
+    expect((mesh.estimatedVolume - solid.volume).abs() / solid.volume,
+        lessThan(0.03));
+    expect(const StlExporter().export(solid), contains('facet normal'));
+  });
+  test('rectangular Boolean subtraction persists and evaluates', () {
+    const pocket = SketchEntity(
+        id: 'pocket',
+        kind: SketchEntityKind.rectangle,
+        start: Offset(30, 30),
+        end: Offset(50, 50));
+    final subtract = ModelOperation(
+        id: 'boolean-1',
+        kind: ModelOperationKind.booleanSubtract,
+        profileId: 'pocket',
+        depth: 8,
+        createdAt: DateTime.utc(2026));
+    final decoded = ModelDocument.fromJson(
+        ModelDocument(operations: [extrude, subtract]).toJson());
+    expect(decoded.operations.last.kind, ModelOperationKind.booleanSubtract);
+    final solid = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle, pocket]), decoded)!;
+    expect(solid.rectangularCuts, hasLength(1));
+    expect(solid.rectangularCuts.single.bounds,
+        const Rect.fromLTWH(30, 30, 20, 20));
+    expect(solid.volume, 36800);
+    final values = SolidMeasurements.from(solid, CadMaterial.pla);
+    expect(values.surfaceAreaMm2, 12240);
+    expect(values.massGrams, closeTo(36.8 * 1.24, 0.001));
+  });
+
+  test('Boolean subtraction follows suppression', () {
+    const pocket = SketchEntity(
+        id: 'pocket',
+        kind: SketchEntityKind.rectangle,
+        start: Offset(30, 30),
+        end: Offset(50, 50));
+    final subtract = ModelOperation(
+        id: 'boolean-1',
+        kind: ModelOperationKind.booleanSubtract,
+        profileId: 'pocket',
+        depth: 8,
+        createdAt: DateTime.utc(2026),
+        suppressed: true);
+    final solid = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle, pocket]),
+        ModelDocument(operations: [extrude, subtract]))!;
+    expect(solid.rectangularCuts, isEmpty);
+    expect(solid.volume, 40000);
+  });
+
+  test('Boolean subtraction validator rejects escape and overlap', () {
+    const solid = EvaluatedSolid(
+        origin: Offset(10, 20),
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [CircularCut(center: Offset(45, 40), radius: 5)]);
+    const valid = SketchEntity(
+        id: 'valid',
+        kind: SketchEntityKind.rectangle,
+        start: Offset(70, 30),
+        end: Offset(90, 50));
+    const outside = SketchEntity(
+        id: 'outside',
+        kind: SketchEntityKind.rectangle,
+        start: Offset(100, 60),
+        end: Offset(120, 80));
+    const overlapping = SketchEntity(
+        id: 'overlap',
+        kind: SketchEntityKind.rectangle,
+        start: Offset(40, 35),
+        end: Offset(50, 45));
+    const validator = BooleanSubtractValidator();
+    expect(validator.validate(solid, valid), isNull);
+    expect(validator.validate(solid, outside), contains('outside'));
+    expect(validator.validate(solid, overlapping), contains('circular'));
+  });
+
+  test('mixed Boolean and circular cuts export closed manifold STL', () {
+    const pocket = SketchEntity(
+        id: 'pocket',
+        kind: SketchEntityKind.rectangle,
+        start: Offset(70, 30),
+        end: Offset(90, 50));
+    final circular = ModelOperation(
+        id: 'cut-1',
+        kind: ModelOperationKind.circularCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026));
+    final subtract = ModelOperation(
+        id: 'boolean-1',
+        kind: ModelOperationKind.booleanSubtract,
+        profileId: 'pocket',
+        depth: 8,
+        createdAt: DateTime.utc(2026));
+    final solid = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle, circle, pocket]),
+        ModelDocument(operations: [extrude, circular, subtract]))!;
     final mesh = const SolidMesher(targetCells: 64).tessellate(solid);
     expect(mesh.isClosedManifold, isTrue);
     expect((mesh.estimatedVolume - solid.volume).abs() / solid.volume,
