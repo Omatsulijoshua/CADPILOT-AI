@@ -1,3 +1,4 @@
+import 'ai_commands.dart';
 import 'model_3d.dart';
 import 'sketch_models.dart';
 
@@ -29,6 +30,7 @@ class CadProject {
     required this.syncState,
     this.sketch = const SketchDocument(),
     this.model = const ModelDocument(),
+    this.aiHistory = const [],
   });
   final String id;
   final String name;
@@ -39,13 +41,15 @@ class CadProject {
   final SyncState syncState;
   final SketchDocument sketch;
   final ModelDocument model;
+  final List<AiCommandRecord> aiHistory;
 
   CadProject copyWith(
           {String? name,
           String? note,
           SyncState? syncState,
           SketchDocument? sketch,
-          ModelDocument? model}) =>
+          ModelDocument? model,
+          List<AiCommandRecord>? aiHistory}) =>
       CadProject(
         id: id,
         name: name ?? this.name,
@@ -56,6 +60,7 @@ class CadProject {
         syncState: syncState ?? SyncState.pending,
         sketch: sketch ?? this.sketch,
         model: model ?? this.model,
+        aiHistory: aiHistory ?? this.aiHistory,
       );
 
   Map<String, Object?> toJson() => {
@@ -68,6 +73,7 @@ class CadProject {
         'syncState': syncState.name,
         'sketch': sketch.toJson(),
         'model': model.toJson(),
+        'aiHistory': aiHistory.map((item) => item.toJson()).toList(),
       };
 
   factory CadProject.fromJson(Map<String, Object?> json) => CadProject(
@@ -80,5 +86,10 @@ class CadProject {
         syncState: SyncState.values.byName(json['syncState']! as String),
         sketch:
             SketchDocument.fromJson(json['sketch'] as Map<String, Object?>?),
+        model: ModelDocument.fromJson(json['model'] as Map<String, Object?>?),
+        aiHistory: (json['aiHistory'] as List<Object?>? ?? const [])
+            .map((item) =>
+                AiCommandRecord.fromJson(item! as Map<String, Object?>))
+            .toList(),
       );
 }

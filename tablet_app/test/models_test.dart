@@ -1,3 +1,5 @@
+import 'package:cadpilot_tablet/src/ai_commands.dart';
+import 'package:cadpilot_tablet/src/model_3d.dart';
 import 'package:cadpilot_tablet/src/models.dart';
 import 'package:cadpilot_tablet/src/sketch_models.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,6 +15,21 @@ void main() {
       updatedAt: now,
       revision: 3,
       syncState: SyncState.pending,
+      model: ModelDocument(operations: [
+        ModelOperation(
+            id: 'extrude-1',
+            kind: ModelOperationKind.extrude,
+            profileId: 'rect-1',
+            depth: 8,
+            createdAt: now),
+      ]),
+      aiHistory: [
+        AiCommandRecord(
+            commandId: 'command-1',
+            summary: 'Extrude base',
+            status: AiCommandStatus.applied,
+            createdAt: now),
+      ],
       sketch: const SketchDocument(entities: [
         SketchEntity(
             id: 'line-1',
@@ -27,5 +44,7 @@ void main() {
     expect(decoded.note, 'M6 holes');
     expect(decoded.sketch.entities.single.id, 'line-1');
     expect(decoded.sketch.entities.single.end, const Offset(105, 10));
+    expect(decoded.model.operations.single.id, 'extrude-1');
+    expect(decoded.aiHistory.single.status, AiCommandStatus.applied);
   });
 }

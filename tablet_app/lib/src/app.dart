@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'ai_command_dialog.dart';
 import 'controllers.dart';
 import 'models.dart';
 import 'modeling_canvas.dart';
@@ -380,6 +381,25 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
     });
   }
 
+  Future<void> runAiCommand(CadProject project) async {
+    final decision = await showAiCommandDialog(context,
+        sketch: project.sketch, model: project.model);
+    if (decision == null || !mounted) return;
+    final updated = project.copyWith(
+      model: decision.model ?? project.model,
+      aiHistory: [...project.aiHistory, decision.record],
+    );
+    await ref.read(projectsProvider.notifier).save(updated);
+    if (mounted) {
+      setState(() {
+        status = decision.model == null
+            ? 'AI command cancelled'
+            : 'AI command applied';
+        if (decision.model != null) modeling = true;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final project = ref
@@ -400,7 +420,12 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
         title: Text(project.name),
         actions: [
           Text(status),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
+          FilledButton.icon(
+              onPressed: () => runAiCommand(project),
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('AI command')),
+          const SizedBox(width: 12),
           SegmentedButton<bool>(
               segments: const [
                 ButtonSegment(
