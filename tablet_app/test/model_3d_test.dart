@@ -380,7 +380,7 @@ void main() {
         width: 100,
         height: 50,
         depth: 8,
-        cuts: [CircularCut(center: Offset(6, 6), radius: 3)]);
+        cuts: [CircularCut(center: Offset(4, 4), radius: 3)]);
     expect(validator.validate(cornerCut, 10), contains('intersect'));
   });
 
@@ -409,6 +409,101 @@ void main() {
         depth: 8,
         cuts: [CircularCut(center: Offset(45, 40), radius: 5)],
         chamfer: 5);
+    final mesh = const SolidMesher(targetCells: 64).tessellate(solid);
+    expect(mesh.isClosedManifold, isTrue);
+    expect((mesh.estimatedVolume - solid.volume).abs() / solid.volume,
+        lessThan(0.03));
+  });
+  test('fillet persists evaluates and follows suppression', () {
+    final fillet = ModelOperation(
+        id: 'fillet-1',
+        kind: ModelOperationKind.fillet,
+        profileId: 'rect',
+        depth: 6,
+        createdAt: DateTime.utc(2026));
+    final decoded = ModelDocument.fromJson(
+        ModelDocument(operations: [extrude, fillet]).toJson());
+    expect(decoded.operations.last.kind, ModelOperationKind.fillet);
+    expect(decoded.operations.last.depth, 6);
+    final solid = const ModelEvaluator()
+        .evaluate(const SketchDocument(entities: [rectangle]), decoded)!;
+    expect(solid.cornerRadius, 6);
+    expect(solid.volume, closeTo((5000 - (4 - math.pi) * 36) * 8, 0.001));
+    final suppressed = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle]),
+        ModelDocument(
+            operations: [extrude, fillet.copyWith(suppressed: true)]))!;
+    expect(suppressed.cornerRadius, 0);
+    expect(suppressed.volume, 40000);
+  });
+
+  test('fillet measurements use analytic rounded area and perimeter', () {
+    const solid = EvaluatedSolid(
+        origin: Offset.zero,
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [],
+        cornerRadius: 5);
+    final values = SolidMeasurements.from(solid, CadMaterial.aluminum6061);
+    const expectedArea =
+        2 * (5000 - (4 - math.pi) * 25) + (300 - 40 + 10 * math.pi) * 8;
+    expect(values.volumeMm3, closeTo((5000 - (4 - math.pi) * 25) * 8, 0.001));
+    expect(values.surfaceAreaMm2, closeTo(expectedArea, 0.001));
+    expect(values.massGrams, closeTo(values.volumeMm3 / 1000 * 2.70, 0.001));
+  });
+
+  test('fillet validator rejects invalid radii conflicts and cut collisions',
+      () {
+    const validator = FilletValidator();
+    const plain = EvaluatedSolid(
+        origin: Offset.zero, width: 100, height: 50, depth: 8, cuts: []);
+    expect(validator.validate(plain, 0), contains('greater than zero'));
+    expect(validator.validate(plain, 25), contains('half'));
+    expect(validator.validate(plain, 5), isNull);
+    const chamfered = EvaluatedSolid(
+        origin: Offset.zero,
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [],
+        chamfer: 4);
+    expect(validator.validate(chamfered, 5), contains('chamfer'));
+    const cornerCut = EvaluatedSolid(
+        origin: Offset.zero,
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [CircularCut(center: Offset(4, 4), radius: 3)]);
+    expect(validator.validate(cornerCut, 10), contains('intersect'));
+  });
+
+  test('plain fillet uses a closed 140-triangle rounded mesh', () {
+    const solid = EvaluatedSolid(
+        origin: Offset.zero,
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [],
+        cornerRadius: 5);
+    final mesh = const SolidMesher().tessellate(solid);
+    expect(mesh.triangles, hasLength(140));
+    expect(mesh.isClosedManifold, isTrue);
+    expect(mesh.tolerance, greaterThan(0));
+    expect(mesh.tolerance, lessThan(0.1));
+    expect(mesh.estimatedVolume, solid.volume);
+    expect(
+        const StlExporter().export(solid), contains('endsolid cadpilot_part'));
+  });
+
+  test('fillet with through hole remains manifold and volume-bounded', () {
+    const solid = EvaluatedSolid(
+        origin: Offset(10, 20),
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [CircularCut(center: Offset(45, 40), radius: 5)],
+        cornerRadius: 6);
     final mesh = const SolidMesher(targetCells: 64).tessellate(solid);
     expect(mesh.isClosedManifold, isTrue);
     expect((mesh.estimatedVolume - solid.volume).abs() / solid.volume,

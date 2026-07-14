@@ -135,6 +135,41 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
     widget.onChanged(history.document);
   }
 
+  Future<void> fillet() async {
+    final current = solid;
+    final baseOperation = model.operations
+        .where((item) => item.kind == ModelOperationKind.extrude)
+        .firstOrNull;
+    if (current == null || baseOperation == null) {
+      message('Create an extrusion first.');
+      return;
+    }
+    final existing = model.operations
+        .where((item) => item.kind == ModelOperationKind.fillet)
+        .firstOrNull;
+    final radius = await depthDialog(
+        existing == null ? 'Fillet solid corners' : 'Edit fillet',
+        existing?.depth ?? math.min(current.width, current.height) * 0.1,
+        label: 'Radius (mm)');
+    if (radius == null) return;
+    final validation = const FilletValidator().validate(current, radius);
+    if (validation != null) {
+      message(validation);
+      return;
+    }
+    final operation = ModelOperation(
+        id: existing?.id ?? const Uuid().v4(),
+        kind: ModelOperationKind.fillet,
+        profileId: baseOperation.profileId,
+        depth: radius,
+        createdAt: existing?.createdAt ?? DateTime.now().toUtc(),
+        name: existing?.name,
+        suppressed: existing?.suppressed ?? false);
+    setState(() =>
+        existing == null ? history.add(operation) : history.replace(operation));
+    widget.onChanged(history.document);
+  }
+
   Future<void> chamfer() async {
     final current = solid;
     final baseOperation = model.operations
@@ -293,6 +328,10 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
   }
 
   Future<void> editOperation(ModelOperation operation) async {
+    if (operation.kind == ModelOperationKind.fillet) {
+      await fillet();
+      return;
+    }
     if (operation.kind == ModelOperationKind.chamfer) {
       await chamfer();
       return;
@@ -428,6 +467,11 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                             label: const Text('Through cut')),
                         const SizedBox(width: 8),
                         FilledButton.tonalIcon(
+                            onPressed: fillet,
+                            icon: const Icon(Icons.rounded_corner),
+                            label: const Text('Fillet')),
+                        const SizedBox(width: 8),
+                        FilledButton.tonalIcon(
                             onPressed: chamfer,
                             icon: const Icon(Icons.architecture),
                             label: const Text('Chamfer')),
@@ -520,6 +564,8 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                                 Icons.flip,
                                               ModelOperationKind.chamfer =>
                                                 Icons.architecture,
+                                              ModelOperationKind.fillet =>
+                                                Icons.rounded_corner,
                                             },
                                             color: operation.suppressed
                                                 ? Colors.grey
@@ -571,7 +617,11 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                                               ModelOperationKind
                                                                   .chamfer
                                                           ? 'Edit chamfer'
-                                                          : 'Edit depth')),
+                                                          : operation.kind ==
+                                                                  ModelOperationKind
+                                                                      .fillet
+                                                              ? 'Edit fillet'
+                                                              : 'Edit depth')),
                                             if (operation.kind ==
                                                 ModelOperationKind
                                                     .circularCut) ...[
@@ -672,24 +722,47 @@ class SolidPainter extends CustomPainter {
             zoom)
         .clamp(0.2, 20.0);
     final w = current.width / 2, h = current.height / 2, d = current.depth;
-    final c = current.chamfer;
-    final plan = c > 0
-        ? <List<double>>[
-            [-w + c, -h, 0],
-            [w - c, -h, 0],
-            [w, -h + c, 0],
-            [w, h - c, 0],
-            [w - c, h, 0],
-            [-w + c, h, 0],
-            [-w, h - c, 0],
-            [-w, -h + c, 0],
-          ]
-        : <List<double>>[
-            [-w, -h, 0],
-            [w, -h, 0],
-            [w, h, 0],
-            [-w, h, 0],
-          ];
+    final plan = <List<double>>[];
+    if (current.cornerRadius > 0) {
+      const segments = 8;
+      final r = current.cornerRadius;
+      final centers = <Offset>[
+        Offset(-w + r, -h + r),
+        Offset(w - r, -h + r),
+        Offset(w - r, h - r),
+        Offset(-w + r, h - r),
+      ];
+      const starts = [-math.pi, -math.pi / 2, 0.0, math.pi / 2];
+      for (var corner = 0; corner < 4; corner++) {
+        for (var step = 0; step <= segments; step++) {
+          final angle = starts[corner] + step * math.pi / 2 / segments;
+          plan.add([
+            centers[corner].dx + math.cos(angle) * r,
+            centers[corner].dy + math.sin(angle) * r,
+            0
+          ]);
+        }
+      }
+    } else if (current.chamfer > 0) {
+      final c = current.chamfer;
+      plan.addAll([
+        [-w + c, -h, 0],
+        [w - c, -h, 0],
+        [w, -h + c, 0],
+        [w, h - c, 0],
+        [w - c, h, 0],
+        [-w + c, h, 0],
+        [-w, h - c, 0],
+        [-w, -h + c, 0],
+      ]);
+    } else {
+      plan.addAll([
+        [-w, -h, 0],
+        [w, -h, 0],
+        [w, h, 0],
+        [-w, h, 0],
+      ]);
+    }
     final v = <List<double>>[
       ...plan,
       ...plan.map((point) => [point[0], point[1], d]),
@@ -729,7 +802,9 @@ class SolidPainter extends CustomPainter {
               .withValues(alpha: 0.72);
       canvas.drawPath(path, fill);
       canvas.drawPath(path, edge);
-      if (selectedEdge != null && current.chamfer == 0) {
+      if (selectedEdge != null &&
+          current.chamfer == 0 &&
+          current.cornerRadius == 0) {
         final pair = SolidProjection.edgePairs[selectedEdge!];
         canvas.drawLine(
             project(v[pair[0]], size, scale),
