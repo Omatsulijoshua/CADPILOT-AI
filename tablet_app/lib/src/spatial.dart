@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'spatial_models.dart';
+
 class SpatialCapabilities {
   const SpatialCapabilities({
     required this.platform,
@@ -87,10 +89,14 @@ class SpatialCapabilityPanel extends StatefulWidget {
   const SpatialCapabilityPanel({
     required this.projectName,
     this.service = const SpatialCapabilityService(),
+    this.placements = const [],
+    this.onPlacementSaved,
     super.key,
   });
   final String projectName;
   final SpatialCapabilityService service;
+  final List<SpatialPlacement> placements;
+  final ValueChanged<SpatialPlacement>? onPlacementSaved;
 
   @override
   State<SpatialCapabilityPanel> createState() => _SpatialCapabilityPanelState();
@@ -141,9 +147,13 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                 Row(children: [
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: value.arSupported ? () {} : null,
-                      icon: const Icon(Icons.view_in_ar),
-                      label: const Text('AR placement (foundation ready)'),
+                      onPressed: () => _planPlacement(context, value),
+                      icon: Icon(value.arSupported
+                          ? Icons.view_in_ar
+                          : Icons.straighten),
+                      label: Text(value.arSupported
+                          ? 'Plan AR placement'
+                          : 'Add manual placement'),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -155,6 +165,22 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                     ),
                   ),
                 ]),
+                if (widget.placements.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                        'Saved placements (${widget.placements.length})',
+                        style: Theme.of(context).textTheme.titleSmall),
+                  ),
+                  ...widget.placements.take(3).map((placement) => ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.place_outlined),
+                        title: Text(placement.name),
+                        subtitle: Text(
+                            '${placement.plane} plane - ${placement.widthMm} x ${placement.heightMm} x ${placement.depthMm} mm'),
+                      )),
+                ],
               ]);
             },
           ),
@@ -166,9 +192,169 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
         ],
       );
 
+  Future<void> _planPlacement(
+      BuildContext context, SpatialCapabilities capabilities) async {
+    final placement = await showDialog<SpatialPlacement>(
+      context: context,
+      builder: (_) => PlacementPlannerDialog(
+        projectName: widget.projectName,
+        source: capabilities.arSupported ? 'camera_ar' : 'manual',
+      ),
+    );
+    if (placement != null) widget.onPlacementSaved?.call(placement);
+  }
+
   static Widget _status(String label, bool supported) => Chip(
         avatar: Icon(supported ? Icons.check_circle : Icons.cancel,
             size: 18, color: supported ? Colors.greenAccent : Colors.grey),
         label: Text('$label: ${supported ? 'Supported' : 'Unavailable'}'),
+      );
+}
+
+class PlacementPlannerDialog extends StatefulWidget {
+  const PlacementPlannerDialog({
+    required this.projectName,
+    required this.source,
+    super.key,
+  });
+
+  final String projectName;
+  final String source;
+
+  @override
+  State<PlacementPlannerDialog> createState() => _PlacementPlannerDialogState();
+}
+
+class _PlacementPlannerDialogState extends State<PlacementPlannerDialog> {
+  final formKey = GlobalKey<FormState>();
+  final name = TextEditingController(text: 'Primary placement');
+  final width = TextEditingController(text: '1000');
+  final height = TextEditingController(text: '1000');
+  final depth = TextEditingController(text: '1000');
+  final x = TextEditingController(text: '0');
+  final y = TextEditingController(text: '0');
+  final z = TextEditingController(text: '0');
+  final rotation = TextEditingController(text: '0');
+  String plane = 'floor';
+
+  @override
+  void dispose() {
+    for (final controller in [name, width, height, depth, x, y, z, rotation]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  double number(TextEditingController controller) =>
+      double.parse(controller.text.trim());
+
+  String? positive(String? value) {
+    final parsed = double.tryParse(value?.trim() ?? '');
+    return parsed == null || parsed <= 0 ? 'Enter a value above 0' : null;
+  }
+
+  String? numeric(String? value) =>
+      double.tryParse(value?.trim() ?? '') == null ? 'Enter a number' : null;
+
+  void save() {
+    if (!formKey.currentState!.validate()) return;
+    Navigator.pop(
+      context,
+      SpatialPlacement(
+        id: 'placement-${DateTime.now().microsecondsSinceEpoch}',
+        name: name.text.trim(),
+        createdAt: DateTime.now().toUtc(),
+        source: widget.source,
+        plane: plane,
+        widthMm: number(width),
+        heightMm: number(height),
+        depthMm: number(depth),
+        offsetXMm: number(x),
+        offsetYMm: number(y),
+        offsetZMm: number(z),
+        rotationDegrees: number(rotation),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text('Placement plan - ${widget.projectName}'),
+        content: SizedBox(
+          width: 600,
+          child: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text(widget.source == 'camera_ar'
+                    ? 'Camera AR is available. This plan will be ready for a live plane anchor.'
+                    : 'Manual fallback: enter measured values without claiming an AR anchor.'),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: name,
+                  decoration:
+                      const InputDecoration(labelText: 'Placement name'),
+                  validator: (value) => (value?.trim().isEmpty ?? true)
+                      ? 'Enter a placement name'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: plane,
+                  decoration:
+                      const InputDecoration(labelText: 'Mounting plane'),
+                  items: const [
+                    DropdownMenuItem(value: 'floor', child: Text('Floor')),
+                    DropdownMenuItem(value: 'wall', child: Text('Wall')),
+                    DropdownMenuItem(value: 'ceiling', child: Text('Ceiling')),
+                    DropdownMenuItem(value: 'custom', child: Text('Custom')),
+                  ],
+                  onChanged: (value) => setState(() => plane = value!),
+                ),
+                const SizedBox(height: 12),
+                _row([
+                  _field(width, 'Width (mm)', positive),
+                  _field(height, 'Height (mm)', positive),
+                  _field(depth, 'Depth (mm)', positive),
+                ]),
+                const SizedBox(height: 12),
+                _row([
+                  _field(x, 'X offset (mm)', numeric),
+                  _field(y, 'Y offset (mm)', numeric),
+                  _field(z, 'Z offset (mm)', numeric),
+                ]),
+                const SizedBox(height: 12),
+                _field(rotation, 'Rotation (degrees)', numeric),
+              ]),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton.icon(
+              onPressed: save,
+              icon: const Icon(Icons.save),
+              label: const Text('Save placement')),
+        ],
+      );
+
+  Widget _field(TextEditingController controller, String label,
+          String? Function(String?) validator) =>
+      TextFormField(
+        controller: controller,
+        keyboardType:
+            const TextInputType.numberWithOptions(decimal: true, signed: true),
+        decoration: InputDecoration(labelText: label),
+        validator: validator,
+      );
+
+  Widget _row(List<Widget> children) => Row(
+        children: children
+            .expand(
+                (child) => [Expanded(child: child), const SizedBox(width: 8)])
+            .toList()
+          ..removeLast(),
       );
 }

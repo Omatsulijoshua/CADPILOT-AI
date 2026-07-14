@@ -1,6 +1,7 @@
 import 'ai_commands.dart';
 import 'model_3d.dart';
 import 'sketch_models.dart';
+import 'spatial_models.dart';
 
 enum SessionKind { signedIn, guest }
 
@@ -31,6 +32,7 @@ class CadProject {
     this.sketch = const SketchDocument(),
     this.model = const ModelDocument(),
     this.aiHistory = const [],
+    this.spatialPlacements = const [],
   });
   final String id;
   final String name;
@@ -42,6 +44,7 @@ class CadProject {
   final SketchDocument sketch;
   final ModelDocument model;
   final List<AiCommandRecord> aiHistory;
+  final List<SpatialPlacement> spatialPlacements;
 
   CadProject copyWith(
           {String? name,
@@ -49,7 +52,8 @@ class CadProject {
           SyncState? syncState,
           SketchDocument? sketch,
           ModelDocument? model,
-          List<AiCommandRecord>? aiHistory}) =>
+          List<AiCommandRecord>? aiHistory,
+          List<SpatialPlacement>? spatialPlacements}) =>
       CadProject(
         id: id,
         name: name ?? this.name,
@@ -61,6 +65,7 @@ class CadProject {
         sketch: sketch ?? this.sketch,
         model: model ?? this.model,
         aiHistory: aiHistory ?? this.aiHistory,
+        spatialPlacements: spatialPlacements ?? this.spatialPlacements,
       );
 
   Map<String, Object?> toJson() => {
@@ -74,6 +79,8 @@ class CadProject {
         'sketch': sketch.toJson(),
         'model': model.toJson(),
         'aiHistory': aiHistory.map((item) => item.toJson()).toList(),
+        'spatialPlacements':
+            spatialPlacements.map((item) => item.toJson()).toList(),
       };
 
   factory CadProject.fromJson(Map<String, Object?> json) => CadProject(
@@ -91,5 +98,10 @@ class CadProject {
             .map((item) =>
                 AiCommandRecord.fromJson(item! as Map<String, Object?>))
             .toList(),
+        spatialPlacements:
+            (json['spatialPlacements'] as List<Object?>? ?? const [])
+                .map((item) =>
+                    SpatialPlacement.fromJson(item! as Map<String, Object?>))
+                .toList(),
       );
 }
