@@ -13,7 +13,7 @@ enum CadMaterial {
   final double densityGramsPerCm3;
 }
 
-enum ModelOperationKind { extrude, circularCut }
+enum ModelOperationKind { extrude, circularCut, linearPattern }
 
 class ModelOperation {
   const ModelOperation({
@@ -24,6 +24,9 @@ class ModelOperation {
     required this.createdAt,
     this.name,
     this.suppressed = false,
+    this.sourceOperationId,
+    this.instanceCount = 1,
+    this.spacing = 0,
   });
   final String id;
   final ModelOperationKind kind;
@@ -32,9 +35,22 @@ class ModelOperation {
   final DateTime createdAt;
   final String? name;
   final bool suppressed;
+  final String? sourceOperationId;
+  final int instanceCount;
+  final double spacing;
   String get displayName =>
-      name ?? (kind == ModelOperationKind.extrude ? 'Extrude' : 'Circular cut');
-  ModelOperation copyWith({double? depth, String? name, bool? suppressed}) =>
+      name ??
+      switch (kind) {
+        ModelOperationKind.extrude => 'Extrude',
+        ModelOperationKind.circularCut => 'Circular cut',
+        ModelOperationKind.linearPattern => 'Linear pattern',
+      };
+  ModelOperation copyWith(
+          {double? depth,
+          String? name,
+          bool? suppressed,
+          int? instanceCount,
+          double? spacing}) =>
       ModelOperation(
         id: id,
         kind: kind,
@@ -43,6 +59,9 @@ class ModelOperation {
         createdAt: createdAt,
         name: name ?? this.name,
         suppressed: suppressed ?? this.suppressed,
+        sourceOperationId: sourceOperationId,
+        instanceCount: instanceCount ?? this.instanceCount,
+        spacing: spacing ?? this.spacing,
       );
   Map<String, Object?> toJson() => {
         'id': id,
@@ -52,6 +71,9 @@ class ModelOperation {
         'createdAt': createdAt.toIso8601String(),
         'name': name,
         'suppressed': suppressed,
+        'sourceOperationId': sourceOperationId,
+        'instanceCount': instanceCount,
+        'spacing': spacing,
       };
   factory ModelOperation.fromJson(Map<String, Object?> json) => ModelOperation(
         id: json['id']! as String,
@@ -61,6 +83,9 @@ class ModelOperation {
         createdAt: DateTime.parse(json['createdAt']! as String),
         name: json['name'] as String?,
         suppressed: (json['suppressed'] as bool?) ?? false,
+        sourceOperationId: json['sourceOperationId'] as String?,
+        instanceCount: (json['instanceCount'] as int?) ?? 1,
+        spacing: (json['spacing'] as num?)?.toDouble() ?? 0,
       );
 }
 
@@ -143,6 +168,35 @@ class EvaluatedSolid {
           0, (sum, cut) => sum + math.pi * cut.radius * cut.radius * depth);
 }
 
+class LinearPatternValidator {
+  const LinearPatternValidator();
+
+  String? validate(EvaluatedSolid solid, SketchEntity profile,
+      {required int count, required double spacing}) {
+    if (profile.kind != SketchEntityKind.circle) {
+      return 'A linear cut pattern requires a circular profile.';
+    }
+    if (count < 2 || count > 50) {
+      return 'Instance count must be between 2 and 50.';
+    }
+    final radius = profile.primaryDimension;
+    if (!spacing.isFinite || spacing < radius * 2) {
+      return 'Spacing must be at least the hole diameter.';
+    }
+    final bounds = Rect.fromLTWH(
+        solid.origin.dx, solid.origin.dy, solid.width, solid.height);
+    final first = profile.start;
+    final last = first + Offset(spacing * (count - 1), 0);
+    if (first.dx - radius < bounds.left ||
+        first.dy - radius < bounds.top ||
+        first.dy + radius > bounds.bottom ||
+        last.dx + radius > bounds.right) {
+      return 'The pattern extends outside the solid.';
+    }
+    return null;
+  }
+}
+
 class SolidMeasurements {
   const SolidMeasurements(
       {required this.volumeMm3,
@@ -185,6 +239,7 @@ class ModelEvaluator {
     SketchEntity? base;
     double? depth;
     final cuts = <CircularCut>[];
+    final activeOperations = <String>{};
     for (final operation in model.operations) {
       if (operation.suppressed) continue;
       final profile = sketch.entities
@@ -201,6 +256,17 @@ class ModelEvaluator {
           base != null) {
         cuts.add(CircularCut(
             center: profile.start, radius: profile.primaryDimension));
+        activeOperations.add(operation.id);
+      }
+      if (operation.kind == ModelOperationKind.linearPattern &&
+          profile.kind == SketchEntityKind.circle &&
+          base != null &&
+          activeOperations.contains(operation.sourceOperationId)) {
+        for (var index = 1; index < operation.instanceCount; index++) {
+          cuts.add(CircularCut(
+              center: profile.start + Offset(operation.spacing * index, 0),
+              radius: profile.primaryDimension));
+        }
       }
     }
     if (base == null || depth == null) return null;

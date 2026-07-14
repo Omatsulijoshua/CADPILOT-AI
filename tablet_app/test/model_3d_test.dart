@@ -176,4 +176,91 @@ void main() {
     expect(
         SolidMeasurements.from(solid, CadMaterial.generic).massGrams, isNull);
   });
+
+  test('linear cut pattern persists and evaluates repeated holes', () {
+    final cut = ModelOperation(
+        id: 'cut-source',
+        kind: ModelOperationKind.circularCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026));
+    final pattern = ModelOperation(
+        id: 'pattern-1',
+        kind: ModelOperationKind.linearPattern,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026),
+        sourceOperationId: cut.id,
+        instanceCount: 3,
+        spacing: 20);
+    final decoded = ModelDocument.fromJson(
+        ModelDocument(operations: [extrude, cut, pattern]).toJson());
+    expect(decoded.operations.last.instanceCount, 3);
+    expect(decoded.operations.last.spacing, 20);
+    expect(decoded.operations.last.sourceOperationId, cut.id);
+    final solid = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle, circle]), decoded)!;
+    expect(solid.cuts.map((item) => item.center.dx), [45, 65, 85]);
+    expect(solid.volume, closeTo(40000 - 3 * math.pi * 25 * 8, 0.001));
+  });
+
+  test('pattern follows source and feature suppression', () {
+    final cut = ModelOperation(
+        id: 'cut-source',
+        kind: ModelOperationKind.circularCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026));
+    final pattern = ModelOperation(
+        id: 'pattern-1',
+        kind: ModelOperationKind.linearPattern,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026),
+        sourceOperationId: cut.id,
+        instanceCount: 3,
+        spacing: 20);
+    EvaluatedSolid evaluate(ModelOperation source, ModelOperation repeated) =>
+        const ModelEvaluator().evaluate(
+            const SketchDocument(entities: [rectangle, circle]),
+            ModelDocument(operations: [extrude, source, repeated]))!;
+    expect(
+        evaluate(cut, pattern.copyWith(suppressed: true)).cuts, hasLength(1));
+    expect(evaluate(cut.copyWith(suppressed: true), pattern).cuts, isEmpty);
+  });
+
+  test('multi-hole pattern exports as a closed manifold STL', () {
+    final cut = ModelOperation(
+        id: 'cut-source',
+        kind: ModelOperationKind.circularCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026));
+    final pattern = ModelOperation(
+        id: 'pattern-1',
+        kind: ModelOperationKind.linearPattern,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026),
+        sourceOperationId: cut.id,
+        instanceCount: 3,
+        spacing: 20);
+    final solid = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle, circle]),
+        ModelDocument(operations: [extrude, cut, pattern]))!;
+    final mesh = const SolidMesher(targetCells: 64).tessellate(solid);
+    expect(mesh.isClosedManifold, isTrue);
+    expect(const StlExporter().export(solid), contains('facet normal'));
+  });
+
+  test('linear pattern validator rejects overlap and escaped instances', () {
+    const solid = EvaluatedSolid(
+        origin: Offset(10, 20), width: 100, height: 50, depth: 8, cuts: []);
+    const validator = LinearPatternValidator();
+    expect(validator.validate(solid, circle, count: 3, spacing: 9),
+        contains('diameter'));
+    expect(validator.validate(solid, circle, count: 5, spacing: 20),
+        contains('outside'));
+    expect(validator.validate(solid, circle, count: 3, spacing: 20), isNull);
+  });
 }

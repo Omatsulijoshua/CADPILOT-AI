@@ -134,6 +134,88 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
     widget.onChanged(history.document);
   }
 
+  Future<({int count, double spacing})?> patternDialog(
+      {int count = 3, double spacing = 20}) async {
+    final countController = TextEditingController(text: count.toString());
+    final spacingController =
+        TextEditingController(text: spacing.toStringAsFixed(1));
+    return showDialog<({int count, double spacing})>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Linear cut pattern'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+              controller: countController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Total instances')),
+          const SizedBox(height: 12),
+          TextField(
+              controller: spacingController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'X spacing (mm)')),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () {
+                final parsedCount = int.tryParse(countController.text);
+                final parsedSpacing = double.tryParse(spacingController.text);
+                if (parsedCount != null &&
+                    parsedCount >= 2 &&
+                    parsedCount <= 50 &&
+                    parsedSpacing != null &&
+                    parsedSpacing > 0) {
+                  Navigator.pop(
+                      context, (count: parsedCount, spacing: parsedSpacing));
+                }
+              },
+              child: const Text('Apply')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> patternCut(ModelOperation source,
+      {ModelOperation? existing}) async {
+    final current = solid;
+    final profile = widget.sketch.entities
+        .where((item) => item.id == source.profileId)
+        .firstOrNull;
+    if (current == null ||
+        profile == null ||
+        profile.kind != SketchEntityKind.circle) {
+      message('The source circular cut is no longer valid.');
+      return;
+    }
+    final parameters = await patternDialog(
+        count: existing?.instanceCount ?? 3,
+        spacing: existing?.spacing ?? profile.primaryDimension * 3);
+    if (parameters == null) return;
+    final validation = const LinearPatternValidator().validate(current, profile,
+        count: parameters.count, spacing: parameters.spacing);
+    if (validation != null) {
+      message(validation);
+      return;
+    }
+    final operation = ModelOperation(
+        id: existing?.id ?? const Uuid().v4(),
+        kind: ModelOperationKind.linearPattern,
+        profileId: source.profileId,
+        depth: current.depth,
+        createdAt: existing?.createdAt ?? DateTime.now().toUtc(),
+        name: existing?.name,
+        suppressed: existing?.suppressed ?? false,
+        sourceOperationId: source.id,
+        instanceCount: parameters.count,
+        spacing: parameters.spacing);
+    setState(() =>
+        existing == null ? history.add(operation) : history.replace(operation));
+    widget.onChanged(history.document);
+  }
+
   void assignMaterial(CadMaterial material) {
     setState(() => history.commit(model.copyWith(material: material)));
     widget.onChanged(history.document);
@@ -150,6 +232,17 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
   }
 
   Future<void> editOperation(ModelOperation operation) async {
+    if (operation.kind == ModelOperationKind.linearPattern) {
+      final source = model.operations
+          .where((item) => item.id == operation.sourceOperationId)
+          .firstOrNull;
+      if (source == null) {
+        message('The pattern source no longer exists.');
+        return;
+      }
+      await patternCut(source, existing: operation);
+      return;
+    }
     final depth =
         await depthDialog('Edit ${operation.displayName}', operation.depth);
     if (depth == null) return;
@@ -345,22 +438,34 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                       return ListTile(
                                         contentPadding: EdgeInsets.zero,
                                         leading: Icon(
-                                            operation.kind ==
-                                                    ModelOperationKind.extrude
-                                                ? Icons.view_in_ar
-                                                : Icons.remove_circle_outline,
+                                            switch (operation.kind) {
+                                              ModelOperationKind.extrude =>
+                                                Icons.view_in_ar,
+                                              ModelOperationKind.circularCut =>
+                                                Icons.remove_circle_outline,
+                                              ModelOperationKind
+                                                    .linearPattern =>
+                                                Icons.grid_view,
+                                            },
                                             color: operation.suppressed
                                                 ? Colors.grey
                                                 : const Color(0xff29d3b2)),
                                         title: Text(operation.displayName),
                                         subtitle: Text(operation.suppressed
                                             ? 'Suppressed'
-                                            : '${operation.depth.toStringAsFixed(1)} mm'),
+                                            : operation.kind ==
+                                                    ModelOperationKind
+                                                        .linearPattern
+                                                ? '${operation.instanceCount} x ${operation.spacing.toStringAsFixed(1)} mm'
+                                                : '${operation.depth.toStringAsFixed(1)} mm'),
                                         enabled: !operation.suppressed,
                                         trailing: PopupMenuButton<String>(
                                           onSelected: (value) {
                                             if (value == 'edit') {
                                               editOperation(operation);
+                                            }
+                                            if (value == 'pattern') {
+                                              patternCut(operation);
                                             }
                                             if (value == 'rename') {
                                               renameOperation(operation);
@@ -373,9 +478,19 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                             }
                                           },
                                           itemBuilder: (_) => [
-                                            const PopupMenuItem(
+                                            PopupMenuItem(
                                                 value: 'edit',
-                                                child: Text('Edit depth')),
+                                                child: Text(operation.kind ==
+                                                        ModelOperationKind
+                                                            .linearPattern
+                                                    ? 'Edit pattern'
+                                                    : 'Edit depth')),
+                                            if (operation.kind ==
+                                                ModelOperationKind.circularCut)
+                                              const PopupMenuItem(
+                                                  value: 'pattern',
+                                                  child:
+                                                      Text('Linear pattern')),
                                             const PopupMenuItem(
                                                 value: 'rename',
                                                 child: Text('Rename')),
