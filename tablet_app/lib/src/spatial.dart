@@ -90,11 +90,51 @@ enum CameraPermissionState {
       };
 }
 
+class ArPlacementPreflight {
+  const ArPlacementPreflight({
+    required this.capabilities,
+    required this.cameraPermission,
+  });
+
+  final SpatialCapabilities capabilities;
+  final CameraPermissionState cameraPermission;
+
+  bool get ready =>
+      capabilities.arSupported &&
+      capabilities.planeDetectionSupported &&
+      cameraPermission == CameraPermissionState.granted;
+
+  String get placementSource => ready ? 'camera_ar' : 'manual';
+
+  List<String> get blockers => [
+        if (!capabilities.arSupported) 'AR tracking is unavailable',
+        if (capabilities.arSupported && !capabilities.planeDetectionSupported)
+          'Plane detection is unavailable',
+        if (capabilities.arSupported &&
+            cameraPermission != CameraPermissionState.granted)
+          cameraPermission.label,
+      ];
+}
+
 class SpatialCapabilityService {
   const SpatialCapabilityService({
     MethodChannel channel = const MethodChannel('cadpilot/spatial'),
   }) : _channel = channel;
   final MethodChannel _channel;
+
+  Future<ArPlacementPreflight> placementPreflight({
+    SpatialCapabilities? knownCapabilities,
+    bool requestPermission = false,
+  }) async {
+    final value = knownCapabilities ?? await detect();
+    final permission = value.arSupported
+        ? await cameraPermission(request: requestPermission)
+        : CameraPermissionState.unavailable;
+    return ArPlacementPreflight(
+      capabilities: value,
+      cameraPermission: permission,
+    );
+  }
 
   Future<CameraPermissionState> cameraPermission({bool request = false}) async {
     if (kIsWeb) return CameraPermissionState.unavailable;
@@ -289,11 +329,32 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
 
   Future<void> _planPlacement(
       BuildContext context, SpatialCapabilities capabilities) async {
+    final preflight = await widget.service.placementPreflight(
+      knownCapabilities: capabilities,
+      requestPermission: capabilities.arSupported,
+    );
+    if (!context.mounted) return;
+    if (!preflight.ready && capabilities.arSupported) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Using manual placement'),
+          content: Text(
+              '${preflight.blockers.join('. ')}. This record will not be labeled as camera AR.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Continue')),
+          ],
+        ),
+      );
+      if (!context.mounted) return;
+    }
     final placement = await showDialog<SpatialPlacement>(
       context: context,
       builder: (_) => PlacementPlannerDialog(
         projectName: widget.projectName,
-        source: capabilities.arSupported ? 'camera_ar' : 'manual',
+        source: preflight.placementSource,
       ),
     );
     if (placement != null) _upsert(placement);

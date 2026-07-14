@@ -71,4 +71,49 @@ void main() {
         .cameraPermission(request: true);
     expect(state, CameraPermissionState.unavailable);
   });
+
+  test('AR placement preflight requires tracking planes and camera access', () {
+    final capabilities = SpatialCapabilities.fromMap(const {
+      'platform': 'android',
+      'cameraSupported': true,
+      'arSupported': true,
+      'planeDetectionSupported': true,
+      'motionTrackingSupported': true,
+      'captureMethod': 'camera_ar',
+    });
+    final ready = ArPlacementPreflight(
+      capabilities: capabilities,
+      cameraPermission: CameraPermissionState.granted,
+    );
+    expect(ready.ready, isTrue);
+    expect(ready.placementSource, 'camera_ar');
+    expect(ready.blockers, isEmpty);
+
+    final blocked = ArPlacementPreflight(
+      capabilities: capabilities,
+      cameraPermission: CameraPermissionState.permanentlyDenied,
+    );
+    expect(blocked.ready, isFalse);
+    expect(blocked.placementSource, 'manual');
+    expect(blocked.blockers.single, contains('system settings'));
+  });
+
+  test('preflight does not request camera access on unsupported devices',
+      () async {
+    const channel = MethodChannel('cadpilot/spatial-preflight-unsupported');
+    var calls = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls++;
+      return null;
+    });
+    final result = await const SpatialCapabilityService(channel: channel)
+        .placementPreflight(
+      knownCapabilities: SpatialCapabilities.unsupported,
+      requestPermission: true,
+    );
+    expect(result.ready, isFalse);
+    expect(result.placementSource, 'manual');
+    expect(calls, 0);
+  });
 }
