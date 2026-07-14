@@ -122,6 +122,30 @@ class SpatialCapabilityService {
   }) : _channel = channel;
   final MethodChannel _channel;
 
+  Future<SpatialAnchor?> createFloorAnchor({
+    required SpatialPlacement placement,
+    required ArPlacementPreflight preflight,
+  }) async {
+    if (!preflight.ready) {
+      throw StateError(
+          'AR placement preflight must pass before anchor creation.');
+    }
+    final request = NativeFloorAnchorRequest.fromPlacement(placement);
+    if (kIsWeb) return null;
+    try {
+      final value = await _channel.invokeMapMethod<Object?, Object?>(
+        'createFloorAnchor',
+        request.toMap(),
+      );
+      if (value == null) return null;
+      return SpatialAnchor.fromJson(Map<String, Object?>.from(value));
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
   Future<ArPlacementPreflight> placementPreflight({
     SpatialCapabilities? knownCapabilities,
     bool requestPermission = false,

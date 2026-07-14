@@ -91,6 +91,40 @@ class NativeSpatialTransform {
   }
 }
 
+class NativeFloorAnchorRequest {
+  NativeFloorAnchorRequest._({
+    required this.placementId,
+    required this.transform,
+  });
+
+  final String placementId;
+  final NativeSpatialTransform transform;
+
+  factory NativeFloorAnchorRequest.fromPlacement(SpatialPlacement placement) {
+    if (placement.source != 'camera_ar') {
+      throw StateError(
+          'Only a preflight-approved camera AR placement can request an anchor.');
+    }
+    if (placement.anchor != null) {
+      throw StateError('The placement already has a native anchor.');
+    }
+    return NativeFloorAnchorRequest._(
+      placementId: placement.id,
+      transform: placement.toFloorAnchorTransform(),
+    );
+  }
+
+  Map<String, Object?> toMap() => {
+        'placementId': placementId,
+        'plane': 'floor',
+        'scale': SpatialPlacement.trueScale,
+        'matrixColumnMajor': transform.matrixColumnMajor,
+        'widthMeters': transform.widthMeters,
+        'heightMeters': transform.heightMeters,
+        'depthMeters': transform.depthMeters,
+      };
+}
+
 class SpatialPlacement {
   const SpatialPlacement({
     required this.id,

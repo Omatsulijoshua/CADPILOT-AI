@@ -1,4 +1,5 @@
 import 'package:cadpilot_tablet/src/spatial.dart';
+import 'package:cadpilot_tablet/src/spatial_models.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -114,6 +115,93 @@ void main() {
     );
     expect(result.ready, isFalse);
     expect(result.placementSource, 'manual');
+    expect(calls, 0);
+  });
+
+  test('floor anchor request sends a true-scale native payload', () async {
+    const channel = MethodChannel('cadpilot/spatial-anchor-request');
+    final now = DateTime.utc(2026, 7, 14);
+    final capabilities = SpatialCapabilities.fromMap(const {
+      'platform': 'android',
+      'cameraSupported': true,
+      'arSupported': true,
+      'planeDetectionSupported': true,
+      'motionTrackingSupported': true,
+      'captureMethod': 'camera_ar',
+    });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'createFloorAnchor');
+      final arguments = call.arguments! as Map<Object?, Object?>;
+      expect(arguments['placementId'], 'placement-native');
+      expect(arguments['scale'], 1.0);
+      expect(arguments['widthMeters'], 1.2);
+      expect(arguments['matrixColumnMajor'], hasLength(16));
+      return {
+        'id': 'anchor-native',
+        'platform': 'android',
+        'trackingState': 'tracking',
+        'updatedAt': now.toIso8601String(),
+      };
+    });
+    final placement = SpatialPlacement(
+      id: 'placement-native',
+      name: 'Machine',
+      createdAt: now,
+      source: 'camera_ar',
+      plane: 'floor',
+      widthMm: 1200,
+      heightMm: 800,
+      depthMm: 600,
+      offsetXMm: 0,
+      offsetYMm: 0,
+      offsetZMm: 0,
+      rotationDegrees: 0,
+    );
+    final anchor = await const SpatialCapabilityService(channel: channel)
+        .createFloorAnchor(
+      placement: placement,
+      preflight: ArPlacementPreflight(
+        capabilities: capabilities,
+        cameraPermission: CameraPermissionState.granted,
+      ),
+    );
+    expect(anchor?.id, 'anchor-native');
+    expect(anchor?.trackingState, SpatialTrackingState.tracking);
+  });
+
+  test('floor anchor request is blocked before successful preflight', () async {
+    const channel = MethodChannel('cadpilot/spatial-anchor-blocked');
+    var calls = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls++;
+      return null;
+    });
+    final placement = SpatialPlacement(
+      id: 'manual',
+      name: 'Manual',
+      createdAt: DateTime.utc(2026, 7, 14),
+      source: 'manual',
+      plane: 'floor',
+      widthMm: 100,
+      heightMm: 100,
+      depthMm: 100,
+      offsetXMm: 0,
+      offsetYMm: 0,
+      offsetZMm: 0,
+      rotationDegrees: 0,
+    );
+    expect(
+      () => const SpatialCapabilityService(channel: channel).createFloorAnchor(
+        placement: placement,
+        preflight: const ArPlacementPreflight(
+          capabilities: SpatialCapabilities.unsupported,
+          cameraPermission: CameraPermissionState.unavailable,
+        ),
+      ),
+      throwsStateError,
+    );
     expect(calls, 0);
   });
 }
