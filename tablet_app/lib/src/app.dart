@@ -179,7 +179,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     FilledButton(
                         onPressed: busy ? null : submit,
                         child: Text(busy
-                            ? 'Signing inÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦'
+                            ? 'Signing inÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦'
                             : 'Sign in')),
                     const SizedBox(height: 12),
                     OutlinedButton(
@@ -343,7 +343,7 @@ class ProjectGrid extends ConsumerWidget {
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w700)),
                               Text(
-                                  'Revision ${project.revision} ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ ${project.syncState == SyncState.synced ? 'Synced' : 'Saved locally'}',
+                                  'Revision ${project.revision} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ ${project.syncState == SyncState.synced ? 'Synced' : 'Saved locally'}',
                                   style: Theme.of(context).textTheme.bodySmall),
                             ]),
                       )));
@@ -376,7 +376,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
 
   void schedule(CadProject project) {
     setState(() => status =
-        'SavingÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦');
+        'SavingÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦');
     autosave?.cancel();
     autosave = Timer(const Duration(milliseconds: 600), () async {
       await ref
@@ -475,15 +475,12 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                   builder: (_) => SpatialCapabilityPanel(
                         projectName: project.name,
                         placements: project.spatialPlacements,
-                        onPlacementSaved: (placement) async {
+                        onPlacementsChanged: (placements) async {
                           await ref.read(projectsProvider.notifier).save(
-                                project.copyWith(spatialPlacements: [
-                                  ...project.spatialPlacements,
-                                  placement,
-                                ]),
+                                project.copyWith(spatialPlacements: placements),
                               );
                           if (mounted) {
-                            setState(() => status = 'Spatial placement saved');
+                            setState(() => status = 'Spatial placements saved');
                           }
                         },
                       )),
@@ -567,7 +564,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                           maxLines: 8,
                           decoration: const InputDecoration(
                               hintText:
-                                  'Add design intent, dimensions, or manufacturing notesÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦')),
+                                  'Add design intent, dimensions, or manufacturing notesÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦')),
                       const SizedBox(height: 20),
                       const Text('SYNC'),
                       const ListTile(

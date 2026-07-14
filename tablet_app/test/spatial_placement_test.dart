@@ -50,4 +50,33 @@ void main() {
     });
     expect(restored.spatialPlacements, isEmpty);
   });
+
+  test('copyWith preserves identity while updating placement transforms', () {
+    final original = SpatialPlacement(
+      id: 'placement-1',
+      name: 'Original',
+      createdAt: DateTime.utc(2026, 7, 14),
+      source: 'manual',
+      plane: 'floor',
+      widthMm: 100,
+      heightMm: 200,
+      depthMm: 300,
+      offsetXMm: 0,
+      offsetYMm: 0,
+      offsetZMm: 0,
+      rotationDegrees: 0,
+    );
+    final edited = original.copyWith(
+      name: 'Edited',
+      plane: 'wall',
+      offsetZMm: 500,
+      rotationDegrees: 90,
+    );
+    expect(edited.id, original.id);
+    expect(edited.createdAt, original.createdAt);
+    expect(edited.name, 'Edited');
+    expect(edited.plane, 'wall');
+    expect(edited.offsetZMm, 500);
+    expect(edited.widthMm, 100);
+  });
 }

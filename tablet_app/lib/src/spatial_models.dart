@@ -27,6 +27,34 @@ class SpatialPlacement {
   final double offsetZMm;
   final double rotationDegrees;
 
+  SpatialPlacement copyWith({
+    String? id,
+    String? name,
+    DateTime? createdAt,
+    String? source,
+    String? plane,
+    double? widthMm,
+    double? heightMm,
+    double? depthMm,
+    double? offsetXMm,
+    double? offsetYMm,
+    double? offsetZMm,
+    double? rotationDegrees,
+  }) =>
+      SpatialPlacement(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        createdAt: createdAt ?? this.createdAt,
+        source: source ?? this.source,
+        plane: plane ?? this.plane,
+        widthMm: widthMm ?? this.widthMm,
+        heightMm: heightMm ?? this.heightMm,
+        depthMm: depthMm ?? this.depthMm,
+        offsetXMm: offsetXMm ?? this.offsetXMm,
+        offsetYMm: offsetYMm ?? this.offsetYMm,
+        offsetZMm: offsetZMm ?? this.offsetZMm,
+        rotationDegrees: rotationDegrees ?? this.rotationDegrees,
+      );
   Map<String, Object?> toJson() => {
         'id': id,
         'name': name,

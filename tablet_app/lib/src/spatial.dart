@@ -90,13 +90,13 @@ class SpatialCapabilityPanel extends StatefulWidget {
     required this.projectName,
     this.service = const SpatialCapabilityService(),
     this.placements = const [],
-    this.onPlacementSaved,
+    this.onPlacementsChanged,
     super.key,
   });
   final String projectName;
   final SpatialCapabilityService service;
   final List<SpatialPlacement> placements;
-  final ValueChanged<SpatialPlacement>? onPlacementSaved;
+  final ValueChanged<List<SpatialPlacement>>? onPlacementsChanged;
 
   @override
   State<SpatialCapabilityPanel> createState() => _SpatialCapabilityPanelState();
@@ -104,6 +104,13 @@ class SpatialCapabilityPanel extends StatefulWidget {
 
 class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
   late final Future<SpatialCapabilities> capabilities = widget.service.detect();
+  late List<SpatialPlacement> placements;
+
+  @override
+  void initState() {
+    super.initState();
+    placements = [...widget.placements];
+  }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -165,20 +172,35 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                     ),
                   ),
                 ]),
-                if (widget.placements.isNotEmpty) ...[
+                if (placements.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Text(
-                        'Saved placements (${widget.placements.length})',
+                    child: Text('Saved placements (${placements.length})',
                         style: Theme.of(context).textTheme.titleSmall),
                   ),
-                  ...widget.placements.take(3).map((placement) => ListTile(
+                  ...placements.map((placement) => ListTile(
                         dense: true,
                         leading: const Icon(Icons.place_outlined),
                         title: Text(placement.name),
                         subtitle: Text(
                             '${placement.plane} plane - ${placement.widthMm} x ${placement.heightMm} x ${placement.depthMm} mm'),
+                        trailing: Wrap(children: [
+                          IconButton(
+                              tooltip: 'Edit placement',
+                              onPressed: () =>
+                                  _editPlacement(context, placement),
+                              icon: const Icon(Icons.edit_outlined)),
+                          IconButton(
+                              tooltip: 'Duplicate placement',
+                              onPressed: () => _duplicatePlacement(placement),
+                              icon: const Icon(Icons.copy_outlined)),
+                          IconButton(
+                              tooltip: 'Delete placement',
+                              onPressed: () =>
+                                  _deletePlacement(context, placement),
+                              icon: const Icon(Icons.delete_outline)),
+                        ]),
                       )),
                 ],
               ]);
@@ -201,7 +223,61 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
         source: capabilities.arSupported ? 'camera_ar' : 'manual',
       ),
     );
-    if (placement != null) widget.onPlacementSaved?.call(placement);
+    if (placement != null) _upsert(placement);
+  }
+
+  Future<void> _editPlacement(
+      BuildContext context, SpatialPlacement placement) async {
+    final updated = await showDialog<SpatialPlacement>(
+      context: context,
+      builder: (_) => PlacementPlannerDialog(
+          projectName: widget.projectName,
+          source: placement.source,
+          initial: placement),
+    );
+    if (updated != null) _upsert(updated);
+  }
+
+  void _duplicatePlacement(SpatialPlacement placement) {
+    final stamp = DateTime.now();
+    _upsert(placement.copyWith(
+        id: 'placement-${stamp.microsecondsSinceEpoch}',
+        name: '${placement.name} copy',
+        createdAt: stamp.toUtc()));
+  }
+
+  Future<void> _deletePlacement(
+      BuildContext context, SpatialPlacement placement) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete placement?'),
+        content: Text('Remove "${placement.name}" from this project?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => placements.removeWhere((item) => item.id == placement.id));
+    widget.onPlacementsChanged?.call(List.unmodifiable(placements));
+  }
+
+  void _upsert(SpatialPlacement placement) {
+    setState(() {
+      final index = placements.indexWhere((item) => item.id == placement.id);
+      if (index < 0) {
+        placements.add(placement);
+      } else {
+        placements[index] = placement;
+      }
+    });
+    widget.onPlacementsChanged?.call(List.unmodifiable(placements));
   }
 
   static Widget _status(String label, bool supported) => Chip(
@@ -215,11 +291,13 @@ class PlacementPlannerDialog extends StatefulWidget {
   const PlacementPlannerDialog({
     required this.projectName,
     required this.source,
+    this.initial,
     super.key,
   });
 
   final String projectName;
   final String source;
+  final SpatialPlacement? initial;
 
   @override
   State<PlacementPlannerDialog> createState() => _PlacementPlannerDialogState();
@@ -227,15 +305,30 @@ class PlacementPlannerDialog extends StatefulWidget {
 
 class _PlacementPlannerDialogState extends State<PlacementPlannerDialog> {
   final formKey = GlobalKey<FormState>();
-  final name = TextEditingController(text: 'Primary placement');
-  final width = TextEditingController(text: '1000');
-  final height = TextEditingController(text: '1000');
-  final depth = TextEditingController(text: '1000');
-  final x = TextEditingController(text: '0');
-  final y = TextEditingController(text: '0');
-  final z = TextEditingController(text: '0');
-  final rotation = TextEditingController(text: '0');
-  String plane = 'floor';
+  late final TextEditingController name;
+  late final TextEditingController width;
+  late final TextEditingController height;
+  late final TextEditingController depth;
+  late final TextEditingController x;
+  late final TextEditingController y;
+  late final TextEditingController z;
+  late final TextEditingController rotation;
+  late String plane;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initial;
+    name = TextEditingController(text: initial?.name ?? 'Primary placement');
+    width = TextEditingController(text: '${initial?.widthMm ?? 1000}');
+    height = TextEditingController(text: '${initial?.heightMm ?? 1000}');
+    depth = TextEditingController(text: '${initial?.depthMm ?? 1000}');
+    x = TextEditingController(text: '${initial?.offsetXMm ?? 0}');
+    y = TextEditingController(text: '${initial?.offsetYMm ?? 0}');
+    z = TextEditingController(text: '${initial?.offsetZMm ?? 0}');
+    rotation = TextEditingController(text: '${initial?.rotationDegrees ?? 0}');
+    plane = initial?.plane ?? 'floor';
+  }
 
   @override
   void dispose() {
@@ -261,9 +354,10 @@ class _PlacementPlannerDialogState extends State<PlacementPlannerDialog> {
     Navigator.pop(
       context,
       SpatialPlacement(
-        id: 'placement-${DateTime.now().microsecondsSinceEpoch}',
+        id: widget.initial?.id ??
+            'placement-${DateTime.now().microsecondsSinceEpoch}',
         name: name.text.trim(),
-        createdAt: DateTime.now().toUtc(),
+        createdAt: widget.initial?.createdAt ?? DateTime.now().toUtc(),
         source: widget.source,
         plane: plane,
         widthMm: number(width),
