@@ -18,6 +18,9 @@ class _SketchCanvasState extends State<SketchCanvas> {
   Offset? pointerStart;
   Offset? pointerCurrent;
   Offset moveDelta = Offset.zero;
+  Offset? hoverPoint;
+  bool snapping = true;
+  static const snapper = SketchSnapper();
   @override
   void initState() {
     super.initState();
@@ -32,7 +35,9 @@ class _SketchCanvasState extends State<SketchCanvas> {
         moveDelta = Offset.zero;
       });
   void down(PointerDownEvent event) {
-    final point = event.localPosition;
+    final point = tool == SketchTool.select || !snapping
+        ? event.localPosition
+        : snapper.snap(event.localPosition, history.document);
     setState(() {
       pointerStart = point;
       pointerCurrent = point;
@@ -44,7 +49,9 @@ class _SketchCanvasState extends State<SketchCanvas> {
   void move(PointerMoveEvent event) {
     if (pointerStart == null) return;
     setState(() {
-      pointerCurrent = event.localPosition;
+      pointerCurrent = tool == SketchTool.select || !snapping
+          ? event.localPosition
+          : snapper.snap(event.localPosition, history.document);
       if (tool == SketchTool.select && history.selectedId != null) {
         moveDelta = pointerCurrent! - pointerStart!;
       }
@@ -173,12 +180,16 @@ class _SketchCanvasState extends State<SketchCanvas> {
                   onPointerDown: down,
                   onPointerMove: move,
                   onPointerUp: up,
+                  onPointerHover: (event) =>
+                      setState(() => hoverPoint = event.localPosition),
+                  onPointerCancel: (_) => setState(() => hoverPoint = null),
                   child: CustomPaint(
                       painter: SketchPainter(
                           document: history.document,
                           selectedId: history.selectedId,
                           preview: _preview(),
-                          selectedDelta: moveDelta)))),
+                          selectedDelta: moveDelta,
+                          hoverPoint: hoverPoint)))),
           Positioned(
               top: 16,
               left: 16,
@@ -192,6 +203,11 @@ class _SketchCanvasState extends State<SketchCanvas> {
                         SketchTool.rectangle),
                     _tool(Icons.circle_outlined, 'Circle', SketchTool.circle),
                     _tool(Icons.architecture, 'Arc', SketchTool.arc),
+                    const SizedBox(width: 6),
+                    IconButton.filledTonal(
+                        tooltip: snapping ? 'Snapping on' : 'Snapping off',
+                        onPressed: () => setState(() => snapping = !snapping),
+                        icon: Icon(snapping ? Icons.grid_on : Icons.grid_off)),
                     const SizedBox(width: 12),
                     IconButton.filledTonal(
                         tooltip: 'Set dimension',
@@ -240,10 +256,15 @@ class _SketchCanvasState extends State<SketchCanvas> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 8),
                       child: Text(
-                          '${history.document.entities.length} entities | ${tool.name}')))),
+                          '${history.document.entities.length} entities | ${tool.name} | ${_solveLabel(history.document.solveState)}')))),
         ]),
       );
 
+  String _solveLabel(SketchSolveState state) => switch (state) {
+        SketchSolveState.underConstrained => 'Under-constrained',
+        SketchSolveState.fullyConstrained => 'Fully constrained',
+        SketchSolveState.conflicting => 'Conflicting constraints',
+      };
   Widget _tool(IconData icon, String label, SketchTool value) => Padding(
       padding: const EdgeInsets.only(right: 8),
       child: SegmentedButton<SketchTool>(
@@ -276,11 +297,13 @@ class SketchPainter extends CustomPainter {
       {required this.document,
       required this.selectedId,
       required this.preview,
-      required this.selectedDelta});
+      required this.selectedDelta,
+      required this.hoverPoint});
   final SketchDocument document;
   final String? selectedId;
   final SketchEntity? preview;
   final Offset selectedDelta;
+  final Offset? hoverPoint;
   @override
   void paint(Canvas canvas, Size size) {
     final grid = Paint()
@@ -299,6 +322,17 @@ class SketchPainter extends CustomPainter {
         Offset(0, size.height / 2), Offset(size.width, size.height / 2), axis);
     canvas.drawLine(
         Offset(size.width / 2, 0), Offset(size.width / 2, size.height), axis);
+    if (hoverPoint != null) {
+      final hoverPaint = Paint()
+        ..color = const Color(0x8896f7e3)
+        ..strokeWidth = 1;
+      canvas.drawCircle(
+          hoverPoint!, 7, hoverPaint..style = PaintingStyle.stroke);
+      canvas.drawLine(hoverPoint! - const Offset(11, 0),
+          hoverPoint! + const Offset(11, 0), hoverPaint);
+      canvas.drawLine(hoverPoint! - const Offset(0, 11),
+          hoverPoint! + const Offset(0, 11), hoverPaint);
+    }
     for (final entity in document.entities) {
       final displayed =
           entity.id == selectedId ? entity.translated(selectedDelta) : entity;

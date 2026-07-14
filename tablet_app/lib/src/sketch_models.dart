@@ -7,30 +7,37 @@ enum SketchEntityKind { line, rectangle, circle, arc }
 
 enum SketchConstraint { horizontal, vertical }
 
+enum SketchSolveState { underConstrained, fullyConstrained, conflicting }
+
 class SketchEntity {
   const SketchEntity(
       {required this.id,
       required this.kind,
       required this.start,
       required this.end,
-      this.constraint});
+      this.constraint,
+      this.dimensionLocked = false});
   final String id;
   final SketchEntityKind kind;
   final Offset start;
   final Offset end;
   final SketchConstraint? constraint;
+  final bool dimensionLocked;
 
   SketchEntity copyWith(
           {Offset? start,
           Offset? end,
           SketchConstraint? constraint,
-          bool clearConstraint = false}) =>
+          bool clearConstraint = false,
+          bool? dimensionLocked}) =>
       SketchEntity(
-          id: id,
-          kind: kind,
-          start: start ?? this.start,
-          end: end ?? this.end,
-          constraint: clearConstraint ? null : constraint ?? this.constraint);
+        id: id,
+        kind: kind,
+        start: start ?? this.start,
+        end: end ?? this.end,
+        constraint: clearConstraint ? null : constraint ?? this.constraint,
+        dimensionLocked: dimensionLocked ?? this.dimensionLocked,
+      );
   SketchEntity translated(Offset delta) =>
       copyWith(start: start + delta, end: end + delta);
   double get primaryDimension => switch (kind) {
@@ -45,7 +52,7 @@ class SketchEntity {
   String get measurementLabel => switch (kind) {
         SketchEntityKind.line => '${primaryDimension.toStringAsFixed(1)} mm',
         SketchEntityKind.rectangle =>
-          '${primaryDimension.toStringAsFixed(1)} × ${secondaryDimension!.toStringAsFixed(1)} mm',
+          '${primaryDimension.toStringAsFixed(1)} x ${secondaryDimension!.toStringAsFixed(1)} mm',
         SketchEntityKind.circle =>
           'R ${primaryDimension.toStringAsFixed(1)} mm',
         SketchEntityKind.arc =>
@@ -60,24 +67,25 @@ class SketchEntity {
         final direction = vector.distance == 0
             ? const Offset(1, 0)
             : vector / vector.distance;
-        return copyWith(end: start + direction * safePrimary);
+        return copyWith(
+            end: start + direction * safePrimary, dimensionLocked: true);
       case SketchEntityKind.rectangle:
         final xSign = end.dx < start.dx ? -1.0 : 1.0;
         final ySign = end.dy < start.dy ? -1.0 : 1.0;
+        final height = (secondary ?? secondaryDimension ?? safePrimary)
+            .clamp(0.1, 100000.0);
         return copyWith(
             end: Offset(
-                start.dx + safePrimary * xSign,
-                start.dy +
-                    (secondary ?? secondaryDimension ?? safePrimary)
-                            .clamp(0.1, 100000.0) *
-                        ySign));
+                start.dx + safePrimary * xSign, start.dy + height * ySign),
+            dimensionLocked: true);
       case SketchEntityKind.circle:
       case SketchEntityKind.arc:
         final vector = end - start;
         final direction = vector.distance == 0
             ? const Offset(1, 0)
             : vector / vector.distance;
-        return copyWith(end: start + direction * safePrimary);
+        return copyWith(
+            end: start + direction * safePrimary, dimensionLocked: true);
     }
   }
 
@@ -120,7 +128,8 @@ class SketchEntity {
         'kind': kind.name,
         'start': [start.dx, start.dy],
         'end': [end.dx, end.dy],
-        if (constraint != null) 'constraint': constraint!.name
+        if (constraint != null) 'constraint': constraint!.name,
+        'dimensionLocked': dimensionLocked,
       };
   factory SketchEntity.fromJson(Map<String, Object?> json) {
     final start = json['start']! as List<Object?>;
@@ -134,6 +143,7 @@ class SketchEntity {
       constraint: json['constraint'] == null
           ? null
           : SketchConstraint.values.byName(json['constraint']! as String),
+      dimensionLocked: (json['dimensionLocked'] as bool?) ?? false,
     );
   }
 }
@@ -141,6 +151,27 @@ class SketchEntity {
 class SketchDocument {
   const SketchDocument({this.entities = const []});
   final List<SketchEntity> entities;
+  SketchSolveState get solveState {
+    for (final entity in entities) {
+      if (entity.constraint == SketchConstraint.horizontal &&
+          (entity.end.dy - entity.start.dy).abs() > 0.001) {
+        return SketchSolveState.conflicting;
+      }
+      if (entity.constraint == SketchConstraint.vertical &&
+          (entity.end.dx - entity.start.dx).abs() > 0.001) {
+        return SketchSolveState.conflicting;
+      }
+    }
+    if (entities.isNotEmpty &&
+        entities.every((entity) =>
+            entity.dimensionLocked &&
+            (entity.kind != SketchEntityKind.line ||
+                entity.constraint != null))) {
+      return SketchSolveState.fullyConstrained;
+    }
+    return SketchSolveState.underConstrained;
+  }
+
   SketchDocument copyWith({List<SketchEntity>? entities}) =>
       SketchDocument(entities: List.unmodifiable(entities ?? this.entities));
   Map<String, Object> toJson() =>
@@ -168,7 +199,6 @@ class SketchHistory {
           .firstOrNull;
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
-
   void commit(SketchDocument next) {
     if (identical(next, _document)) return;
     _undo.add(_document);
@@ -223,5 +253,27 @@ class SketchHistory {
     _undo.add(_document);
     _document = _redo.removeLast();
     selectedId = null;
+  }
+}
+
+class SketchSnapper {
+  const SketchSnapper({this.gridSize = 12, this.threshold = 10});
+  final double gridSize;
+  final double threshold;
+  Offset snap(Offset point, SketchDocument document) {
+    Offset? nearest;
+    var nearestDistance = threshold;
+    for (final entity in document.entities) {
+      for (final candidate in [entity.start, entity.end]) {
+        final distance = (point - candidate).distance;
+        if (distance < nearestDistance) {
+          nearest = candidate;
+          nearestDistance = distance;
+        }
+      }
+    }
+    if (nearest != null) return nearest;
+    return Offset((point.dx / gridSize).round() * gridSize,
+        (point.dy / gridSize).round() * gridSize);
   }
 }

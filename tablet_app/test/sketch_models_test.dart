@@ -86,4 +86,84 @@ void main() {
     expect(arc.primaryDimension, 40);
     expect(arc.hitTest(const Offset(100, 60)), isTrue);
   });
+
+  test('snapper prioritizes endpoints then falls back to grid', () {
+    const document = SketchDocument(entities: [
+      SketchEntity(
+          id: 'line-1',
+          kind: SketchEntityKind.line,
+          start: Offset(25, 25),
+          end: Offset(90, 25))
+    ]);
+    const snapper = SketchSnapper(gridSize: 12, threshold: 10);
+    expect(snapper.snap(const Offset(29, 27), document), const Offset(25, 25));
+    expect(snapper.snap(const Offset(52, 53), document), const Offset(48, 48));
+  });
+
+  test('solve state reports under, fully, and conflicting sketches', () {
+    const under = SketchDocument(entities: [
+      SketchEntity(
+          id: 'line',
+          kind: SketchEntityKind.line,
+          start: Offset.zero,
+          end: Offset(10, 4))
+    ]);
+    expect(under.solveState, SketchSolveState.underConstrained);
+    const full = SketchDocument(entities: [
+      SketchEntity(
+          id: 'line',
+          kind: SketchEntityKind.line,
+          start: Offset.zero,
+          end: Offset(10, 0),
+          constraint: SketchConstraint.horizontal,
+          dimensionLocked: true),
+      SketchEntity(
+          id: 'circle',
+          kind: SketchEntityKind.circle,
+          start: Offset(30, 30),
+          end: Offset(40, 30),
+          dimensionLocked: true),
+    ]);
+    expect(full.solveState, SketchSolveState.fullyConstrained);
+    const conflicting = SketchDocument(entities: [
+      SketchEntity(
+          id: 'bad',
+          kind: SketchEntityKind.line,
+          start: Offset.zero,
+          end: Offset(10, 5),
+          constraint: SketchConstraint.horizontal,
+          dimensionLocked: true)
+    ]);
+    expect(conflicting.solveState, SketchSolveState.conflicting);
+  });
+
+  test('dimension lock survives serialization', () {
+    const entity = SketchEntity(
+        id: 'circle',
+        kind: SketchEntityKind.circle,
+        start: Offset.zero,
+        end: Offset(20, 0),
+        dimensionLocked: true);
+    expect(SketchEntity.fromJson(entity.toJson()).dimensionLocked, isTrue);
+  });
+
+  test('long undo and redo sequence remains deterministic', () {
+    final history = SketchHistory(const SketchDocument());
+    for (var index = 0; index < 50; index++) {
+      history.add(SketchEntity(
+          id: 'line-$index',
+          kind: SketchEntityKind.line,
+          start: Offset(index.toDouble(), 0),
+          end: Offset(index + 10.0, 0)));
+    }
+    for (var index = 0; index < 50; index++) {
+      history.undo();
+    }
+    expect(history.document.entities, isEmpty);
+    for (var index = 0; index < 50; index++) {
+      history.redo();
+    }
+    expect(history.document.entities, hasLength(50));
+    expect(history.document.entities.last.id, 'line-49');
+  });
 }
