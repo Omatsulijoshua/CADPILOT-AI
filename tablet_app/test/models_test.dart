@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:cadpilot_tablet/src/models.dart';
 import 'package:cadpilot_tablet/src/sketch_models.dart';
 import 'package:flutter_test/flutter_test.dart';

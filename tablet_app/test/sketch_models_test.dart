@@ -44,4 +44,46 @@ void main() {
     history.undo();
     expect(history.document.entities, hasLength(1));
   });
+
+  test('dimensions resize geometry and remain undoable', () {
+    final history = SketchHistory(const SketchDocument(entities: [
+      SketchEntity(
+          id: 'rect-1',
+          kind: SketchEntityKind.rectangle,
+          start: Offset(10, 10),
+          end: Offset(30, 25))
+    ]));
+    history.selectAt(const Offset(30, 18));
+    history.dimensionSelected(120, 45);
+    expect(history.selected!.primaryDimension, 120);
+    expect(history.selected!.secondaryDimension, 45);
+    history.undo();
+    expect(history.document.entities.single.primaryDimension, 20);
+  });
+
+  test('line constraints persist through serialization', () {
+    final history = SketchHistory(const SketchDocument(entities: [
+      SketchEntity(
+          id: 'line-1',
+          kind: SketchEntityKind.line,
+          start: Offset(5, 5),
+          end: Offset(60, 30))
+    ]));
+    history.selectAt(const Offset(30, 17));
+    history.constrainSelected(SketchConstraint.horizontal);
+    final constrained = history.selected!;
+    expect(constrained.end.dy, constrained.start.dy);
+    final decoded = SketchEntity.fromJson(constrained.toJson());
+    expect(decoded.constraint, SketchConstraint.horizontal);
+  });
+
+  test('arc stores radius and supports selection', () {
+    const arc = SketchEntity(
+        id: 'arc-1',
+        kind: SketchEntityKind.arc,
+        start: Offset(100, 100),
+        end: Offset(140, 100));
+    expect(arc.primaryDimension, 40);
+    expect(arc.hitTest(const Offset(100, 60)), isTrue);
+  });
 }

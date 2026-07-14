@@ -1,6 +1,6 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
-
 import 'sketch_models.dart';
 
 class SketchCanvas extends StatefulWidget {
@@ -18,13 +18,13 @@ class _SketchCanvasState extends State<SketchCanvas> {
   Offset? pointerStart;
   Offset? pointerCurrent;
   Offset moveDelta = Offset.zero;
-
   @override
   void initState() {
     super.initState();
     history = SketchHistory(widget.document);
   }
 
+  void persist() => widget.onChanged(history.document);
   void choose(SketchTool next) => setState(() {
         tool = next;
         pointerStart = null;
@@ -63,7 +63,8 @@ class _SketchCanvasState extends State<SketchCanvas> {
         SketchTool.line => SketchEntityKind.line,
         SketchTool.rectangle => SketchEntityKind.rectangle,
         SketchTool.circle => SketchEntityKind.circle,
-        SketchTool.select => throw StateError('select cannot draw')
+        SketchTool.arc => SketchEntityKind.arc,
+        SketchTool.select => throw StateError('select cannot draw'),
       };
       history.add(SketchEntity(
           id: const Uuid().v4(),
@@ -76,95 +77,182 @@ class _SketchCanvasState extends State<SketchCanvas> {
       pointerCurrent = null;
       moveDelta = Offset.zero;
     });
-    widget.onChanged(history.document);
+    persist();
   }
 
   void undo() {
     setState(history.undo);
-    widget.onChanged(history.document);
+    persist();
   }
 
   void redo() {
     setState(history.redo);
-    widget.onChanged(history.document);
+    persist();
   }
 
   void delete() {
     setState(history.deleteSelected);
-    widget.onChanged(history.document);
+    persist();
+  }
+
+  void constrain(SketchConstraint constraint) {
+    setState(() => history.constrainSelected(constraint));
+    persist();
+  }
+
+  Future<void> dimension() async {
+    final selected = history.selected;
+    if (selected == null) return;
+    final primary = TextEditingController(
+        text: selected.primaryDimension.toStringAsFixed(1));
+    final secondary = TextEditingController(
+        text: selected.secondaryDimension?.toStringAsFixed(1));
+    final result = await showDialog<List<double>>(
+        context: context,
+        builder: (context) => AlertDialog(
+              title: Text(selected.kind == SketchEntityKind.rectangle
+                  ? 'Set width and height'
+                  : 'Set dimension'),
+              content: Column(mainAxisSize: MainAxisSize.min, children: [
+                TextField(
+                    controller: primary,
+                    autofocus: true,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                        labelText: selected.kind == SketchEntityKind.circle ||
+                                selected.kind == SketchEntityKind.arc
+                            ? 'Radius (mm)'
+                            : selected.kind == SketchEntityKind.rectangle
+                                ? 'Width (mm)'
+                                : 'Length (mm)')),
+                if (selected.secondaryDimension != null) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                      controller: secondary,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration:
+                          const InputDecoration(labelText: 'Height (mm)'))
+                ],
+              ]),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel')),
+                FilledButton(
+                    onPressed: () {
+                      final first = double.tryParse(primary.text);
+                      final second = selected.secondaryDimension == null
+                          ? null
+                          : double.tryParse(secondary.text);
+                      if (first != null &&
+                          first > 0 &&
+                          (selected.secondaryDimension == null ||
+                              second != null && second > 0)) {
+                        Navigator.pop(
+                            context, [first, if (second != null) second]);
+                      }
+                    },
+                    child: const Text('Apply'))
+              ],
+            ));
+    if (result == null) return;
+    setState(() => history.dimensionSelected(
+        result.first, result.length > 1 ? result[1] : null));
+    persist();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0xff071017),
-      child: Stack(children: [
-        Positioned.fill(
-            child: Listener(
-          behavior: HitTestBehavior.opaque,
-          onPointerDown: down,
-          onPointerMove: move,
-          onPointerUp: up,
-          child: CustomPaint(
-              painter: SketchPainter(
-                  document: history.document,
-                  selectedId: history.selectedId,
-                  preview: _preview(),
-                  selectedDelta: moveDelta)),
-        )),
-        Positioned(
-            top: 16,
-            left: 16,
-            right: 16,
-            child: Row(children: [
-              _tool(Icons.near_me_outlined, 'Select', SketchTool.select),
-              _tool(Icons.show_chart, 'Line', SketchTool.line),
-              _tool(
-                  Icons.rectangle_outlined, 'Rectangle', SketchTool.rectangle),
-              _tool(Icons.circle_outlined, 'Circle', SketchTool.circle),
-              const Spacer(),
-              IconButton.filledTonal(
-                  tooltip: 'Undo',
-                  onPressed: history.canUndo ? undo : null,
-                  icon: const Icon(Icons.undo)),
-              const SizedBox(width: 8),
-              IconButton.filledTonal(
-                  tooltip: 'Redo',
-                  onPressed: history.canRedo ? redo : null,
-                  icon: const Icon(Icons.redo)),
-              const SizedBox(width: 8),
-              IconButton.filledTonal(
-                  tooltip: 'Delete selection',
-                  onPressed: history.selectedId == null ? null : delete,
-                  icon: const Icon(Icons.delete_outline)),
-            ])),
-        Positioned(
-            left: 18,
-            bottom: 16,
-            child: DecoratedBox(
-                decoration: BoxDecoration(
-                    color: const Color(0xdd121b25),
-                    borderRadius: BorderRadius.circular(8)),
-                child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Text(
-                        '${history.document.entities.length} entities Ã¢â‚¬Â¢ ${tool.name}')))),
-      ]),
-    );
-  }
-
-  Widget _tool(IconData icon, String label, SketchTool value) => Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: SegmentedButton<SketchTool>(
-            segments: [
-              ButtonSegment(value: value, icon: Icon(icon), label: Text(label))
-            ],
-            selected: tool == value ? {value} : <SketchTool>{},
-            emptySelectionAllowed: true,
-            onSelectionChanged: (_) => choose(value)),
+  Widget build(BuildContext context) => ColoredBox(
+        color: const Color(0xff071017),
+        child: Stack(children: [
+          Positioned.fill(
+              child: Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: down,
+                  onPointerMove: move,
+                  onPointerUp: up,
+                  child: CustomPaint(
+                      painter: SketchPainter(
+                          document: history.document,
+                          selectedId: history.selectedId,
+                          preview: _preview(),
+                          selectedDelta: moveDelta)))),
+          Positioned(
+              top: 16,
+              left: 16,
+              right: 16,
+              child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(children: [
+                    _tool(Icons.near_me_outlined, 'Select', SketchTool.select),
+                    _tool(Icons.show_chart, 'Line', SketchTool.line),
+                    _tool(Icons.rectangle_outlined, 'Rectangle',
+                        SketchTool.rectangle),
+                    _tool(Icons.circle_outlined, 'Circle', SketchTool.circle),
+                    _tool(Icons.architecture, 'Arc', SketchTool.arc),
+                    const SizedBox(width: 12),
+                    IconButton.filledTonal(
+                        tooltip: 'Set dimension',
+                        onPressed: history.selected == null ? null : dimension,
+                        icon: const Icon(Icons.straighten)),
+                    const SizedBox(width: 6),
+                    IconButton.filledTonal(
+                        tooltip: 'Constrain horizontal',
+                        onPressed:
+                            history.selected?.kind == SketchEntityKind.line
+                                ? () => constrain(SketchConstraint.horizontal)
+                                : null,
+                        icon: const Icon(Icons.horizontal_rule)),
+                    const SizedBox(width: 6),
+                    IconButton.filledTonal(
+                        tooltip: 'Constrain vertical',
+                        onPressed:
+                            history.selected?.kind == SketchEntityKind.line
+                                ? () => constrain(SketchConstraint.vertical)
+                                : null,
+                        icon: const Icon(Icons.height)),
+                    const SizedBox(width: 12),
+                    IconButton.filledTonal(
+                        tooltip: 'Undo',
+                        onPressed: history.canUndo ? undo : null,
+                        icon: const Icon(Icons.undo)),
+                    const SizedBox(width: 6),
+                    IconButton.filledTonal(
+                        tooltip: 'Redo',
+                        onPressed: history.canRedo ? redo : null,
+                        icon: const Icon(Icons.redo)),
+                    const SizedBox(width: 6),
+                    IconButton.filledTonal(
+                        tooltip: 'Delete selection',
+                        onPressed: history.selectedId == null ? null : delete,
+                        icon: const Icon(Icons.delete_outline)),
+                  ]))),
+          Positioned(
+              left: 18,
+              bottom: 16,
+              child: DecoratedBox(
+                  decoration: BoxDecoration(
+                      color: const Color(0xdd121b25),
+                      borderRadius: BorderRadius.circular(8)),
+                  child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      child: Text(
+                          '${history.document.entities.length} entities | ${tool.name}')))),
+        ]),
       );
 
+  Widget _tool(IconData icon, String label, SketchTool value) => Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: SegmentedButton<SketchTool>(
+          segments: [
+            ButtonSegment(value: value, icon: Icon(icon), label: Text(label))
+          ],
+          selected: tool == value ? {value} : <SketchTool>{},
+          emptySelectionAllowed: true,
+          onSelectionChanged: (_) => choose(value)));
   SketchEntity? _preview() {
     if (tool == SketchTool.select ||
         pointerStart == null ||
@@ -175,6 +263,7 @@ class _SketchCanvasState extends State<SketchCanvas> {
       SketchTool.line => SketchEntityKind.line,
       SketchTool.rectangle => SketchEntityKind.rectangle,
       SketchTool.circle => SketchEntityKind.circle,
+      SketchTool.arc => SketchEntityKind.arc,
       SketchTool.select => SketchEntityKind.line
     };
     return SketchEntity(
@@ -211,9 +300,10 @@ class SketchPainter extends CustomPainter {
     canvas.drawLine(
         Offset(size.width / 2, 0), Offset(size.width / 2, size.height), axis);
     for (final entity in document.entities) {
-      _draw(canvas,
-          entity.id == selectedId ? entity.translated(selectedDelta) : entity,
-          selected: entity.id == selectedId);
+      final displayed =
+          entity.id == selectedId ? entity.translated(selectedDelta) : entity;
+      _draw(canvas, displayed, selected: entity.id == selectedId);
+      _label(canvas, displayed);
     }
     if (preview != null) _draw(canvas, preview!, previewing: true);
   }
@@ -236,7 +326,45 @@ class SketchPainter extends CustomPainter {
       case SketchEntityKind.circle:
         canvas.drawCircle(
             entity.start, (entity.end - entity.start).distance, paint);
+      case SketchEntityKind.arc:
+        final radius = (entity.end - entity.start).distance;
+        canvas.drawArc(Rect.fromCircle(center: entity.start, radius: radius),
+            -math.pi, math.pi, false, paint);
     }
+    if (entity.constraint != null) {
+      _text(
+          canvas,
+          entity.constraint == SketchConstraint.horizontal ? 'H' : 'V',
+          (entity.start + entity.end) / 2 + const Offset(6, 6),
+          const Color(0xff8ddcff));
+    }
+  }
+
+  void _label(Canvas canvas, SketchEntity entity) {
+    final anchor = switch (entity.kind) {
+      SketchEntityKind.line =>
+        (entity.start + entity.end) / 2 + const Offset(6, -22),
+      SketchEntityKind.rectangle =>
+        Rect.fromPoints(entity.start, entity.end).bottomCenter +
+            const Offset(0, 6),
+      SketchEntityKind.circle ||
+      SketchEntityKind.arc =>
+        entity.start + Offset(0, -(entity.end - entity.start).distance - 20)
+    };
+    _text(canvas, entity.measurementLabel, anchor, const Color(0xffa9bdc9));
+  }
+
+  void _text(Canvas canvas, String value, Offset offset, Color color) {
+    final painter = TextPainter(
+        text: TextSpan(
+            text: value,
+            style: TextStyle(
+                color: color,
+                fontSize: 11,
+                backgroundColor: const Color(0xcc071017))),
+        textDirection: TextDirection.ltr)
+      ..layout();
+    painter.paint(canvas, offset);
   }
 
   @override

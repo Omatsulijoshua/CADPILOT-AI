@@ -1,25 +1,95 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-enum SketchTool { select, line, rectangle, circle }
+enum SketchTool { select, line, rectangle, circle, arc }
 
-enum SketchEntityKind { line, rectangle, circle }
+enum SketchEntityKind { line, rectangle, circle, arc }
+
+enum SketchConstraint { horizontal, vertical }
 
 class SketchEntity {
   const SketchEntity(
       {required this.id,
       required this.kind,
       required this.start,
-      required this.end});
+      required this.end,
+      this.constraint});
   final String id;
   final SketchEntityKind kind;
   final Offset start;
   final Offset end;
+  final SketchConstraint? constraint;
 
-  SketchEntity copyWith({Offset? start, Offset? end}) => SketchEntity(
-      id: id, kind: kind, start: start ?? this.start, end: end ?? this.end);
+  SketchEntity copyWith(
+          {Offset? start,
+          Offset? end,
+          SketchConstraint? constraint,
+          bool clearConstraint = false}) =>
+      SketchEntity(
+          id: id,
+          kind: kind,
+          start: start ?? this.start,
+          end: end ?? this.end,
+          constraint: clearConstraint ? null : constraint ?? this.constraint);
   SketchEntity translated(Offset delta) =>
       copyWith(start: start + delta, end: end + delta);
+  double get primaryDimension => switch (kind) {
+        SketchEntityKind.line => (end - start).distance,
+        SketchEntityKind.rectangle => (end.dx - start.dx).abs(),
+        SketchEntityKind.circle ||
+        SketchEntityKind.arc =>
+          (end - start).distance,
+      };
+  double? get secondaryDimension =>
+      kind == SketchEntityKind.rectangle ? (end.dy - start.dy).abs() : null;
+  String get measurementLabel => switch (kind) {
+        SketchEntityKind.line => '${primaryDimension.toStringAsFixed(1)} mm',
+        SketchEntityKind.rectangle =>
+          '${primaryDimension.toStringAsFixed(1)} × ${secondaryDimension!.toStringAsFixed(1)} mm',
+        SketchEntityKind.circle =>
+          'R ${primaryDimension.toStringAsFixed(1)} mm',
+        SketchEntityKind.arc =>
+          'Arc R ${primaryDimension.toStringAsFixed(1)} mm',
+      };
+
+  SketchEntity withDimensions(double primary, [double? secondary]) {
+    final safePrimary = primary.clamp(0.1, 100000.0);
+    switch (kind) {
+      case SketchEntityKind.line:
+        final vector = end - start;
+        final direction = vector.distance == 0
+            ? const Offset(1, 0)
+            : vector / vector.distance;
+        return copyWith(end: start + direction * safePrimary);
+      case SketchEntityKind.rectangle:
+        final xSign = end.dx < start.dx ? -1.0 : 1.0;
+        final ySign = end.dy < start.dy ? -1.0 : 1.0;
+        return copyWith(
+            end: Offset(
+                start.dx + safePrimary * xSign,
+                start.dy +
+                    (secondary ?? secondaryDimension ?? safePrimary)
+                            .clamp(0.1, 100000.0) *
+                        ySign));
+      case SketchEntityKind.circle:
+      case SketchEntityKind.arc:
+        final vector = end - start;
+        final direction = vector.distance == 0
+            ? const Offset(1, 0)
+            : vector / vector.distance;
+        return copyWith(end: start + direction * safePrimary);
+    }
+  }
+
+  SketchEntity constrained(SketchConstraint value) {
+    if (kind != SketchEntityKind.line) return this;
+    return switch (value) {
+      SketchConstraint.horizontal =>
+        copyWith(end: Offset(end.dx, start.dy), constraint: value),
+      SketchConstraint.vertical =>
+        copyWith(end: Offset(start.dx, end.dy), constraint: value),
+    };
+  }
 
   bool hitTest(Offset point, {double tolerance = 14}) {
     switch (kind) {
@@ -39,16 +109,18 @@ class SketchEntity {
         return rect.contains(point) &&
             (inner.width <= 0 || inner.height <= 0 || !inner.contains(point));
       case SketchEntityKind.circle:
+      case SketchEntityKind.arc:
         final radius = (end - start).distance;
         return ((point - start).distance - radius).abs() <= tolerance;
     }
   }
 
-  Map<String, Object> toJson() => {
+  Map<String, Object?> toJson() => {
         'id': id,
         'kind': kind.name,
         'start': [start.dx, start.dy],
-        'end': [end.dx, end.dy]
+        'end': [end.dx, end.dy],
+        if (constraint != null) 'constraint': constraint!.name
       };
   factory SketchEntity.fromJson(Map<String, Object?> json) {
     final start = json['start']! as List<Object?>;
@@ -59,6 +131,9 @@ class SketchEntity {
       start:
           Offset((start[0]! as num).toDouble(), (start[1]! as num).toDouble()),
       end: Offset((end[0]! as num).toDouble(), (end[1]! as num).toDouble()),
+      constraint: json['constraint'] == null
+          ? null
+          : SketchConstraint.values.byName(json['constraint']! as String),
     );
   }
 }
@@ -86,6 +161,11 @@ class SketchHistory {
   final List<SketchDocument> _redo = [];
   String? selectedId;
   SketchDocument get document => _document;
+  SketchEntity? get selected => selectedId == null
+      ? null
+      : _document.entities
+          .where((entity) => entity.id == selectedId)
+          .firstOrNull;
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
 
@@ -105,6 +185,14 @@ class SketchHistory {
         .firstOrNull;
   }
 
+  void _replaceSelected(SketchEntity Function(SketchEntity) update) {
+    if (selectedId == null) return;
+    commit(_document.copyWith(
+        entities: _document.entities
+            .map((entity) => entity.id == selectedId ? update(entity) : entity)
+            .toList()));
+  }
+
   void deleteSelected() {
     if (selectedId == null) return;
     commit(_document.copyWith(
@@ -116,13 +204,13 @@ class SketchHistory {
 
   void moveSelected(Offset delta) {
     if (selectedId == null || delta.distanceSquared < math.pow(0.1, 2)) return;
-    commit(_document.copyWith(
-        entities: _document.entities
-            .map((entity) =>
-                entity.id == selectedId ? entity.translated(delta) : entity)
-            .toList()));
+    _replaceSelected((entity) => entity.translated(delta));
   }
 
+  void dimensionSelected(double primary, [double? secondary]) =>
+      _replaceSelected((entity) => entity.withDimensions(primary, secondary));
+  void constrainSelected(SketchConstraint constraint) =>
+      _replaceSelected((entity) => entity.constrained(constraint));
   void undo() {
     if (!canUndo) return;
     _redo.add(_document);
