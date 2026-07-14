@@ -22,20 +22,37 @@ class ModelingCanvas extends StatefulWidget {
 }
 
 class _ModelingCanvasState extends State<ModelingCanvas> {
-  late ModelDocument model;
+  late ModelHistory history;
+  ModelDocument get model => history.document;
   double yaw = -0.65;
   double pitch = 0.45;
   double zoom = 1;
   Offset pan = Offset.zero;
   Offset? lastFocal;
+  final viewportKey = GlobalKey();
+  int? selectedFace;
+  int? selectedEdge;
   final evaluator = const ModelEvaluator();
   @override
   void initState() {
     super.initState();
-    model = widget.model;
+    history = ModelHistory(widget.model);
   }
 
   EvaluatedSolid? get solid => evaluator.evaluate(widget.sketch, model);
+
+  void selectAt(TapUpDetails details) {
+    final current = solid;
+    final box = viewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (current == null || box == null) return;
+    final hit = SolidProjection(current,
+            yaw: yaw, pitch: pitch, zoom: zoom, pan: pan, size: box.size)
+        .hitTest(details.localPosition);
+    setState(() {
+      selectedFace = hit.face;
+      selectedEdge = hit.edge;
+    });
+  }
 
   Future<double?> depthDialog(String title, double initial) async {
     final controller = TextEditingController(text: initial.toStringAsFixed(1));
@@ -74,13 +91,13 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
     }
     final depth = await depthDialog('Extrude rectangle', 20);
     if (depth == null) return;
-    setState(() => model = model.add(ModelOperation(
+    setState(() => history.add(ModelOperation(
         id: const Uuid().v4(),
         kind: ModelOperationKind.extrude,
         profileId: rectangles.first.id,
         depth: depth,
         createdAt: DateTime.now().toUtc())));
-    widget.onChanged(model);
+    widget.onChanged(history.document);
   }
 
   Future<void> cut() async {
@@ -95,13 +112,64 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
       message('Draw a circle in Sketch mode for the cut profile.');
       return;
     }
-    setState(() => model = model.add(ModelOperation(
+    setState(() => history.add(ModelOperation(
         id: const Uuid().v4(),
         kind: ModelOperationKind.circularCut,
         profileId: circles.first.id,
         depth: solid!.depth,
         createdAt: DateTime.now().toUtc())));
-    widget.onChanged(model);
+    widget.onChanged(history.document);
+  }
+
+  void undo() {
+    setState(history.undo);
+    widget.onChanged(history.document);
+  }
+
+  void redo() {
+    setState(history.redo);
+    widget.onChanged(history.document);
+  }
+
+  Future<void> editOperation(ModelOperation operation) async {
+    final depth =
+        await depthDialog('Edit ${operation.displayName}', operation.depth);
+    if (depth == null) return;
+    setState(() => history.replace(operation.copyWith(depth: depth)));
+    widget.onChanged(history.document);
+  }
+
+  Future<void> renameOperation(ModelOperation operation) async {
+    final controller = TextEditingController(text: operation.displayName);
+    final value = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+              title: const Text('Rename feature'),
+              content: TextField(controller: controller, autofocus: true),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel')),
+                FilledButton(
+                    onPressed: () =>
+                        Navigator.pop(context, controller.text.trim()),
+                    child: const Text('Rename'))
+              ],
+            ));
+    if (value == null || value.isEmpty) return;
+    setState(() => history.replace(operation.copyWith(name: value)));
+    widget.onChanged(history.document);
+  }
+
+  void suppressOperation(ModelOperation operation) {
+    setState(() =>
+        history.replace(operation.copyWith(suppressed: !operation.suppressed)));
+    widget.onChanged(history.document);
+  }
+
+  void deleteOperation(ModelOperation operation) {
+    setState(() => history.remove(operation.id));
+    widget.onChanged(history.document);
   }
 
   Future<void> exportStl() async {
@@ -139,6 +207,7 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                   Positioned.fill(
                       child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
+                    onTapUp: selectAt,
                     onScaleStart: (details) => lastFocal = details.focalPoint,
                     onScaleUpdate: (details) {
                       final delta = details.focalPoint -
@@ -161,7 +230,9 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                             yaw: yaw,
                             pitch: pitch,
                             zoom: zoom,
-                            pan: pan)),
+                            pan: pan,
+                            selectedFace: selectedFace,
+                            selectedEdge: selectedEdge)),
                   )),
                   Positioned(
                       top: 16,
@@ -176,6 +247,16 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                             onPressed: cut,
                             icon: const Icon(Icons.remove_circle_outline),
                             label: const Text('Through cut')),
+                        const SizedBox(width: 8),
+                        IconButton.filledTonal(
+                            tooltip: 'Undo 3D operation',
+                            onPressed: history.canUndo ? undo : null,
+                            icon: const Icon(Icons.undo)),
+                        const SizedBox(width: 6),
+                        IconButton.filledTonal(
+                            tooltip: 'Redo 3D operation',
+                            onPressed: history.canRedo ? redo : null,
+                            icon: const Icon(Icons.redo)),
                         const SizedBox(width: 8),
                         OutlinedButton.icon(
                             onPressed: exportStl,
@@ -193,7 +274,7 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                               padding: const EdgeInsets.all(10),
                               child: Text(solid == null
                                   ? 'No solid | Extrude a rectangle profile'
-                                  : '${solid!.width.toStringAsFixed(1)} x ${solid!.height.toStringAsFixed(1)} x ${solid!.depth.toStringAsFixed(1)} mm | Volume ${solid!.volume.toStringAsFixed(1)} mm³')))),
+                                  : '${solid!.width.toStringAsFixed(1)} x ${solid!.height.toStringAsFixed(1)} x ${solid!.depth.toStringAsFixed(1)} mm^3')))),
                 ]))),
         SizedBox(
             width: 250,
@@ -218,20 +299,54 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                     itemBuilder: (context, index) {
                                       final operation = model.operations[index];
                                       return ListTile(
-                                          contentPadding: EdgeInsets.zero,
-                                          leading: Icon(
-                                              operation.kind ==
-                                                      ModelOperationKind.extrude
-                                                  ? Icons.view_in_ar
-                                                  : Icons.remove_circle_outline,
-                                              color: const Color(0xff29d3b2)),
-                                          title: Text(operation.kind ==
-                                                  ModelOperationKind.extrude
-                                              ? 'Extrude ${index + 1}'
-                                              : 'Cut ${index + 1}'),
-                                          subtitle: Text(
-                                              '${operation.depth.toStringAsFixed(1)} mm'),
-                                          dense: true);
+                                        contentPadding: EdgeInsets.zero,
+                                        leading: Icon(
+                                            operation.kind ==
+                                                    ModelOperationKind.extrude
+                                                ? Icons.view_in_ar
+                                                : Icons.remove_circle_outline,
+                                            color: operation.suppressed
+                                                ? Colors.grey
+                                                : const Color(0xff29d3b2)),
+                                        title: Text(operation.displayName),
+                                        subtitle: Text(operation.suppressed
+                                            ? 'Suppressed'
+                                            : '${operation.depth.toStringAsFixed(1)} mm'),
+                                        enabled: !operation.suppressed,
+                                        trailing: PopupMenuButton<String>(
+                                          onSelected: (value) {
+                                            if (value == 'edit') {
+                                              editOperation(operation);
+                                            }
+                                            if (value == 'rename') {
+                                              renameOperation(operation);
+                                            }
+                                            if (value == 'suppress') {
+                                              suppressOperation(operation);
+                                            }
+                                            if (value == 'delete') {
+                                              deleteOperation(operation);
+                                            }
+                                          },
+                                          itemBuilder: (_) => [
+                                            const PopupMenuItem(
+                                                value: 'edit',
+                                                child: Text('Edit depth')),
+                                            const PopupMenuItem(
+                                                value: 'rename',
+                                                child: Text('Rename')),
+                                            PopupMenuItem(
+                                                value: 'suppress',
+                                                child: Text(operation.suppressed
+                                                    ? 'Unsuppress'
+                                                    : 'Suppress')),
+                                            const PopupMenuItem(
+                                                value: 'delete',
+                                                child: Text('Delete')),
+                                          ],
+                                        ),
+                                        dense: true,
+                                      );
                                     }))
                         ])))),
       ]);
@@ -243,10 +358,14 @@ class SolidPainter extends CustomPainter {
       required this.yaw,
       required this.pitch,
       required this.zoom,
-      required this.pan});
+      required this.pan,
+      required this.selectedFace,
+      required this.selectedEdge});
   final EvaluatedSolid? solid;
   final double yaw, pitch, zoom;
   final Offset pan;
+  final int? selectedFace;
+  final int? selectedEdge;
   Offset project(List<double> point, Size size, double scale) {
     final x = point[0], y = point[1], z = point[2];
     final x1 = x * math.cos(yaw) - y * math.sin(yaw),
@@ -316,11 +435,22 @@ class SolidPainter extends CustomPainter {
         }
       }
       path.close();
-      fill.color = Color.lerp(const Color(0xff0c8877), const Color(0xff29d3b2),
-              i / faces.length)!
-          .withValues(alpha: 0.72);
+      fill.color = i == selectedFace
+          ? const Color(0xffffbf69)
+          : Color.lerp(const Color(0xff0c8877), const Color(0xff29d3b2),
+                  i / faces.length)!
+              .withValues(alpha: 0.72);
       canvas.drawPath(path, fill);
       canvas.drawPath(path, edge);
+      if (selectedEdge != null) {
+        final pair = SolidProjection.edgePairs[selectedEdge!];
+        canvas.drawLine(
+            project(v[pair[0]], size, scale),
+            project(v[pair[1]], size, scale),
+            Paint()
+              ..color = const Color(0xffff784f)
+              ..strokeWidth = 5);
+      }
     }
     for (final cut in current.cuts) {
       final relative = Offset(
@@ -339,4 +469,116 @@ class SolidPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant SolidPainter oldDelegate) => true;
+}
+
+class SolidHit {
+  const SolidHit({this.face, this.edge});
+  final int? face;
+  final int? edge;
+}
+
+class SolidProjection {
+  SolidProjection(this.solid,
+      {required this.yaw,
+      required this.pitch,
+      required this.zoom,
+      required this.pan,
+      required this.size});
+  final EvaluatedSolid solid;
+  final double yaw, pitch, zoom;
+  final Offset pan;
+  final Size size;
+  static const faces = <List<int>>[
+    [0, 1, 2, 3],
+    [4, 7, 6, 5],
+    [0, 4, 5, 1],
+    [1, 5, 6, 2],
+    [2, 6, 7, 3],
+    [3, 7, 4, 0]
+  ];
+  static const edgePairs = <List<int>>[
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 0],
+    [4, 5],
+    [5, 6],
+    [6, 7],
+    [7, 4],
+    [0, 4],
+    [1, 5],
+    [2, 6],
+    [3, 7]
+  ];
+  List<Offset> get points {
+    final w = solid.width / 2, h = solid.height / 2, d = solid.depth;
+    final vertices = <List<double>>[
+      [-w, -h, 0],
+      [w, -h, 0],
+      [w, h, 0],
+      [-w, h, 0],
+      [-w, -h, d],
+      [w, -h, d],
+      [w, h, d],
+      [-w, h, d]
+    ];
+    final scale = (math.min(size.width / (solid.width + solid.depth),
+                size.height / (solid.height + solid.depth)) *
+            0.55 *
+            zoom)
+        .clamp(0.2, 20.0);
+    return vertices.map((point) {
+      final x1 = point[0] * math.cos(yaw) - point[1] * math.sin(yaw),
+          y1 = point[0] * math.sin(yaw) + point[1] * math.cos(yaw);
+      final y2 = y1 * math.cos(pitch) - point[2] * math.sin(pitch),
+          z2 = y1 * math.sin(pitch) + point[2] * math.cos(pitch);
+      return Offset(size.width / 2 + x1 * scale + pan.dx,
+          size.height / 2 + (y2 - z2 * 0.18) * scale + pan.dy);
+    }).toList();
+  }
+
+  SolidHit hitTest(Offset point) {
+    final projected = points;
+    var bestEdge = -1, bestDistance = 12.0;
+    for (var index = 0; index < edgePairs.length; index++) {
+      final pair = edgePairs[index];
+      final distance =
+          _segmentDistance(point, projected[pair[0]], projected[pair[1]]);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestEdge = index;
+      }
+    }
+    if (bestEdge >= 0) return SolidHit(edge: bestEdge);
+    for (var face = faces.length - 1; face >= 0; face--) {
+      if (_inside(
+          point, faces[face].map((index) => projected[index]).toList())) {
+        return SolidHit(face: face);
+      }
+    }
+    return const SolidHit();
+  }
+
+  double _segmentDistance(Offset p, Offset a, Offset b) {
+    final length = (b - a).distanceSquared;
+    if (length == 0) return (p - a).distance;
+    final t = (((p.dx - a.dx) * (b.dx - a.dx) + (p.dy - a.dy) * (b.dy - a.dy)) /
+            length)
+        .clamp(0.0, 1.0);
+    return (p - Offset(a.dx + (b.dx - a.dx) * t, a.dy + (b.dy - a.dy) * t))
+        .distance;
+  }
+
+  bool _inside(Offset point, List<Offset> polygon) {
+    var inside = false;
+    for (var i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      final a = polygon[i], b = polygon[j];
+      if (((a.dy > point.dy) != (b.dy > point.dy)) &&
+          (point.dx <
+              (b.dx - a.dx) * (point.dy - a.dy) / (b.dy - a.dy) + a.dx)) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
 }

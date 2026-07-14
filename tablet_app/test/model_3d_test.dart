@@ -1,4 +1,6 @@
+import 'dart:ui' show Size;
 import 'package:cadpilot_tablet/src/model_3d.dart';
+import 'package:cadpilot_tablet/src/modeling_canvas.dart';
 import 'package:cadpilot_tablet/src/sketch_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -69,5 +71,48 @@ void main() {
         const SketchDocument(entities: [rectangle, circle]),
         ModelDocument(operations: [extrude, cut]))!;
     expect(() => const StlExporter().export(solid), throwsUnsupportedError);
+  });
+
+  test('model history edit suppress delete undo and redo are deterministic',
+      () {
+    final history = ModelHistory(ModelDocument(operations: [extrude]));
+    history.replace(extrude.copyWith(name: 'Base plate', depth: 12));
+    expect(history.document.operations.single.displayName, 'Base plate');
+    expect(history.document.operations.single.depth, 12);
+    history
+        .replace(history.document.operations.single.copyWith(suppressed: true));
+    expect(
+        const ModelEvaluator().evaluate(
+            const SketchDocument(entities: [rectangle]), history.document),
+        isNull);
+    history.undo();
+    expect(history.document.operations.single.suppressed, isFalse);
+    history.remove('op-1');
+    expect(history.document.operations, isEmpty);
+    history.undo();
+    history.redo();
+    expect(history.document.operations, isEmpty);
+  });
+
+  test('solid projection distinguishes edge and face hits', () {
+    const solid = EvaluatedSolid(
+        origin: Offset.zero, width: 100, height: 60, depth: 15, cuts: []);
+    final projection = SolidProjection(solid,
+        yaw: -0.65,
+        pitch: 0.45,
+        zoom: 1,
+        pan: Offset.zero,
+        size: const Size(600, 500));
+    final edgeHit = projection.hitTest(projection.points.first);
+    expect(edgeHit.edge, isNotNull);
+    final top = [
+      projection.points[4],
+      projection.points[7],
+      projection.points[6],
+      projection.points[5]
+    ];
+    final center = top.reduce((a, b) => a + b) / top.length.toDouble();
+    final faceHit = projection.hitTest(center);
+    expect(faceHit.face, isNotNull);
   });
 }

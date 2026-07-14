@@ -5,30 +5,52 @@ import 'sketch_models.dart';
 enum ModelOperationKind { extrude, circularCut }
 
 class ModelOperation {
-  const ModelOperation(
-      {required this.id,
-      required this.kind,
-      required this.profileId,
-      required this.depth,
-      required this.createdAt});
+  const ModelOperation({
+    required this.id,
+    required this.kind,
+    required this.profileId,
+    required this.depth,
+    required this.createdAt,
+    this.name,
+    this.suppressed = false,
+  });
   final String id;
   final ModelOperationKind kind;
   final String profileId;
   final double depth;
   final DateTime createdAt;
-  Map<String, Object> toJson() => {
+  final String? name;
+  final bool suppressed;
+  String get displayName =>
+      name ?? (kind == ModelOperationKind.extrude ? 'Extrude' : 'Circular cut');
+  ModelOperation copyWith({double? depth, String? name, bool? suppressed}) =>
+      ModelOperation(
+        id: id,
+        kind: kind,
+        profileId: profileId,
+        depth: depth ?? this.depth,
+        createdAt: createdAt,
+        name: name ?? this.name,
+        suppressed: suppressed ?? this.suppressed,
+      );
+  Map<String, Object?> toJson() => {
         'id': id,
         'kind': kind.name,
         'profileId': profileId,
         'depth': depth,
-        'createdAt': createdAt.toIso8601String()
+        'createdAt': createdAt.toIso8601String(),
+        'name': name,
+        'suppressed': suppressed,
       };
   factory ModelOperation.fromJson(Map<String, Object?> json) => ModelOperation(
-      id: json['id']! as String,
-      kind: ModelOperationKind.values.byName(json['kind']! as String),
-      profileId: json['profileId']! as String,
-      depth: (json['depth']! as num).toDouble(),
-      createdAt: DateTime.parse(json['createdAt']! as String));
+        id: json['id']! as String,
+        kind: ModelOperationKind.values.byName(json['kind']! as String),
+        profileId: json['profileId']! as String,
+        depth: (json['depth']! as num).toDouble(),
+        createdAt: DateTime.parse(json['createdAt']! as String),
+        name: json['name'] as String?,
+        suppressed: (json['suppressed'] as bool?) ?? false,
+      );
 }
 
 class ModelDocument {
@@ -42,6 +64,43 @@ class ModelDocument {
           .toList());
   ModelDocument add(ModelOperation operation) =>
       ModelDocument(operations: [...operations, operation]);
+  ModelDocument replace(ModelOperation operation) => ModelDocument(
+      operations: operations
+          .map((item) => item.id == operation.id ? operation : item)
+          .toList());
+  ModelDocument remove(String id) => ModelDocument(
+      operations: operations.where((item) => item.id != id).toList());
+}
+
+class ModelHistory {
+  ModelHistory(ModelDocument initial) : _document = initial;
+  ModelDocument _document;
+  final List<ModelDocument> _undo = [];
+  final List<ModelDocument> _redo = [];
+  ModelDocument get document => _document;
+  bool get canUndo => _undo.isNotEmpty;
+  bool get canRedo => _redo.isNotEmpty;
+  void commit(ModelDocument next) {
+    _undo.add(_document);
+    _document = next;
+    _redo.clear();
+  }
+
+  void add(ModelOperation operation) => commit(_document.add(operation));
+  void replace(ModelOperation operation) =>
+      commit(_document.replace(operation));
+  void remove(String id) => commit(_document.remove(id));
+  void undo() {
+    if (!canUndo) return;
+    _redo.add(_document);
+    _document = _undo.removeLast();
+  }
+
+  void redo() {
+    if (!canRedo) return;
+    _undo.add(_document);
+    _document = _redo.removeLast();
+  }
 }
 
 class EvaluatedSolid {
@@ -75,6 +134,7 @@ class ModelEvaluator {
     double? depth;
     final cuts = <CircularCut>[];
     for (final operation in model.operations) {
+      if (operation.suppressed) continue;
       final profile = sketch.entities
           .where((item) => item.id == operation.profileId)
           .firstOrNull;
