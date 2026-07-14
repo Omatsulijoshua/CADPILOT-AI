@@ -509,4 +509,94 @@ void main() {
     expect((mesh.estimatedVolume - solid.volume).abs() / solid.volume,
         lessThan(0.03));
   });
+  test('shell persists evaluates and follows suppression', () {
+    final shell = ModelOperation(
+        id: 'shell-1',
+        kind: ModelOperationKind.shell,
+        profileId: 'rect',
+        depth: 2,
+        createdAt: DateTime.utc(2026));
+    final decoded = ModelDocument.fromJson(
+        ModelDocument(operations: [extrude, shell]).toJson());
+    expect(decoded.operations.last.kind, ModelOperationKind.shell);
+    expect(decoded.operations.last.depth, 2);
+    final solid = const ModelEvaluator()
+        .evaluate(const SketchDocument(entities: [rectangle]), decoded)!;
+    expect(solid.shellThickness, 2);
+    expect(solid.volume, 40000 - 96 * 46 * 6);
+    final suppressed = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle]),
+        ModelDocument(
+            operations: [extrude, shell.copyWith(suppressed: true)]))!;
+    expect(suppressed.shellThickness, 0);
+    expect(suppressed.volume, 40000);
+  });
+
+  test('shell measurements include outer rim and internal cavity', () {
+    const solid = EvaluatedSolid(
+        origin: Offset.zero,
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [],
+        shellThickness: 2);
+    final values = SolidMeasurements.from(solid, CadMaterial.pla);
+    expect(values.volumeMm3, 13504);
+    expect(values.surfaceAreaMm2, 14104);
+    expect(values.massGrams, closeTo(13.504 * 1.24, 0.001));
+  });
+
+  test('shell validator rejects invalid thickness and modified bases', () {
+    const validator = ShellValidator();
+    const plain = EvaluatedSolid(
+        origin: Offset.zero, width: 100, height: 50, depth: 8, cuts: []);
+    expect(validator.validate(plain, 0), contains('greater than zero'));
+    expect(validator.validate(plain, 8), contains('smaller'));
+    expect(validator.validate(plain, 2), isNull);
+    const cutSolid = EvaluatedSolid(
+        origin: Offset.zero,
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [CircularCut(center: Offset(50, 25), radius: 4)]);
+    expect(validator.validate(cutSolid, 2), contains('unmodified'));
+    const filleted = EvaluatedSolid(
+        origin: Offset.zero,
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [],
+        cornerRadius: 4);
+    expect(validator.validate(filleted, 2), contains('unmodified'));
+  });
+
+  test('open-top shell exports an exact closed 28-triangle mesh', () {
+    const solid = EvaluatedSolid(
+        origin: Offset.zero,
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [],
+        shellThickness: 2);
+    final mesh = const SolidMesher().tessellate(solid);
+    expect(mesh.triangles, hasLength(28));
+    expect(mesh.isClosedManifold, isTrue);
+    expect(mesh.tolerance, 0);
+    expect(mesh.estimatedVolume, solid.volume);
+    final stl = const StlExporter().export(solid, name: 'shell_part');
+    expect(RegExp('facet normal').allMatches(stl), hasLength(28));
+    expect(stl.trim(), endsWith('endsolid shell_part'));
+  });
+
+  test('shell conflicts are rejected by edge modifiers', () {
+    const solid = EvaluatedSolid(
+        origin: Offset.zero,
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [],
+        shellThickness: 2);
+    expect(const FilletValidator().validate(solid, 3), contains('shell'));
+    expect(const ChamferValidator().validate(solid, 3), contains('shell'));
+  });
 }

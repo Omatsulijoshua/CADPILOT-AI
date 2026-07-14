@@ -19,7 +19,8 @@ enum ModelOperationKind {
   linearPattern,
   mirrorCut,
   chamfer,
-  fillet
+  fillet,
+  shell
 }
 
 class ModelOperation {
@@ -54,6 +55,7 @@ class ModelOperation {
         ModelOperationKind.mirrorCut => 'Mirror cut',
         ModelOperationKind.chamfer => 'Chamfer',
         ModelOperationKind.fillet => 'Fillet',
+        ModelOperationKind.shell => 'Shell',
       };
   ModelOperation copyWith(
           {double? depth,
@@ -168,7 +170,8 @@ class EvaluatedSolid {
       required this.depth,
       required this.cuts,
       this.chamfer = 0,
-      this.cornerRadius = 0});
+      this.cornerRadius = 0,
+      this.shellThickness = 0});
   final Offset origin;
   final double width;
   final double height;
@@ -176,6 +179,7 @@ class EvaluatedSolid {
   final List<CircularCut> cuts;
   final double chamfer;
   final double cornerRadius;
+  final double shellThickness;
   double get planArea => cornerRadius > 0
       ? width * height - (4 - math.pi) * cornerRadius * cornerRadius
       : width * height - 2 * chamfer * chamfer;
@@ -207,10 +211,35 @@ class EvaluatedSolid {
         (width - x) + (height - y) >= chamfer;
   }
 
-  double get volume =>
-      planArea * depth -
-      cuts.fold(
-          0, (sum, cut) => sum + math.pi * cut.radius * cut.radius * depth);
+  double get volume {
+    final outer = planArea * depth -
+        cuts.fold(
+            0, (sum, cut) => sum + math.pi * cut.radius * cut.radius * depth);
+    if (shellThickness <= 0) return outer;
+    final innerWidth = width - 2 * shellThickness;
+    final innerHeight = height - 2 * shellThickness;
+    final cavityDepth = depth - shellThickness;
+    return outer - innerWidth * innerHeight * cavityDepth;
+  }
+}
+
+class ShellValidator {
+  const ShellValidator();
+
+  String? validate(EvaluatedSolid solid, double thickness) {
+    if (!thickness.isFinite || thickness <= 0) {
+      return 'Shell thickness must be greater than zero.';
+    }
+    if (solid.cuts.isNotEmpty || solid.chamfer > 0 || solid.cornerRadius > 0) {
+      return 'Shell currently requires an unmodified base solid.';
+    }
+    final limit =
+        math.min(math.min(solid.width, solid.height) / 2, solid.depth);
+    if (thickness >= limit) {
+      return 'Shell thickness must be smaller than the walls and depth.';
+    }
+    return null;
+  }
 }
 
 class FilletValidator {
@@ -219,6 +248,9 @@ class FilletValidator {
   String? validate(EvaluatedSolid solid, double radius) {
     if (!radius.isFinite || radius <= 0) {
       return 'Fillet radius must be greater than zero.';
+    }
+    if (solid.shellThickness > 0) {
+      return 'Suppress or delete the shell before adding a fillet.';
     }
     if (solid.chamfer > 0) {
       return 'Suppress or delete the chamfer before adding a fillet.';
@@ -253,6 +285,9 @@ class ChamferValidator {
   String? validate(EvaluatedSolid solid, double distance) {
     if (!distance.isFinite || distance <= 0) {
       return 'Chamfer distance must be greater than zero.';
+    }
+    if (solid.shellThickness > 0) {
+      return 'Suppress or delete the shell before adding a chamfer.';
     }
     if (solid.cornerRadius > 0) {
       return 'Suppress or delete the fillet before adding a chamfer.';
@@ -351,7 +386,9 @@ class SolidMeasurements {
   final double? massGrams;
 
   factory SolidMeasurements.from(EvaluatedSolid solid, CadMaterial material) {
-    final outerArea = 2 * solid.planArea + solid.planPerimeter * solid.depth;
+    final outerArea = solid.shellThickness > 0
+        ? _shellSurfaceArea(solid)
+        : 2 * solid.planArea + solid.planPerimeter * solid.depth;
     final cutAreaDelta = solid.cuts.fold<double>(
         0,
         (sum, cut) =>
@@ -365,6 +402,19 @@ class SolidMeasurements {
         volumeMm3: solid.volume,
         surfaceAreaMm2: outerArea + cutAreaDelta,
         massGrams: mass);
+  }
+
+  static double _shellSurfaceArea(EvaluatedSolid solid) {
+    final t = solid.shellThickness;
+    final innerWidth = solid.width - 2 * t;
+    final innerHeight = solid.height - 2 * t;
+    final cavityDepth = solid.depth - t;
+    final outerBottom = solid.width * solid.height;
+    final outerWalls = 2 * (solid.width + solid.height) * solid.depth;
+    final rim = solid.width * solid.height - innerWidth * innerHeight;
+    final innerBottom = innerWidth * innerHeight;
+    final innerWalls = 2 * (innerWidth + innerHeight) * cavityDepth;
+    return outerBottom + outerWalls + rim + innerBottom + innerWalls;
   }
 }
 
@@ -381,6 +431,7 @@ class ModelEvaluator {
     double? depth;
     double chamfer = 0;
     double cornerRadius = 0;
+    double shellThickness = 0;
     final cuts = <CircularCut>[];
     final activeOperations = <String>{};
     for (final operation in model.operations) {
@@ -433,6 +484,12 @@ class ModelEvaluator {
           profile.id == base.id) {
         cornerRadius = operation.depth;
       }
+      if (operation.kind == ModelOperationKind.shell &&
+          profile.kind == SketchEntityKind.rectangle &&
+          base != null &&
+          profile.id == base.id) {
+        shellThickness = operation.depth;
+      }
     }
     if (base == null || depth == null) return null;
     final rect = Rect.fromPoints(base.start, base.end);
@@ -443,7 +500,8 @@ class ModelEvaluator {
         depth: depth,
         cuts: cuts,
         chamfer: chamfer,
-        cornerRadius: cornerRadius);
+        cornerRadius: cornerRadius,
+        shellThickness: shellThickness);
   }
 }
 
@@ -488,6 +546,7 @@ class SolidMesher {
   const SolidMesher({this.targetCells = 56});
   final int targetCells;
   SolidMesh tessellate(EvaluatedSolid solid) {
+    if (solid.shellThickness > 0) return _openTopShell(solid);
     if (solid.cuts.isEmpty) {
       if (solid.cornerRadius > 0) return _filletedPrism(solid);
       return solid.chamfer > 0 ? _chamferedPrism(solid) : _cuboid(solid);
@@ -584,6 +643,38 @@ class SolidMesher {
             .toList(),
         tolerance: 0,
         estimatedVolume: solid.width * solid.height * solid.depth);
+  }
+
+  SolidMesh _openTopShell(EvaluatedSolid solid) {
+    final w = solid.width, h = solid.height, d = solid.depth;
+    final t = solid.shellThickness;
+    final triangles = <MeshTriangle>[];
+    MeshPoint p(double x, double y, double z) => MeshPoint(x, y, z);
+
+    _quad(triangles, p(0, 0, 0), p(0, h, 0), p(w, h, 0), p(w, 0, 0));
+    _quad(triangles, p(0, 0, 0), p(w, 0, 0), p(w, 0, d), p(0, 0, d));
+    _quad(triangles, p(w, 0, 0), p(w, h, 0), p(w, h, d), p(w, 0, d));
+    _quad(triangles, p(w, h, 0), p(0, h, 0), p(0, h, d), p(w, h, d));
+    _quad(triangles, p(0, h, 0), p(0, 0, 0), p(0, 0, d), p(0, h, d));
+
+    _quad(triangles, p(t, t, t), p(w - t, t, t), p(w - t, h - t, t),
+        p(t, h - t, t));
+    _quad(triangles, p(t, t, t), p(t, t, d), p(w - t, t, d), p(w - t, t, t));
+    _quad(triangles, p(w - t, t, t), p(w - t, t, d), p(w - t, h - t, d),
+        p(w - t, h - t, t));
+    _quad(triangles, p(w - t, h - t, t), p(w - t, h - t, d), p(t, h - t, d),
+        p(t, h - t, t));
+    _quad(triangles, p(t, h - t, t), p(t, h - t, d), p(t, t, d), p(t, t, t));
+
+    _quad(triangles, p(0, 0, d), p(w, 0, d), p(w - t, t, d), p(t, t, d));
+    _quad(
+        triangles, p(w, 0, d), p(w, h, d), p(w - t, h - t, d), p(w - t, t, d));
+    _quad(
+        triangles, p(w, h, d), p(0, h, d), p(t, h - t, d), p(w - t, h - t, d));
+    _quad(triangles, p(0, h, d), p(0, 0, d), p(t, t, d), p(t, h - t, d));
+
+    return SolidMesh(
+        triangles: triangles, tolerance: 0, estimatedVolume: solid.volume);
   }
 
   SolidMesh _filletedPrism(EvaluatedSolid solid) {

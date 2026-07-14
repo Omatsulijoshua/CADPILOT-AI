@@ -119,6 +119,10 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
       message('Create an extrusion first.');
       return;
     }
+    if (solid!.shellThickness > 0) {
+      message('Suppress or delete the shell before adding a through cut.');
+      return;
+    }
     final circles = widget.sketch.entities
         .where((item) => item.kind == SketchEntityKind.circle)
         .toList();
@@ -132,6 +136,44 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
         profileId: circles.first.id,
         depth: solid!.depth,
         createdAt: DateTime.now().toUtc())));
+    widget.onChanged(history.document);
+  }
+
+  Future<void> shell() async {
+    final current = solid;
+    final baseOperation = model.operations
+        .where((item) => item.kind == ModelOperationKind.extrude)
+        .firstOrNull;
+    if (current == null || baseOperation == null) {
+      message('Create an extrusion first.');
+      return;
+    }
+    final existing = model.operations
+        .where((item) => item.kind == ModelOperationKind.shell)
+        .firstOrNull;
+    final thickness = await depthDialog(
+        existing == null ? 'Shell solid' : 'Edit shell',
+        existing?.depth ??
+            math.min(math.min(current.width, current.height) / 2,
+                    current.depth) *
+                0.2,
+        label: 'Wall thickness (mm)');
+    if (thickness == null) return;
+    final validation = const ShellValidator().validate(current, thickness);
+    if (validation != null) {
+      message(validation);
+      return;
+    }
+    final operation = ModelOperation(
+        id: existing?.id ?? const Uuid().v4(),
+        kind: ModelOperationKind.shell,
+        profileId: baseOperation.profileId,
+        depth: thickness,
+        createdAt: existing?.createdAt ?? DateTime.now().toUtc(),
+        name: existing?.name,
+        suppressed: existing?.suppressed ?? false);
+    setState(() =>
+        existing == null ? history.add(operation) : history.replace(operation));
     widget.onChanged(history.document);
   }
 
@@ -328,6 +370,10 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
   }
 
   Future<void> editOperation(ModelOperation operation) async {
+    if (operation.kind == ModelOperationKind.shell) {
+      await shell();
+      return;
+    }
     if (operation.kind == ModelOperationKind.fillet) {
       await fillet();
       return;
@@ -467,6 +513,11 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                             label: const Text('Through cut')),
                         const SizedBox(width: 8),
                         FilledButton.tonalIcon(
+                            onPressed: shell,
+                            icon: const Icon(Icons.crop_square),
+                            label: const Text('Shell')),
+                        const SizedBox(width: 8),
+                        FilledButton.tonalIcon(
                             onPressed: fillet,
                             icon: const Icon(Icons.rounded_corner),
                             label: const Text('Fillet')),
@@ -566,6 +617,8 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                                 Icons.architecture,
                                               ModelOperationKind.fillet =>
                                                 Icons.rounded_corner,
+                                              ModelOperationKind.shell =>
+                                                Icons.crop_square,
                                             },
                                             color: operation.suppressed
                                                 ? Colors.grey
@@ -621,7 +674,11 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                                                   ModelOperationKind
                                                                       .fillet
                                                               ? 'Edit fillet'
-                                                              : 'Edit depth')),
+                                                              : operation.kind ==
+                                                                      ModelOperationKind
+                                                                          .shell
+                                                                  ? 'Edit shell'
+                                                                  : 'Edit depth')),
                                             if (operation.kind ==
                                                 ModelOperationKind
                                                     .circularCut) ...[
@@ -813,6 +870,40 @@ class SolidPainter extends CustomPainter {
               ..color = const Color(0xffff784f)
               ..strokeWidth = 5);
       }
+    }
+    if (current.shellThickness > 0) {
+      final t = current.shellThickness;
+      final cavityTop = <List<double>>[
+        [-w + t, -h + t, d],
+        [w - t, -h + t, d],
+        [w - t, h - t, d],
+        [-w + t, h - t, d],
+      ];
+      final cavityBottom =
+          cavityTop.map((point) => [point[0], point[1], t]).toList();
+      Path polygon(List<List<double>> points) {
+        final path = Path();
+        for (var index = 0; index < points.length; index++) {
+          final point = project(points[index], size, scale);
+          index == 0
+              ? path.moveTo(point.dx, point.dy)
+              : path.lineTo(point.dx, point.dy);
+        }
+        return path..close();
+      }
+
+      canvas.drawPath(
+          polygon(cavityTop),
+          Paint()
+            ..color = const Color(0xff071017)
+            ..style = PaintingStyle.fill);
+      canvas.drawPath(
+          polygon(cavityBottom),
+          Paint()
+            ..color = const Color(0xff0b3f3a)
+            ..style = PaintingStyle.fill);
+      canvas.drawPath(polygon(cavityTop), edge);
+      canvas.drawPath(polygon(cavityBottom), edge);
     }
     for (final cut in current.cuts) {
       final relative = Offset(
