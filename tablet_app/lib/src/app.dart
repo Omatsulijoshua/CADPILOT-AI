@@ -9,6 +9,7 @@ import 'controllers.dart';
 import 'models.dart';
 import 'modeling_canvas.dart';
 import 'sketch_canvas.dart';
+import 'spatial.dart';
 
 class CadPilotApp extends StatelessWidget {
   const CadPilotApp({super.key});
@@ -177,7 +178,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     const SizedBox(height: 20),
                     FilledButton(
                         onPressed: busy ? null : submit,
-                        child: Text(busy ? 'Signing inÃ¢â‚¬Â¦' : 'Sign in')),
+                        child: Text(busy
+                            ? 'Signing inÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦'
+                            : 'Sign in')),
                     const SizedBox(height: 12),
                     OutlinedButton(
                         onPressed: busy
@@ -340,7 +343,7 @@ class ProjectGrid extends ConsumerWidget {
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w700)),
                               Text(
-                                  'Revision ${project.revision} Ã¢â‚¬Â¢ ${project.syncState == SyncState.synced ? 'Synced' : 'Saved locally'}',
+                                  'Revision ${project.revision} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${project.syncState == SyncState.synced ? 'Synced' : 'Saved locally'}',
                                   style: Theme.of(context).textTheme.bodySmall),
                             ]),
                       )));
@@ -372,7 +375,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
   }
 
   void schedule(CadProject project) {
-    setState(() => status = 'SavingÃ¢â‚¬Â¦');
+    setState(() => status = 'SavingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦');
     autosave?.cancel();
     autosave = Timer(const Duration(milliseconds: 600), () async {
       await ref
@@ -465,6 +468,14 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
         actions: [
           Text(status),
           const SizedBox(width: 12),
+          OutlinedButton.icon(
+              onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) =>
+                      SpatialCapabilityPanel(projectName: project.name)),
+              icon: const Icon(Icons.view_in_ar),
+              label: const Text('AR / Scan')),
+          const SizedBox(width: 8),
           FilledButton.icon(
               onPressed: () => runAiCommand(project),
               icon: const Icon(Icons.auto_awesome),
@@ -542,7 +553,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                           maxLines: 8,
                           decoration: const InputDecoration(
                               hintText:
-                                  'Add design intent, dimensions, or manufacturing notesÃ¢â‚¬Â¦')),
+                                  'Add design intent, dimensions, or manufacturing notesÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦')),
                       const SizedBox(height: 20),
                       const Text('SYNC'),
                       const ListTile(
