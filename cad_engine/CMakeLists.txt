@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.22)
+project(cadpilot_engine LANGUAGES CXX)
+add_library(cadpilot_engine SHARED ffi/cadpilot_engine.cpp)
+target_include_directories(cadpilot_engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/ffi)
+target_compile_features(cadpilot_engine PUBLIC cxx_std_20)

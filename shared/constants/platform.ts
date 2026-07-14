@@ -1,0 +1,3 @@
+export const MIN_TABLET_WORKSPACE_DP = 720;
+export const PROJECT_FORMAT_VERSION = 1;
+export const CAD_ENGINE_ABI_VERSION = 1;

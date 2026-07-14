@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cadpilot.ai/schemas/ai-cad-command.v1.json",
+  "title": "CadPilot AI command",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "commandId", "intent", "target", "operations", "assumptions", "requiresConfirmation"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "commandId": { "type": "string", "format": "uuid" },
+    "intent": { "enum": ["create_model", "modify_model", "analyze_model", "export_model", "analyze_spatial_scan"] },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["model", "selection", "body", "face", "edge", "sketch", "scan"] },
+        "ids": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      },
+      "required": ["type", "ids"]
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/operation" }
+    },
+    "assumptions": { "type": "array", "items": { "type": "string", "maxLength": 500 } },
+    "requiresConfirmation": { "type": "boolean" }
+  },
+  "$defs": {
+    "quantity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "unit"],
+      "properties": { "value": { "type": "number" }, "unit": { "enum": ["mm", "cm", "m", "in", "deg"] } }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "type", "parameters"],
+      "properties": {
+        "operationId": { "type": "string", "format": "uuid" },
+        "type": { "enum": ["create_sketch", "add_primitive", "add_dimension", "add_constraint", "extrude", "cut", "revolve", "sweep", "loft", "fillet", "chamfer", "shell", "mirror", "pattern", "move", "rotate", "scale", "boolean", "delete", "rename", "assign_material", "export", "analyze", "repair_geometry", "detect_planes", "generate_floor_plan", "check_fit", "compare_as_built"] },
+        "parameters": { "type": "object", "maxProperties": 30 },
+        "distance": { "$ref": "#/$defs/quantity" },
+        "radius": { "$ref": "#/$defs/quantity" }
+      }
+    }
+  }
+}

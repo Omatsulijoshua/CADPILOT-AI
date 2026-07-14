@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cadpilot
+      POSTGRES_PASSWORD: cadpilot
+      POSTGRES_DB: cadpilot
+    ports: ["5432:5432"]
+    volumes: [cadpilot-postgres:/var/lib/postgresql/data]
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+volumes:
+  cadpilot-postgres:
