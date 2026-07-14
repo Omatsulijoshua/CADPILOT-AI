@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'controllers.dart';
 import 'models.dart';
+import 'modeling_canvas.dart';
 import 'sketch_canvas.dart';
 
 class CadPilotApp extends StatelessWidget {
@@ -174,7 +175,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     const SizedBox(height: 20),
                     FilledButton(
                         onPressed: busy ? null : submit,
-                        child: Text(busy ? 'Signing inâ€¦' : 'Sign in')),
+                        child: Text(busy ? 'Signing inÃ¢â‚¬Â¦' : 'Sign in')),
                     const SizedBox(height: 12),
                     OutlinedButton(
                         onPressed: busy
@@ -337,7 +338,7 @@ class ProjectGrid extends ConsumerWidget {
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w700)),
                               Text(
-                                  'Revision ${project.revision} â€¢ ${project.syncState == SyncState.synced ? 'Synced' : 'Saved locally'}',
+                                  'Revision ${project.revision} Ã¢â‚¬Â¢ ${project.syncState == SyncState.synced ? 'Synced' : 'Saved locally'}',
                                   style: Theme.of(context).textTheme.bodySmall),
                             ]),
                       )));
@@ -359,6 +360,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
   Timer? autosave;
   bool initialized = false;
   String status = 'Saved locally';
+  bool modeling = false;
 
   @override
   void dispose() {
@@ -368,7 +370,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
   }
 
   void schedule(CadProject project) {
-    setState(() => status = 'Savingâ€¦');
+    setState(() => status = 'SavingÃ¢â‚¬Â¦');
     autosave?.cancel();
     autosave = Timer(const Duration(milliseconds: 600), () async {
       await ref
@@ -399,7 +401,22 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
         actions: [
           Text(status),
           const SizedBox(width: 16),
-          const Chip(label: Text('2D sketch workspace')),
+          SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                    value: false,
+                    icon: Icon(Icons.draw),
+                    label: Text('Sketch')),
+                ButtonSegment(
+                    value: true,
+                    icon: Icon(Icons.view_in_ar),
+                    label: Text('3D'))
+              ],
+              selected: {
+                modeling
+              },
+              onSelectionChanged: (value) =>
+                  setState(() => modeling = value.first)),
           const SizedBox(width: 16)
         ],
       ),
@@ -413,16 +430,31 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
               icon: Icon(Icons.straighten), label: Text('Measure')),
         ]),
         Expanded(
-          child: SketchCanvas(
-            document: project.sketch,
-            onChanged: (document) async {
-              setState(() => status = 'Saving sketch…');
-              await ref.read(projectsProvider.notifier).save(
-                    project.copyWith(sketch: document),
-                  );
-              if (mounted) setState(() => status = 'Sketch saved locally');
-            },
-          ),
+          child: modeling
+              ? ModelingCanvas(
+                  projectName: project.name,
+                  sketch: project.sketch,
+                  model: project.model,
+                  onChanged: (model) async {
+                    setState(() => status = 'Saving model...');
+                    await ref.read(projectsProvider.notifier).save(
+                          project.copyWith(model: model),
+                        );
+                    if (mounted) setState(() => status = 'Model saved locally');
+                  },
+                )
+              : SketchCanvas(
+                  document: project.sketch,
+                  onChanged: (document) async {
+                    setState(() => status = 'Saving sketch...');
+                    await ref.read(projectsProvider.notifier).save(
+                          project.copyWith(sketch: document),
+                        );
+                    if (mounted) {
+                      setState(() => status = 'Sketch saved locally');
+                    }
+                  },
+                ),
         ),
         SizedBox(
             width: 340,
@@ -441,7 +473,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                           maxLines: 8,
                           decoration: const InputDecoration(
                               hintText:
-                                  'Add design intent, dimensions, or manufacturing notesâ€¦')),
+                                  'Add design intent, dimensions, or manufacturing notesÃ¢â‚¬Â¦')),
                       const SizedBox(height: 20),
                       const Text('SYNC'),
                       const ListTile(

@@ -1,3 +1,4 @@
+import 'model_3d.dart';
 import 'sketch_models.dart';
 
 enum SessionKind { signedIn, guest }
@@ -27,6 +28,7 @@ class CadProject {
     required this.revision,
     required this.syncState,
     this.sketch = const SketchDocument(),
+    this.model = const ModelDocument(),
   });
   final String id;
   final String name;
@@ -36,12 +38,14 @@ class CadProject {
   final int revision;
   final SyncState syncState;
   final SketchDocument sketch;
+  final ModelDocument model;
 
   CadProject copyWith(
           {String? name,
           String? note,
           SyncState? syncState,
-          SketchDocument? sketch}) =>
+          SketchDocument? sketch,
+          ModelDocument? model}) =>
       CadProject(
         id: id,
         name: name ?? this.name,
@@ -51,6 +55,7 @@ class CadProject {
         revision: revision + 1,
         syncState: syncState ?? SyncState.pending,
         sketch: sketch ?? this.sketch,
+        model: model ?? this.model,
       );
 
   Map<String, Object?> toJson() => {
@@ -62,6 +67,7 @@ class CadProject {
         'revision': revision,
         'syncState': syncState.name,
         'sketch': sketch.toJson(),
+        'model': model.toJson(),
       };
 
   factory CadProject.fromJson(Map<String, Object?> json) => CadProject(
