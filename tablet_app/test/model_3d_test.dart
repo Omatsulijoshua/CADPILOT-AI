@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show Size;
 import 'package:cadpilot_tablet/src/model_3d.dart';
 import 'package:cadpilot_tablet/src/modeling_canvas.dart';
@@ -136,5 +137,43 @@ void main() {
     final center = top.reduce((a, b) => a + b) / top.length.toDouble();
     final faceHit = projection.hitTest(center);
     expect(faceHit.face, isNotNull);
+  });
+
+  test('materials persist through operations and remain undoable', () {
+    final history = ModelHistory(
+        ModelDocument(operations: [extrude], material: CadMaterial.generic));
+    history.commit(history.document.copyWith(material: CadMaterial.pla));
+    history.add(ModelOperation(
+        id: 'op-extra',
+        kind: ModelOperationKind.circularCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026)));
+    expect(history.document.material, CadMaterial.pla);
+    final decoded = ModelDocument.fromJson(history.document.toJson());
+    expect(decoded.material, CadMaterial.pla);
+    history.undo();
+    expect(history.document.material, CadMaterial.pla);
+    history.undo();
+    expect(history.document.material, CadMaterial.generic);
+  });
+
+  test('measurements include through-hole area and material mass', () {
+    final cut = ModelOperation(
+        id: 'op-2',
+        kind: ModelOperationKind.circularCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026));
+    final solid = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle, circle]),
+        ModelDocument(
+            operations: [extrude, cut], material: CadMaterial.aluminum6061))!;
+    final values = SolidMeasurements.from(solid, CadMaterial.aluminum6061);
+    expect(values.volumeMm3, closeTo(40000 - math.pi * 25 * 8, 0.001));
+    expect(values.surfaceAreaMm2, closeTo(12400 + math.pi * 30, 0.001));
+    expect(values.massGrams, closeTo(values.volumeMm3 / 1000 * 2.70, 0.001));
+    expect(
+        SolidMeasurements.from(solid, CadMaterial.generic).massGrams, isNull);
   });
 }

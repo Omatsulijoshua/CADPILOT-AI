@@ -51,6 +51,8 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
   }
 
   EvaluatedSolid? get solid => evaluator.evaluate(widget.sketch, model);
+  SolidMeasurements? get measurements =>
+      solid == null ? null : SolidMeasurements.from(solid!, model.material);
 
   void selectAt(TapUpDetails details) {
     final current = solid;
@@ -129,6 +131,11 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
         profileId: circles.first.id,
         depth: solid!.depth,
         createdAt: DateTime.now().toUtc())));
+    widget.onChanged(history.document);
+  }
+
+  void assignMaterial(CadMaterial material) {
+    setState(() => history.commit(model.copyWith(material: material)));
     widget.onChanged(history.document);
   }
 
@@ -299,6 +306,29 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          const Text('MATERIAL',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.2)),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<CadMaterial>(
+                            key: ValueKey(model.material),
+                            initialValue: model.material,
+                            decoration: const InputDecoration(
+                                isDense: true, prefixIcon: Icon(Icons.layers)),
+                            items: CadMaterial.values
+                                .map((material) => DropdownMenuItem(
+                                    value: material,
+                                    child: Text(material.label)))
+                                .toList(),
+                            onChanged: (material) {
+                              if (material != null &&
+                                  material != model.material) {
+                                assignMaterial(material);
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 18),
                           const Text('MODEL TREE',
                               style: TextStyle(
                                   fontWeight: FontWeight.bold,
@@ -361,7 +391,27 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                         ),
                                         dense: true,
                                       );
-                                    }))
+                                    })),
+                          const Divider(),
+                          const Text('MEASUREMENTS',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.2)),
+                          const SizedBox(height: 8),
+                          if (measurements == null)
+                            const Text(
+                                'Create a solid to inspect its properties.')
+                          else ...[
+                            Text(
+                                'Size  ${solid!.width.toStringAsFixed(1)} x ${solid!.height.toStringAsFixed(1)} x ${solid!.depth.toStringAsFixed(1)} mm'),
+                            Text(
+                                'Volume  ${measurements!.volumeMm3.toStringAsFixed(1)} mm^3'),
+                            Text(
+                                'Surface  ${measurements!.surfaceAreaMm2.toStringAsFixed(1)} mm^2'),
+                            Text(measurements!.massGrams == null
+                                ? 'Mass  Assign a physical material'
+                                : 'Mass  ${measurements!.massGrams!.toStringAsFixed(2)} g'),
+                          ]
                         ])))),
       ]);
 }

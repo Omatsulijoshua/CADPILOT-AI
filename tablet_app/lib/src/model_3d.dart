@@ -2,6 +2,17 @@ import 'dart:math' as math;
 import 'dart:ui';
 import 'sketch_models.dart';
 
+enum CadMaterial {
+  generic('Generic', 0),
+  pla('PLA', 1.24),
+  aluminum6061('Aluminum 6061', 2.70),
+  mildSteel('Mild steel', 7.85);
+
+  const CadMaterial(this.label, this.densityGramsPerCm3);
+  final String label;
+  final double densityGramsPerCm3;
+}
+
 enum ModelOperationKind { extrude, circularCut }
 
 class ModelOperation {
@@ -54,22 +65,33 @@ class ModelOperation {
 }
 
 class ModelDocument {
-  const ModelDocument({this.operations = const []});
+  const ModelDocument(
+      {this.operations = const [], this.material = CadMaterial.generic});
   final List<ModelOperation> operations;
-  Map<String, Object> toJson() =>
-      {'operations': operations.map((item) => item.toJson()).toList()};
+  final CadMaterial material;
+  Map<String, Object> toJson() => {
+        'operations': operations.map((item) => item.toJson()).toList(),
+        'material': material.name,
+      };
   factory ModelDocument.fromJson(Map<String, Object?>? json) => ModelDocument(
       operations: (json?['operations'] as List<Object?>? ?? const [])
           .map((item) => ModelOperation.fromJson(item! as Map<String, Object?>))
-          .toList());
+          .toList(),
+      material: CadMaterial.values
+          .byName((json?['material'] as String?) ?? CadMaterial.generic.name));
+  ModelDocument copyWith(
+          {List<ModelOperation>? operations, CadMaterial? material}) =>
+      ModelDocument(
+          operations: operations ?? this.operations,
+          material: material ?? this.material);
   ModelDocument add(ModelOperation operation) =>
-      ModelDocument(operations: [...operations, operation]);
-  ModelDocument replace(ModelOperation operation) => ModelDocument(
+      copyWith(operations: [...operations, operation]);
+  ModelDocument replace(ModelOperation operation) => copyWith(
       operations: operations
           .map((item) => item.id == operation.id ? operation : item)
           .toList());
-  ModelDocument remove(String id) => ModelDocument(
-      operations: operations.where((item) => item.id != id).toList());
+  ModelDocument remove(String id) =>
+      copyWith(operations: operations.where((item) => item.id != id).toList());
 }
 
 class ModelHistory {
@@ -119,6 +141,36 @@ class EvaluatedSolid {
       width * height * depth -
       cuts.fold(
           0, (sum, cut) => sum + math.pi * cut.radius * cut.radius * depth);
+}
+
+class SolidMeasurements {
+  const SolidMeasurements(
+      {required this.volumeMm3,
+      required this.surfaceAreaMm2,
+      required this.massGrams});
+  final double volumeMm3;
+  final double surfaceAreaMm2;
+  final double? massGrams;
+
+  factory SolidMeasurements.from(EvaluatedSolid solid, CadMaterial material) {
+    final cuboidArea = 2 *
+        (solid.width * solid.height +
+            solid.width * solid.depth +
+            solid.height * solid.depth);
+    final cutAreaDelta = solid.cuts.fold<double>(
+        0,
+        (sum, cut) =>
+            sum +
+            2 * math.pi * cut.radius * solid.depth -
+            2 * math.pi * cut.radius * cut.radius);
+    final mass = material.densityGramsPerCm3 == 0
+        ? null
+        : solid.volume / 1000 * material.densityGramsPerCm3;
+    return SolidMeasurements(
+        volumeMm3: solid.volume,
+        surfaceAreaMm2: cuboidArea + cutAreaDelta,
+        massGrams: mass);
+  }
 }
 
 class CircularCut {
