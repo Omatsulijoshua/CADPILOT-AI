@@ -13,7 +13,13 @@ enum CadMaterial {
   final double densityGramsPerCm3;
 }
 
-enum ModelOperationKind { extrude, circularCut, linearPattern, mirrorCut }
+enum ModelOperationKind {
+  extrude,
+  circularCut,
+  linearPattern,
+  mirrorCut,
+  chamfer
+}
 
 class ModelOperation {
   const ModelOperation({
@@ -45,6 +51,7 @@ class ModelOperation {
         ModelOperationKind.circularCut => 'Circular cut',
         ModelOperationKind.linearPattern => 'Linear pattern',
         ModelOperationKind.mirrorCut => 'Mirror cut',
+        ModelOperationKind.chamfer => 'Chamfer',
       };
   ModelOperation copyWith(
           {double? depth,
@@ -157,16 +164,63 @@ class EvaluatedSolid {
       required this.width,
       required this.height,
       required this.depth,
-      required this.cuts});
+      required this.cuts,
+      this.chamfer = 0});
   final Offset origin;
   final double width;
   final double height;
   final double depth;
   final List<CircularCut> cuts;
+  final double chamfer;
+  double get planArea => width * height - 2 * chamfer * chamfer;
+  double get planPerimeter =>
+      2 * (width + height) + 4 * chamfer * (math.sqrt2 - 2);
+  bool containsPlanPoint(Offset point) {
+    final x = point.dx - origin.dx;
+    final y = point.dy - origin.dy;
+    if (x < 0 || y < 0 || x > width || y > height) return false;
+    if (chamfer <= 0) return true;
+    return x + y >= chamfer &&
+        (width - x) + y >= chamfer &&
+        x + (height - y) >= chamfer &&
+        (width - x) + (height - y) >= chamfer;
+  }
+
   double get volume =>
-      width * height * depth -
+      planArea * depth -
       cuts.fold(
           0, (sum, cut) => sum + math.pi * cut.radius * cut.radius * depth);
+}
+
+class ChamferValidator {
+  const ChamferValidator();
+
+  String? validate(EvaluatedSolid solid, double distance) {
+    if (!distance.isFinite || distance <= 0) {
+      return 'Chamfer distance must be greater than zero.';
+    }
+    if (distance >= math.min(solid.width, solid.height) / 2) {
+      return 'Chamfer distance must be less than half the shortest side.';
+    }
+    final candidate = EvaluatedSolid(
+        origin: solid.origin,
+        width: solid.width,
+        height: solid.height,
+        depth: solid.depth,
+        cuts: solid.cuts,
+        chamfer: distance);
+    for (final cut in solid.cuts) {
+      for (var index = 0; index < 32; index++) {
+        final angle = index * math.pi * 2 / 32;
+        final boundary = cut.center +
+            Offset(math.cos(angle) * cut.radius, math.sin(angle) * cut.radius);
+        if (!candidate.containsPlanPoint(boundary)) {
+          return 'The chamfer would intersect existing cut geometry.';
+        }
+      }
+    }
+    return null;
+  }
 }
 
 class MirrorCutValidator {
@@ -239,10 +293,7 @@ class SolidMeasurements {
   final double? massGrams;
 
   factory SolidMeasurements.from(EvaluatedSolid solid, CadMaterial material) {
-    final cuboidArea = 2 *
-        (solid.width * solid.height +
-            solid.width * solid.depth +
-            solid.height * solid.depth);
+    final outerArea = 2 * solid.planArea + solid.planPerimeter * solid.depth;
     final cutAreaDelta = solid.cuts.fold<double>(
         0,
         (sum, cut) =>
@@ -254,7 +305,7 @@ class SolidMeasurements {
         : solid.volume / 1000 * material.densityGramsPerCm3;
     return SolidMeasurements(
         volumeMm3: solid.volume,
-        surfaceAreaMm2: cuboidArea + cutAreaDelta,
+        surfaceAreaMm2: outerArea + cutAreaDelta,
         massGrams: mass);
   }
 }
@@ -270,6 +321,7 @@ class ModelEvaluator {
   EvaluatedSolid? evaluate(SketchDocument sketch, ModelDocument model) {
     SketchEntity? base;
     double? depth;
+    double chamfer = 0;
     final cuts = <CircularCut>[];
     final activeOperations = <String>{};
     for (final operation in model.operations) {
@@ -310,6 +362,12 @@ class ModelEvaluator {
                 rect.left + rect.right - profile.start.dx, profile.start.dy),
             radius: profile.primaryDimension));
       }
+      if (operation.kind == ModelOperationKind.chamfer &&
+          profile.kind == SketchEntityKind.rectangle &&
+          base != null &&
+          profile.id == base.id) {
+        chamfer = operation.depth;
+      }
     }
     if (base == null || depth == null) return null;
     final rect = Rect.fromPoints(base.start, base.end);
@@ -318,7 +376,8 @@ class ModelEvaluator {
         width: rect.width,
         height: rect.height,
         depth: depth,
-        cuts: cuts);
+        cuts: cuts,
+        chamfer: chamfer);
   }
 }
 
@@ -363,7 +422,9 @@ class SolidMesher {
   const SolidMesher({this.targetCells = 56});
   final int targetCells;
   SolidMesh tessellate(EvaluatedSolid solid) {
-    if (solid.cuts.isEmpty) return _cuboid(solid);
+    if (solid.cuts.isEmpty) {
+      return solid.chamfer > 0 ? _chamferedPrism(solid) : _cuboid(solid);
+    }
     final nx = targetCells.clamp(12, 120);
     final ny =
         (targetCells * solid.height / solid.width).round().clamp(12, 120);
@@ -374,8 +435,9 @@ class SolidMesher {
         (x) => List.generate(ny, (y) {
               final point = Offset(solid.origin.dx + (x + 0.5) * dx,
                   solid.origin.dy + (y + 0.5) * dy);
-              return solid.cuts
-                  .every((cut) => (point - cut.center).distance >= cut.radius);
+              return solid.containsPlanPoint(point) &&
+                  solid.cuts.every(
+                      (cut) => (point - cut.center).distance >= cut.radius);
             }));
     final triangles = <MeshTriangle>[];
     var cells = 0;
@@ -455,6 +517,36 @@ class SolidMesher {
             .toList(),
         tolerance: 0,
         estimatedVolume: solid.width * solid.height * solid.depth);
+  }
+
+  SolidMesh _chamferedPrism(EvaluatedSolid solid) {
+    final c = solid.chamfer;
+    final x = solid.width, y = solid.height, z = solid.depth;
+    final plan = <MeshPoint>[
+      MeshPoint(c, 0, 0),
+      MeshPoint(x - c, 0, 0),
+      MeshPoint(x, c, 0),
+      MeshPoint(x, y - c, 0),
+      MeshPoint(x - c, y, 0),
+      MeshPoint(c, y, 0),
+      MeshPoint(0, y - c, 0),
+      MeshPoint(0, c, 0),
+    ];
+    final top = plan.map((point) => MeshPoint(point.x, point.y, z)).toList();
+    final triangles = <MeshTriangle>[];
+    for (var index = 1; index < plan.length - 1; index++) {
+      triangles
+        ..add(MeshTriangle(plan[0], plan[index + 1], plan[index]))
+        ..add(MeshTriangle(top[0], top[index], top[index + 1]));
+    }
+    for (var index = 0; index < plan.length; index++) {
+      final next = (index + 1) % plan.length;
+      _quad(triangles, plan[index], plan[next], top[next], top[index]);
+    }
+    return SolidMesh(
+        triangles: triangles,
+        tolerance: 0,
+        estimatedVolume: solid.planArea * solid.depth);
   }
 }
 

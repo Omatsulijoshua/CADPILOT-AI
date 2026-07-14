@@ -67,7 +67,8 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
     });
   }
 
-  Future<double?> depthDialog(String title, double initial) async {
+  Future<double?> depthDialog(String title, double initial,
+      {String label = 'Depth (mm)'}) async {
     final controller = TextEditingController(text: initial.toStringAsFixed(1));
     return showDialog<double>(
         context: context,
@@ -78,7 +79,7 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                     autofocus: true,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Depth (mm)')),
+                    decoration: InputDecoration(labelText: label)),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(context),
@@ -131,6 +132,41 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
         profileId: circles.first.id,
         depth: solid!.depth,
         createdAt: DateTime.now().toUtc())));
+    widget.onChanged(history.document);
+  }
+
+  Future<void> chamfer() async {
+    final current = solid;
+    final baseOperation = model.operations
+        .where((item) => item.kind == ModelOperationKind.extrude)
+        .firstOrNull;
+    if (current == null || baseOperation == null) {
+      message('Create an extrusion first.');
+      return;
+    }
+    final existing = model.operations
+        .where((item) => item.kind == ModelOperationKind.chamfer)
+        .firstOrNull;
+    final distance = await depthDialog(
+        existing == null ? 'Chamfer solid corners' : 'Edit chamfer',
+        existing?.depth ?? math.min(current.width, current.height) * 0.08,
+        label: 'Distance (mm)');
+    if (distance == null) return;
+    final validation = const ChamferValidator().validate(current, distance);
+    if (validation != null) {
+      message(validation);
+      return;
+    }
+    final operation = ModelOperation(
+        id: existing?.id ?? const Uuid().v4(),
+        kind: ModelOperationKind.chamfer,
+        profileId: baseOperation.profileId,
+        depth: distance,
+        createdAt: existing?.createdAt ?? DateTime.now().toUtc(),
+        name: existing?.name,
+        suppressed: existing?.suppressed ?? false);
+    setState(() =>
+        existing == null ? history.add(operation) : history.replace(operation));
     widget.onChanged(history.document);
   }
 
@@ -257,6 +293,10 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
   }
 
   Future<void> editOperation(ModelOperation operation) async {
+    if (operation.kind == ModelOperationKind.chamfer) {
+      await chamfer();
+      return;
+    }
     if (operation.kind == ModelOperationKind.linearPattern) {
       final source = model.operations
           .where((item) => item.id == operation.sourceOperationId)
@@ -387,6 +427,11 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                             icon: const Icon(Icons.remove_circle_outline),
                             label: const Text('Through cut')),
                         const SizedBox(width: 8),
+                        FilledButton.tonalIcon(
+                            onPressed: chamfer,
+                            icon: const Icon(Icons.architecture),
+                            label: const Text('Chamfer')),
+                        const SizedBox(width: 8),
                         IconButton.filledTonal(
                             tooltip: 'Undo 3D operation',
                             onPressed: history.canUndo ? undo : null,
@@ -473,6 +518,8 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                                 Icons.grid_view,
                                               ModelOperationKind.mirrorCut =>
                                                 Icons.flip,
+                                              ModelOperationKind.chamfer =>
+                                                Icons.architecture,
                                             },
                                             color: operation.suppressed
                                                 ? Colors.grey
@@ -520,7 +567,11 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                                           ModelOperationKind
                                                               .linearPattern
                                                       ? 'Edit pattern'
-                                                      : 'Edit depth')),
+                                                      : operation.kind ==
+                                                              ModelOperationKind
+                                                                  .chamfer
+                                                          ? 'Edit chamfer'
+                                                          : 'Edit depth')),
                                             if (operation.kind ==
                                                 ModelOperationKind
                                                     .circularCut) ...[
@@ -621,23 +672,39 @@ class SolidPainter extends CustomPainter {
             zoom)
         .clamp(0.2, 20.0);
     final w = current.width / 2, h = current.height / 2, d = current.depth;
+    final c = current.chamfer;
+    final plan = c > 0
+        ? <List<double>>[
+            [-w + c, -h, 0],
+            [w - c, -h, 0],
+            [w, -h + c, 0],
+            [w, h - c, 0],
+            [w - c, h, 0],
+            [-w + c, h, 0],
+            [-w, h - c, 0],
+            [-w, -h + c, 0],
+          ]
+        : <List<double>>[
+            [-w, -h, 0],
+            [w, -h, 0],
+            [w, h, 0],
+            [-w, h, 0],
+          ];
     final v = <List<double>>[
-      [-w, -h, 0],
-      [w, -h, 0],
-      [w, h, 0],
-      [-w, h, 0],
-      [-w, -h, d],
-      [w, -h, d],
-      [w, h, d],
-      [-w, h, d]
+      ...plan,
+      ...plan.map((point) => [point[0], point[1], d]),
     ];
-    const faces = <List<int>>[
-      [0, 1, 2, 3],
-      [4, 7, 6, 5],
-      [0, 4, 5, 1],
-      [1, 5, 6, 2],
-      [2, 6, 7, 3],
-      [3, 7, 4, 0]
+    final count = plan.length;
+    final faces = <List<int>>[
+      List.generate(count, (index) => index),
+      List.generate(count, (index) => count * 2 - 1 - index),
+      for (var index = 0; index < count; index++)
+        [
+          index,
+          (index + 1) % count,
+          count + (index + 1) % count,
+          count + index
+        ],
     ];
     final fill = Paint()..style = PaintingStyle.fill;
     final edge = Paint()
@@ -662,7 +729,7 @@ class SolidPainter extends CustomPainter {
               .withValues(alpha: 0.72);
       canvas.drawPath(path, fill);
       canvas.drawPath(path, edge);
-      if (selectedEdge != null) {
+      if (selectedEdge != null && current.chamfer == 0) {
         final pair = SolidProjection.edgePairs[selectedEdge!];
         canvas.drawLine(
             project(v[pair[0]], size, scale),

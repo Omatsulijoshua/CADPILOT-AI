@@ -330,4 +330,88 @@ void main() {
     expect(validator.mirroredCenter(solid, centerlineCircle),
         const Offset(60, 40));
   });
+  test('chamfer persists evaluates and follows suppression', () {
+    final chamfer = ModelOperation(
+        id: 'chamfer-1',
+        kind: ModelOperationKind.chamfer,
+        profileId: 'rect',
+        depth: 5,
+        createdAt: DateTime.utc(2026));
+    final decoded = ModelDocument.fromJson(
+        ModelDocument(operations: [extrude, chamfer]).toJson());
+    expect(decoded.operations.last.kind, ModelOperationKind.chamfer);
+    expect(decoded.operations.last.depth, 5);
+    final solid = const ModelEvaluator()
+        .evaluate(const SketchDocument(entities: [rectangle]), decoded)!;
+    expect(solid.chamfer, 5);
+    expect(solid.volume, closeTo((5000 - 50) * 8, 0.001));
+    final suppressed = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle]),
+        ModelDocument(
+            operations: [extrude, chamfer.copyWith(suppressed: true)]))!;
+    expect(suppressed.chamfer, 0);
+    expect(suppressed.volume, 40000);
+  });
+
+  test('chamfer measurements use reduced plan area and perimeter', () {
+    const solid = EvaluatedSolid(
+        origin: Offset.zero,
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [],
+        chamfer: 5);
+    final values = SolidMeasurements.from(solid, CadMaterial.pla);
+    const expectedArea = 2 * (5000 - 50) + (300 + 20 * (math.sqrt2 - 2)) * 8;
+    expect(values.volumeMm3, 39600);
+    expect(values.surfaceAreaMm2, closeTo(expectedArea, 0.001));
+    expect(values.massGrams, closeTo(39.6 * 1.24, 0.001));
+  });
+
+  test('chamfer validator rejects invalid distances and cut collisions', () {
+    const validator = ChamferValidator();
+    const plain = EvaluatedSolid(
+        origin: Offset.zero, width: 100, height: 50, depth: 8, cuts: []);
+    expect(validator.validate(plain, 0), contains('greater than zero'));
+    expect(validator.validate(plain, 25), contains('half'));
+    expect(validator.validate(plain, 5), isNull);
+    const cornerCut = EvaluatedSolid(
+        origin: Offset.zero,
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [CircularCut(center: Offset(6, 6), radius: 3)]);
+    expect(validator.validate(cornerCut, 10), contains('intersect'));
+  });
+
+  test('plain chamfer uses an exact closed 28-triangle mesh', () {
+    const solid = EvaluatedSolid(
+        origin: Offset.zero,
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [],
+        chamfer: 5);
+    final mesh = const SolidMesher().tessellate(solid);
+    expect(mesh.triangles, hasLength(28));
+    expect(mesh.isClosedManifold, isTrue);
+    expect(mesh.tolerance, 0);
+    expect(mesh.estimatedVolume, solid.volume);
+    expect(
+        const StlExporter().export(solid), contains('endsolid cadpilot_part'));
+  });
+
+  test('chamfer with through hole remains manifold and volume-bounded', () {
+    const solid = EvaluatedSolid(
+        origin: Offset(10, 20),
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [CircularCut(center: Offset(45, 40), radius: 5)],
+        chamfer: 5);
+    final mesh = const SolidMesher(targetCells: 64).tessellate(solid);
+    expect(mesh.isClosedManifold, isTrue);
+    expect((mesh.estimatedVolume - solid.volume).abs() / solid.volume,
+        lessThan(0.03));
+  });
 }
