@@ -692,4 +692,108 @@ void main() {
     expect(solid.cuts, isEmpty);
     expect(solid.volume, closeTo(math.pi * 100 * 100 * 50, 0.001));
   });
+  test('circular cut pattern persists and evaluates rotated holes', () {
+    final cut = ModelOperation(
+        id: 'cut-source',
+        kind: ModelOperationKind.circularCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026));
+    final pattern = ModelOperation(
+        id: 'circular-pattern-1',
+        kind: ModelOperationKind.circularPattern,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026),
+        sourceOperationId: cut.id,
+        instanceCount: 4,
+        spacing: 90);
+    final decoded = ModelDocument.fromJson(
+        ModelDocument(operations: [extrude, cut, pattern]).toJson());
+    expect(decoded.operations.last.kind, ModelOperationKind.circularPattern);
+    expect(decoded.operations.last.instanceCount, 4);
+    expect(decoded.operations.last.spacing, 90);
+    final solid = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle, circle]), decoded)!;
+    expect(solid.cuts, hasLength(4));
+    expect(solid.cuts[0].center, const Offset(45, 40));
+    expect(solid.cuts[1].center.dx, closeTo(65, 0.001));
+    expect(solid.cuts[1].center.dy, closeTo(30, 0.001));
+    expect(solid.cuts[2].center.dx, closeTo(75, 0.001));
+    expect(solid.cuts[2].center.dy, closeTo(50, 0.001));
+    expect(solid.volume, closeTo(40000 - 4 * math.pi * 25 * 8, 0.001));
+  });
+
+  test('circular pattern follows source and feature suppression', () {
+    final cut = ModelOperation(
+        id: 'cut-source',
+        kind: ModelOperationKind.circularCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026));
+    final pattern = ModelOperation(
+        id: 'circular-pattern-1',
+        kind: ModelOperationKind.circularPattern,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026),
+        sourceOperationId: cut.id,
+        instanceCount: 4,
+        spacing: 90);
+    EvaluatedSolid evaluate(ModelOperation source, ModelOperation repeated) =>
+        const ModelEvaluator().evaluate(
+            const SketchDocument(entities: [rectangle, circle]),
+            ModelDocument(operations: [extrude, source, repeated]))!;
+    expect(
+        evaluate(cut, pattern.copyWith(suppressed: true)).cuts, hasLength(1));
+    expect(evaluate(cut.copyWith(suppressed: true), pattern).cuts, isEmpty);
+  });
+
+  test('circular pattern validator rejects center overlap and escape', () {
+    const solid = EvaluatedSolid(
+        origin: Offset(10, 20), width: 100, height: 50, depth: 8, cuts: []);
+    const centerProfile = SketchEntity(
+        id: 'center-hole',
+        kind: SketchEntityKind.circle,
+        start: Offset(60, 45),
+        end: Offset(65, 45));
+    const edgeProfile = SketchEntity(
+        id: 'edge-hole',
+        kind: SketchEntityKind.circle,
+        start: Offset(15, 25),
+        end: Offset(20, 25));
+    const validator = CircularPatternValidator();
+    expect(
+        validator.validate(solid, centerProfile, count: 4), contains('away'));
+    expect(validator.validate(solid, circle, count: 50), contains('overlap'));
+    expect(
+        validator.validate(solid, edgeProfile, count: 4), contains('outside'));
+    expect(validator.validate(solid, circle, count: 4), isNull);
+  });
+
+  test('circular pattern exports as a closed manifold STL', () {
+    final cut = ModelOperation(
+        id: 'cut-source',
+        kind: ModelOperationKind.circularCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026));
+    final pattern = ModelOperation(
+        id: 'circular-pattern-1',
+        kind: ModelOperationKind.circularPattern,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026),
+        sourceOperationId: cut.id,
+        instanceCount: 4,
+        spacing: 90);
+    final solid = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle, circle]),
+        ModelDocument(operations: [extrude, cut, pattern]))!;
+    final mesh = const SolidMesher(targetCells: 64).tessellate(solid);
+    expect(mesh.isClosedManifold, isTrue);
+    expect((mesh.estimatedVolume - solid.volume).abs() / solid.volume,
+        lessThan(0.03));
+    expect(const StlExporter().export(solid), contains('facet normal'));
+  });
 }

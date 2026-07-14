@@ -17,6 +17,7 @@ enum ModelOperationKind {
   extrude,
   circularCut,
   linearPattern,
+  circularPattern,
   mirrorCut,
   chamfer,
   fillet,
@@ -53,6 +54,7 @@ class ModelOperation {
         ModelOperationKind.extrude => 'Extrude',
         ModelOperationKind.circularCut => 'Circular cut',
         ModelOperationKind.linearPattern => 'Linear pattern',
+        ModelOperationKind.circularPattern => 'Circular pattern',
         ModelOperationKind.mirrorCut => 'Mirror cut',
         ModelOperationKind.chamfer => 'Chamfer',
         ModelOperationKind.fillet => 'Fillet',
@@ -379,6 +381,52 @@ class MirrorCutValidator {
       profile.start.dy);
 }
 
+class CircularPatternValidator {
+  const CircularPatternValidator();
+
+  String? validate(EvaluatedSolid solid, SketchEntity profile,
+      {required int count}) {
+    if (profile.kind != SketchEntityKind.circle) {
+      return 'A circular cut pattern requires a circular profile.';
+    }
+    if (solid.revolved || solid.shellThickness > 0) {
+      return 'Circular patterns require a supported solid plate.';
+    }
+    if (count < 2 || count > 50) {
+      return 'Instance count must be between 2 and 50.';
+    }
+    final center = solid.origin + Offset(solid.width / 2, solid.height / 2);
+    final sourceVector = profile.start - center;
+    final radius = profile.primaryDimension;
+    if (sourceVector.distance < radius) {
+      return 'Move the source hole away from the pattern center.';
+    }
+    final centers = <Offset>[];
+    for (var index = 0; index < count; index++) {
+      final angle = index * math.pi * 2 / count;
+      final rotated = Offset(
+          sourceVector.dx * math.cos(angle) - sourceVector.dy * math.sin(angle),
+          sourceVector.dx * math.sin(angle) +
+              sourceVector.dy * math.cos(angle));
+      final instance = center + rotated;
+      for (var sample = 0; sample < 24; sample++) {
+        final boundaryAngle = sample * math.pi * 2 / 24;
+        final boundary = instance +
+            Offset(math.cos(boundaryAngle) * radius,
+                math.sin(boundaryAngle) * radius);
+        if (!solid.containsPlanPoint(boundary)) {
+          return 'The circular pattern extends outside the solid.';
+        }
+      }
+      if (centers.any((other) => (other - instance).distance < radius * 2)) {
+        return 'Circular pattern instances overlap.';
+      }
+      centers.add(instance);
+    }
+    return null;
+  }
+}
+
 class LinearPatternValidator {
   const LinearPatternValidator();
 
@@ -510,6 +558,25 @@ class ModelEvaluator {
         for (var index = 1; index < operation.instanceCount; index++) {
           cuts.add(CircularCut(
               center: profile.start + Offset(operation.spacing * index, 0),
+              radius: profile.primaryDimension));
+        }
+      }
+      if (operation.kind == ModelOperationKind.circularPattern &&
+          profile.kind == SketchEntityKind.circle &&
+          base != null &&
+          !revolved &&
+          activeOperations.contains(operation.sourceOperationId)) {
+        final rect = Rect.fromPoints(base.start, base.end);
+        final center = rect.center;
+        final vector = profile.start - center;
+        for (var index = 1; index < operation.instanceCount; index++) {
+          final angle = index * math.pi * 2 / operation.instanceCount;
+          cuts.add(CircularCut(
+              center: center +
+                  Offset(
+                      vector.dx * math.cos(angle) - vector.dy * math.sin(angle),
+                      vector.dx * math.sin(angle) +
+                          vector.dy * math.cos(angle)),
               radius: profile.primaryDimension));
         }
       }

@@ -356,6 +356,70 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
     widget.onChanged(history.document);
   }
 
+  Future<int?> circularPatternDialog({int count = 4}) async {
+    final controller = TextEditingController(text: count.toString());
+    return showDialog<int>(
+        context: context,
+        builder: (context) => AlertDialog(
+                title: const Text('Circular cut pattern'),
+                content: TextField(
+                    controller: controller,
+                    autofocus: true,
+                    keyboardType: TextInputType.number,
+                    decoration:
+                        const InputDecoration(labelText: 'Total instances')),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel')),
+                  FilledButton(
+                      onPressed: () {
+                        final value = int.tryParse(controller.text);
+                        if (value != null && value >= 2 && value <= 50) {
+                          Navigator.pop(context, value);
+                        }
+                      },
+                      child: const Text('Apply'))
+                ]));
+  }
+
+  Future<void> circularPatternCut(ModelOperation source,
+      {ModelOperation? existing}) async {
+    final current = solid;
+    final profile = widget.sketch.entities
+        .where((item) => item.id == source.profileId)
+        .firstOrNull;
+    if (current == null ||
+        profile == null ||
+        profile.kind != SketchEntityKind.circle) {
+      message('The source circular cut is no longer valid.');
+      return;
+    }
+    final count =
+        await circularPatternDialog(count: existing?.instanceCount ?? 4);
+    if (count == null) return;
+    final validation = const CircularPatternValidator()
+        .validate(current, profile, count: count);
+    if (validation != null) {
+      message(validation);
+      return;
+    }
+    final operation = ModelOperation(
+        id: existing?.id ?? const Uuid().v4(),
+        kind: ModelOperationKind.circularPattern,
+        profileId: source.profileId,
+        depth: current.depth,
+        createdAt: existing?.createdAt ?? DateTime.now().toUtc(),
+        name: existing?.name,
+        suppressed: existing?.suppressed ?? false,
+        sourceOperationId: source.id,
+        instanceCount: count,
+        spacing: 360 / count);
+    setState(() =>
+        existing == null ? history.add(operation) : history.replace(operation));
+    widget.onChanged(history.document);
+  }
+
   void mirrorCut(ModelOperation source) {
     final current = solid;
     final profile = widget.sketch.entities
@@ -407,6 +471,17 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
     }
     if (operation.kind == ModelOperationKind.chamfer) {
       await chamfer();
+      return;
+    }
+    if (operation.kind == ModelOperationKind.circularPattern) {
+      final source = model.operations
+          .where((item) => item.id == operation.sourceOperationId)
+          .firstOrNull;
+      if (source == null) {
+        message('The pattern source no longer exists.');
+        return;
+      }
+      await circularPatternCut(source, existing: operation);
       return;
     }
     if (operation.kind == ModelOperationKind.linearPattern) {
@@ -643,6 +718,9 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                               ModelOperationKind
                                                     .linearPattern =>
                                                 Icons.grid_view,
+                                              ModelOperationKind
+                                                    .circularPattern =>
+                                                Icons.blur_circular,
                                               ModelOperationKind.mirrorCut =>
                                                 Icons.flip,
                                               ModelOperationKind.chamfer =>
@@ -664,6 +742,9 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                                 ModelOperationKind
                                                       .linearPattern =>
                                                   '${operation.instanceCount} x ${operation.spacing.toStringAsFixed(1)} mm',
+                                                ModelOperationKind
+                                                      .circularPattern =>
+                                                  '${operation.instanceCount} around 360 deg',
                                                 ModelOperationKind.mirrorCut =>
                                                   'Vertical center plane',
                                                 ModelOperationKind.revolve =>
@@ -679,6 +760,9 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                             }
                                             if (value == 'pattern') {
                                               patternCut(operation);
+                                            }
+                                            if (value == 'circularPattern') {
+                                              circularPatternCut(operation);
                                             }
                                             if (value == 'mirror') {
                                               mirrorCut(operation);
@@ -707,17 +791,21 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                                       ? 'Edit pattern'
                                                       : operation.kind ==
                                                               ModelOperationKind
-                                                                  .chamfer
-                                                          ? 'Edit chamfer'
+                                                                  .circularPattern
+                                                          ? 'Edit circular pattern'
                                                           : operation.kind ==
                                                                   ModelOperationKind
-                                                                      .fillet
-                                                              ? 'Edit fillet'
+                                                                      .chamfer
+                                                              ? 'Edit chamfer'
                                                               : operation.kind ==
                                                                       ModelOperationKind
-                                                                          .shell
-                                                                  ? 'Edit shell'
-                                                                  : 'Edit depth')),
+                                                                          .fillet
+                                                                  ? 'Edit fillet'
+                                                                  : operation.kind ==
+                                                                          ModelOperationKind
+                                                                              .shell
+                                                                      ? 'Edit shell'
+                                                                      : 'Edit depth')),
                                             if (operation.kind ==
                                                 ModelOperationKind
                                                     .circularCut) ...[
@@ -725,6 +813,10 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                                   value: 'pattern',
                                                   child:
                                                       Text('Linear pattern')),
+                                              const PopupMenuItem(
+                                                  value: 'circularPattern',
+                                                  child:
+                                                      Text('Circular pattern')),
                                               const PopupMenuItem(
                                                   value: 'mirror',
                                                   child: Text('Mirror cut')),
