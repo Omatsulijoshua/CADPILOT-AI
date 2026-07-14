@@ -95,6 +95,29 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                 ]));
   }
 
+  void revolve() {
+    final rectangles = widget.sketch.entities
+        .where((item) => item.kind == SketchEntityKind.rectangle)
+        .toList();
+    if (rectangles.isEmpty) {
+      message('Draw a rectangle in Sketch mode as the radial section first.');
+      return;
+    }
+    final validation =
+        const RevolveValidator().validate(rectangles.first, model);
+    if (validation != null) {
+      message(validation);
+      return;
+    }
+    setState(() => history.add(ModelOperation(
+        id: const Uuid().v4(),
+        kind: ModelOperationKind.revolve,
+        profileId: rectangles.first.id,
+        depth: 360,
+        createdAt: DateTime.now().toUtc())));
+    widget.onChanged(history.document);
+  }
+
   Future<void> extrude() async {
     final rectangles = widget.sketch.entities
         .where((item) => item.kind == SketchEntityKind.rectangle)
@@ -117,6 +140,10 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
   Future<void> cut() async {
     if (solid == null) {
       message('Create an extrusion first.');
+      return;
+    }
+    if (solid!.revolved) {
+      message('Through cuts on revolved solids are not available yet.');
       return;
     }
     if (solid!.shellThickness > 0) {
@@ -508,6 +535,11 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                             label: const Text('Extrude')),
                         const SizedBox(width: 8),
                         FilledButton.tonalIcon(
+                            onPressed: revolve,
+                            icon: const Icon(Icons.rotate_right),
+                            label: const Text('Revolve')),
+                        const SizedBox(width: 8),
+                        FilledButton.tonalIcon(
                             onPressed: cut,
                             icon: const Icon(Icons.remove_circle_outline),
                             label: const Text('Through cut')),
@@ -619,6 +651,8 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                                 Icons.rounded_corner,
                                               ModelOperationKind.shell =>
                                                 Icons.crop_square,
+                                              ModelOperationKind.revolve =>
+                                                Icons.rotate_right,
                                             },
                                             color: operation.suppressed
                                                 ? Colors.grey
@@ -632,6 +666,8 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                                   '${operation.instanceCount} x ${operation.spacing.toStringAsFixed(1)} mm',
                                                 ModelOperationKind.mirrorCut =>
                                                   'Vertical center plane',
+                                                ModelOperationKind.revolve =>
+                                                  '360 deg full revolution',
                                                 _ =>
                                                   '${operation.depth.toStringAsFixed(1)} mm',
                                               }),
@@ -659,7 +695,10 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                           },
                                           itemBuilder: (_) => [
                                             if (operation.kind !=
-                                                ModelOperationKind.mirrorCut)
+                                                    ModelOperationKind
+                                                        .mirrorCut &&
+                                                operation.kind !=
+                                                    ModelOperationKind.revolve)
                                               PopupMenuItem(
                                                   value: 'edit',
                                                   child: Text(operation.kind ==
@@ -780,7 +819,13 @@ class SolidPainter extends CustomPainter {
         .clamp(0.2, 20.0);
     final w = current.width / 2, h = current.height / 2, d = current.depth;
     final plan = <List<double>>[];
-    if (current.cornerRadius > 0) {
+    if (current.revolved) {
+      const segments = 48;
+      for (var index = 0; index < segments; index++) {
+        final angle = index * math.pi * 2 / segments;
+        plan.add([math.cos(angle) * w, math.sin(angle) * h, 0]);
+      }
+    } else if (current.cornerRadius > 0) {
       const segments = 8;
       final r = current.cornerRadius;
       final centers = <Offset>[

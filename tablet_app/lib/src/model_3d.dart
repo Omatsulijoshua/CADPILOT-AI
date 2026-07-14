@@ -20,7 +20,8 @@ enum ModelOperationKind {
   mirrorCut,
   chamfer,
   fillet,
-  shell
+  shell,
+  revolve
 }
 
 class ModelOperation {
@@ -56,6 +57,7 @@ class ModelOperation {
         ModelOperationKind.chamfer => 'Chamfer',
         ModelOperationKind.fillet => 'Fillet',
         ModelOperationKind.shell => 'Shell',
+        ModelOperationKind.revolve => 'Revolve',
       };
   ModelOperation copyWith(
           {double? depth,
@@ -171,7 +173,9 @@ class EvaluatedSolid {
       required this.cuts,
       this.chamfer = 0,
       this.cornerRadius = 0,
-      this.shellThickness = 0});
+      this.shellThickness = 0,
+      this.revolved = false,
+      this.revolveRadius = 0});
   final Offset origin;
   final double width;
   final double height;
@@ -180,16 +184,26 @@ class EvaluatedSolid {
   final double chamfer;
   final double cornerRadius;
   final double shellThickness;
-  double get planArea => cornerRadius > 0
-      ? width * height - (4 - math.pi) * cornerRadius * cornerRadius
-      : width * height - 2 * chamfer * chamfer;
-  double get planPerimeter => cornerRadius > 0
-      ? 2 * (width + height) - 8 * cornerRadius + 2 * math.pi * cornerRadius
-      : 2 * (width + height) + 4 * chamfer * (math.sqrt2 - 2);
+  final bool revolved;
+  final double revolveRadius;
+  double get planArea => revolved
+      ? math.pi * revolveRadius * revolveRadius
+      : cornerRadius > 0
+          ? width * height - (4 - math.pi) * cornerRadius * cornerRadius
+          : width * height - 2 * chamfer * chamfer;
+  double get planPerimeter => revolved
+      ? 2 * math.pi * revolveRadius
+      : cornerRadius > 0
+          ? 2 * (width + height) - 8 * cornerRadius + 2 * math.pi * cornerRadius
+          : 2 * (width + height) + 4 * chamfer * (math.sqrt2 - 2);
   bool containsPlanPoint(Offset point) {
     final x = point.dx - origin.dx;
     final y = point.dy - origin.dy;
     if (x < 0 || y < 0 || x > width || y > height) return false;
+    if (revolved) {
+      return (Offset(x, y) - Offset(revolveRadius, revolveRadius)).distance <=
+          revolveRadius;
+    }
     if (cornerRadius > 0) {
       final r = cornerRadius;
       if (x < r && y < r) return (Offset(x, y) - Offset(r, r)).distance <= r;
@@ -220,6 +234,24 @@ class EvaluatedSolid {
     final innerHeight = height - 2 * shellThickness;
     final cavityDepth = depth - shellThickness;
     return outer - innerWidth * innerHeight * cavityDepth;
+  }
+}
+
+class RevolveValidator {
+  const RevolveValidator();
+
+  String? validate(SketchEntity profile, ModelDocument model) {
+    if (profile.kind != SketchEntityKind.rectangle) {
+      return 'A revolve requires a rectangular radial section.';
+    }
+    final rect = Rect.fromPoints(profile.start, profile.end);
+    if (rect.width <= 0 || rect.height <= 0) {
+      return 'The radial section must have positive width and height.';
+    }
+    if (model.operations.any((operation) => !operation.suppressed)) {
+      return 'Revolve currently creates a new base solid only.';
+    }
+    return null;
   }
 }
 
@@ -388,7 +420,12 @@ class SolidMeasurements {
   factory SolidMeasurements.from(EvaluatedSolid solid, CadMaterial material) {
     final outerArea = solid.shellThickness > 0
         ? _shellSurfaceArea(solid)
-        : 2 * solid.planArea + solid.planPerimeter * solid.depth;
+        : solid.revolved
+            ? 2 *
+                math.pi *
+                solid.revolveRadius *
+                (solid.revolveRadius + solid.depth)
+            : 2 * solid.planArea + solid.planPerimeter * solid.depth;
     final cutAreaDelta = solid.cuts.fold<double>(
         0,
         (sum, cut) =>
@@ -432,6 +469,8 @@ class ModelEvaluator {
     double chamfer = 0;
     double cornerRadius = 0;
     double shellThickness = 0;
+    bool revolved = false;
+    double revolveRadius = 0;
     final cuts = <CircularCut>[];
     final activeOperations = <String>{};
     for (final operation in model.operations) {
@@ -444,10 +483,21 @@ class ModelEvaluator {
           profile.kind == SketchEntityKind.rectangle) {
         base = profile;
         depth = operation.depth;
+        revolved = false;
+        revolveRadius = 0;
+      }
+      if (operation.kind == ModelOperationKind.revolve &&
+          profile.kind == SketchEntityKind.rectangle) {
+        final section = Rect.fromPoints(profile.start, profile.end);
+        base = profile;
+        depth = section.height;
+        revolveRadius = section.width;
+        revolved = true;
       }
       if (operation.kind == ModelOperationKind.circularCut &&
           profile.kind == SketchEntityKind.circle &&
-          base != null) {
+          base != null &&
+          !revolved) {
         cuts.add(CircularCut(
             center: profile.start, radius: profile.primaryDimension));
         activeOperations.add(operation.id);
@@ -455,6 +505,7 @@ class ModelEvaluator {
       if (operation.kind == ModelOperationKind.linearPattern &&
           profile.kind == SketchEntityKind.circle &&
           base != null &&
+          !revolved &&
           activeOperations.contains(operation.sourceOperationId)) {
         for (var index = 1; index < operation.instanceCount; index++) {
           cuts.add(CircularCut(
@@ -465,6 +516,7 @@ class ModelEvaluator {
       if (operation.kind == ModelOperationKind.mirrorCut &&
           profile.kind == SketchEntityKind.circle &&
           base != null &&
+          !revolved &&
           activeOperations.contains(operation.sourceOperationId)) {
         final rect = Rect.fromPoints(base.start, base.end);
         cuts.add(CircularCut(
@@ -475,18 +527,21 @@ class ModelEvaluator {
       if (operation.kind == ModelOperationKind.chamfer &&
           profile.kind == SketchEntityKind.rectangle &&
           base != null &&
+          !revolved &&
           profile.id == base.id) {
         chamfer = operation.depth;
       }
       if (operation.kind == ModelOperationKind.fillet &&
           profile.kind == SketchEntityKind.rectangle &&
           base != null &&
+          !revolved &&
           profile.id == base.id) {
         cornerRadius = operation.depth;
       }
       if (operation.kind == ModelOperationKind.shell &&
           profile.kind == SketchEntityKind.rectangle &&
           base != null &&
+          !revolved &&
           profile.id == base.id) {
         shellThickness = operation.depth;
       }
@@ -494,14 +549,18 @@ class ModelEvaluator {
     if (base == null || depth == null) return null;
     final rect = Rect.fromPoints(base.start, base.end);
     return EvaluatedSolid(
-        origin: rect.topLeft,
-        width: rect.width,
-        height: rect.height,
+        origin: revolved
+            ? Offset(rect.left - revolveRadius, rect.top)
+            : rect.topLeft,
+        width: revolved ? revolveRadius * 2 : rect.width,
+        height: revolved ? revolveRadius * 2 : rect.height,
         depth: depth,
         cuts: cuts,
         chamfer: chamfer,
         cornerRadius: cornerRadius,
-        shellThickness: shellThickness);
+        shellThickness: shellThickness,
+        revolved: revolved,
+        revolveRadius: revolveRadius);
   }
 }
 
@@ -546,6 +605,7 @@ class SolidMesher {
   const SolidMesher({this.targetCells = 56});
   final int targetCells;
   SolidMesh tessellate(EvaluatedSolid solid) {
+    if (solid.revolved) return _cylinder(solid);
     if (solid.shellThickness > 0) return _openTopShell(solid);
     if (solid.cuts.isEmpty) {
       if (solid.cornerRadius > 0) return _filletedPrism(solid);
@@ -643,6 +703,35 @@ class SolidMesher {
             .toList(),
         tolerance: 0,
         estimatedVolume: solid.width * solid.height * solid.depth);
+  }
+
+  SolidMesh _cylinder(EvaluatedSolid solid) {
+    const segments = 64;
+    final r = solid.revolveRadius, z = solid.depth;
+    final bottom = <MeshPoint>[];
+    final top = <MeshPoint>[];
+    for (var index = 0; index < segments; index++) {
+      final angle = index * math.pi * 2 / segments;
+      final x = r + math.cos(angle) * r;
+      final y = r + math.sin(angle) * r;
+      bottom.add(MeshPoint(x, y, 0));
+      top.add(MeshPoint(x, y, z));
+    }
+    final triangles = <MeshTriangle>[];
+    for (var index = 1; index < segments - 1; index++) {
+      triangles
+        ..add(MeshTriangle(bottom[0], bottom[index + 1], bottom[index]))
+        ..add(MeshTriangle(top[0], top[index], top[index + 1]));
+    }
+    for (var index = 0; index < segments; index++) {
+      final next = (index + 1) % segments;
+      _quad(triangles, bottom[index], bottom[next], top[next], top[index]);
+    }
+    final tolerance = r * (1 - math.cos(math.pi / segments));
+    return SolidMesh(
+        triangles: triangles,
+        tolerance: tolerance,
+        estimatedVolume: solid.volume);
   }
 
   SolidMesh _openTopShell(EvaluatedSolid solid) {

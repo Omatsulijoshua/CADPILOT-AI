@@ -599,4 +599,97 @@ void main() {
     expect(const FilletValidator().validate(solid, 3), contains('shell'));
     expect(const ChamferValidator().validate(solid, 3), contains('shell'));
   });
+  test('revolve persists and evaluates a rectangular radial section', () {
+    final revolve = ModelOperation(
+        id: 'revolve-1',
+        kind: ModelOperationKind.revolve,
+        profileId: 'rect',
+        depth: 360,
+        createdAt: DateTime.utc(2026));
+    final decoded =
+        ModelDocument.fromJson(ModelDocument(operations: [revolve]).toJson());
+    expect(decoded.operations.single.kind, ModelOperationKind.revolve);
+    expect(decoded.operations.single.depth, 360);
+    final solid = const ModelEvaluator()
+        .evaluate(const SketchDocument(entities: [rectangle]), decoded)!;
+    expect(solid.revolved, isTrue);
+    expect(solid.revolveRadius, 100);
+    expect(solid.width, 200);
+    expect(solid.height, 200);
+    expect(solid.depth, 50);
+    expect(solid.volume, closeTo(math.pi * 100 * 100 * 50, 0.001));
+  });
+
+  test('revolve suppression removes the base solid', () {
+    final revolve = ModelOperation(
+        id: 'revolve-1',
+        kind: ModelOperationKind.revolve,
+        profileId: 'rect',
+        depth: 360,
+        createdAt: DateTime.utc(2026),
+        suppressed: true);
+    expect(
+        const ModelEvaluator().evaluate(
+            const SketchDocument(entities: [rectangle]),
+            ModelDocument(operations: [revolve])),
+        isNull);
+  });
+
+  test('revolved measurements use analytic cylinder properties', () {
+    const solid = EvaluatedSolid(
+        origin: Offset.zero,
+        width: 20,
+        height: 20,
+        depth: 30,
+        cuts: [],
+        revolved: true,
+        revolveRadius: 10);
+    final values = SolidMeasurements.from(solid, CadMaterial.aluminum6061);
+    expect(values.volumeMm3, closeTo(math.pi * 100 * 30, 0.001));
+    expect(values.surfaceAreaMm2, closeTo(2 * math.pi * 10 * 40, 0.001));
+    expect(values.massGrams, closeTo(values.volumeMm3 / 1000 * 2.70, 0.001));
+  });
+
+  test('revolved cylinder exports a closed 252-triangle mesh', () {
+    const solid = EvaluatedSolid(
+        origin: Offset.zero,
+        width: 20,
+        height: 20,
+        depth: 30,
+        cuts: [],
+        revolved: true,
+        revolveRadius: 10);
+    final mesh = const SolidMesher().tessellate(solid);
+    expect(mesh.triangles, hasLength(252));
+    expect(mesh.isClosedManifold, isTrue);
+    expect(mesh.tolerance, greaterThan(0));
+    expect(mesh.estimatedVolume, solid.volume);
+    final stl = const StlExporter().export(solid, name: 'revolved_part');
+    expect(RegExp('facet normal').allMatches(stl), hasLength(252));
+    expect(stl.trim(), endsWith('endsolid revolved_part'));
+  });
+
+  test('revolve validator and evaluator protect base topology', () {
+    const validator = RevolveValidator();
+    expect(validator.validate(rectangle, const ModelDocument()), isNull);
+    expect(validator.validate(rectangle, ModelDocument(operations: [extrude])),
+        contains('new base'));
+    final revolve = ModelOperation(
+        id: 'revolve-1',
+        kind: ModelOperationKind.revolve,
+        profileId: 'rect',
+        depth: 360,
+        createdAt: DateTime.utc(2026));
+    final cut = ModelOperation(
+        id: 'cut-after-revolve',
+        kind: ModelOperationKind.circularCut,
+        profileId: 'hole',
+        depth: 50,
+        createdAt: DateTime.utc(2026));
+    final solid = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle, circle]),
+        ModelDocument(operations: [revolve, cut]))!;
+    expect(solid.cuts, isEmpty);
+    expect(solid.volume, closeTo(math.pi * 100 * 100 * 50, 0.001));
+  });
 }
