@@ -36,6 +36,7 @@ model User {
   memberships   ProjectMember[]
   projects      Project[]      @relation("ProjectOwner")
   refreshTokens RefreshToken[]
+  aiUsage       AiUsage[]
 }
 
 model RefreshToken {
@@ -90,4 +91,19 @@ model SyncMutation {
   project         Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId, createdAt])
+}
+
+model AiUsage {
+  id           String   @id @default(uuid())
+  userId       String
+  provider     String
+  model        String
+  responseId   String?
+  inputTokens  Int
+  outputTokens Int
+  totalTokens  Int
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }

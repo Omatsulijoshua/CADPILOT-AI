@@ -382,8 +382,20 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
   }
 
   Future<void> runAiCommand(CadProject project) async {
+    final token = await ref.read(tokenStoreProvider).readAccessToken();
+    if (!mounted) return;
     final decision = await showAiCommandDialog(context,
-        sketch: project.sketch, model: project.model);
+        sketch: project.sketch,
+        model: project.model,
+        generator: token == null
+            ? null
+            : (prompt) async {
+                final response = await ref
+                    .read(cloudApiProvider)
+                    .generateAiCommand(
+                        prompt: prompt, project: project, token: token);
+                return AiGeneratedDraft(response.command, response.totalTokens);
+              });
     if (decision == null || !mounted) return;
     final updated = project.copyWith(
       model: decision.model ?? project.model,
@@ -507,6 +519,25 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                           title: Text('Local-first'),
                           subtitle:
                               Text('Cloud changes will queue when offline.')),
+                      const Divider(),
+                      const Text('AI COMMAND HISTORY'),
+                      const SizedBox(height: 8),
+                      if (project.aiHistory.isEmpty)
+                        const Text('No AI commands yet.')
+                      else
+                        ...project.aiHistory.reversed
+                            .take(4)
+                            .map((record) => ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(record.status.name == 'applied'
+                                      ? Icons.check_circle_outline
+                                      : Icons.cancel_outlined),
+                                  title: Text(record.summary,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis),
+                                  subtitle: Text(record.status.name),
+                                )),
                     ]))),
       ]),
     );

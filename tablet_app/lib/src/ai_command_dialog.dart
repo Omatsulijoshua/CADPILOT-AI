@@ -7,6 +7,14 @@ import 'ai_commands.dart';
 import 'model_3d.dart';
 import 'sketch_models.dart';
 
+class AiGeneratedDraft {
+  const AiGeneratedDraft(this.command, this.totalTokens);
+  final Map<String, Object?> command;
+  final int totalTokens;
+}
+
+typedef AiCommandGenerator = Future<AiGeneratedDraft> Function(String prompt);
+
 class AiCommandDecision {
   const AiCommandDecision({required this.record, this.model});
   final AiCommandRecord record;
@@ -14,17 +22,22 @@ class AiCommandDecision {
 }
 
 Future<AiCommandDecision?> showAiCommandDialog(BuildContext context,
-    {required SketchDocument sketch, required ModelDocument model}) {
+    {required SketchDocument sketch,
+    required ModelDocument model,
+    AiCommandGenerator? generator}) {
   return showDialog<AiCommandDecision>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AiCommandDialog(sketch: sketch, model: model));
+      builder: (_) =>
+          AiCommandDialog(sketch: sketch, model: model, generator: generator));
 }
 
 class AiCommandDialog extends StatefulWidget {
-  const AiCommandDialog({required this.sketch, required this.model, super.key});
+  const AiCommandDialog(
+      {required this.sketch, required this.model, this.generator, super.key});
   final SketchDocument sketch;
   final ModelDocument model;
+  final AiCommandGenerator? generator;
 
   @override
   State<AiCommandDialog> createState() => _AiCommandDialogState();
@@ -32,6 +45,9 @@ class AiCommandDialog extends StatefulWidget {
 
 class _AiCommandDialogState extends State<AiCommandDialog> {
   late final TextEditingController input;
+  final prompt = TextEditingController();
+  bool generating = false;
+  int? totalTokens;
   AiCommandPreview? preview;
   String? error;
 
@@ -65,7 +81,28 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
   @override
   void dispose() {
     input.dispose();
+    prompt.dispose();
     super.dispose();
+  }
+
+  Future<void> generate() async {
+    final generator = widget.generator;
+    if (generator == null || prompt.text.trim().isEmpty) return;
+    setState(() {
+      generating = true;
+      error = null;
+      preview = null;
+    });
+    try {
+      final draft = await generator(prompt.text.trim());
+      input.text = const JsonEncoder.withIndent('  ').convert(draft.command);
+      setState(() => totalTokens = draft.totalTokens);
+      createPreview();
+    } catch (value) {
+      setState(() => error = value.toString());
+    } finally {
+      if (mounted) setState(() => generating = false);
+    }
   }
 
   void createPreview() {
@@ -124,6 +161,35 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
                 children: [
                   const Text(
                       'Commands are validated locally and cannot change the model until you apply the preview.'),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(
+                        child: TextField(
+                      controller: prompt,
+                      enabled: widget.generator != null && !generating,
+                      decoration: InputDecoration(
+                        labelText: 'Describe the change',
+                        hintText: widget.generator == null
+                            ? 'Sign in to generate commands from natural language.'
+                            : 'Extrude the base by 10 mm and cut the centre hole',
+                      ),
+                    )),
+                    const SizedBox(width: 10),
+                    FilledButton.icon(
+                      onPressed: widget.generator == null || generating
+                          ? null
+                          : generate,
+                      icon: generating
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.auto_awesome),
+                      label: Text(generating ? 'Generating' : 'Generate'),
+                    ),
+                  ]),
+                  if (totalTokens != null)
+                    Text('Usage: $totalTokens tokens',
+                        textAlign: TextAlign.right),
                   const SizedBox(height: 12),
                   Expanded(
                       child: TextField(

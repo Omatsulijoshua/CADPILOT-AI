@@ -12,6 +12,12 @@ class CloudCredentials {
   final String refreshToken;
 }
 
+class AiCommandResponse {
+  const AiCommandResponse({required this.command, required this.totalTokens});
+  final Map<String, Object?> command;
+  final int totalTokens;
+}
+
 class CloudApiException implements Exception {
   const CloudApiException(this.message, [this.statusCode]);
   final String message;
@@ -47,6 +53,38 @@ class CloudApi {
           email: user['email']! as String),
       accessToken: body['accessToken']! as String,
       refreshToken: body['refreshToken']! as String,
+    );
+  }
+
+  Future<AiCommandResponse> generateAiCommand({
+    required String prompt,
+    required CadProject project,
+    required String token,
+  }) async {
+    final response = await client.post(Uri.parse('$baseUrl/ai/commands'),
+        headers: {
+          'content-type': 'application/json',
+          'authorization': 'Bearer $token'
+        },
+        body: jsonEncode({
+          'prompt': prompt,
+          'context': {
+            'sketch': project.sketch.toJson(),
+            'model': project.model.toJson(),
+          }
+        }));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CloudApiException(
+          response.statusCode == 503
+              ? 'AI commands are not configured or temporarily unavailable.'
+              : 'AI command generation failed.',
+          response.statusCode);
+    }
+    final body = jsonDecode(response.body) as Map<String, Object?>;
+    final usage = body['usage']! as Map<String, Object?>;
+    return AiCommandResponse(
+      command: Map<String, Object?>.from(body['command']! as Map),
+      totalTokens: usage['totalTokens']! as int,
     );
   }
 
