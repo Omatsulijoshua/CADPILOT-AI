@@ -79,4 +79,27 @@ void main() {
     expect(edited.offsetZMm, 500);
     expect(edited.widthMm, 100);
   });
+
+  test('placement lock and true scale persist safely', () {
+    final placement = SpatialPlacement(
+      id: 'locked-1',
+      name: 'Installed unit',
+      createdAt: DateTime.utc(2026, 7, 14),
+      source: 'camera_ar',
+      plane: 'floor',
+      widthMm: 500,
+      heightMm: 900,
+      depthMm: 400,
+      offsetXMm: 10,
+      offsetYMm: 20,
+      offsetZMm: 0,
+      rotationDegrees: 15,
+      isLocked: true,
+    );
+    final restored = SpatialPlacement.fromJson(placement.toJson());
+    expect(restored.isLocked, isTrue);
+    expect(restored.toJson()['scale'], SpatialPlacement.trueScale);
+    expect(restored.copyWith(isLocked: false).isLocked, isFalse);
+    expect(restored.copyWith(isLocked: false).id, placement.id);
+  });
 }

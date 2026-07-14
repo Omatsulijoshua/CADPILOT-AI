@@ -226,21 +226,31 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                         leading: const Icon(Icons.place_outlined),
                         title: Text(placement.name),
                         subtitle: Text(
-                            '${placement.plane} plane - ${placement.widthMm} x ${placement.heightMm} x ${placement.depthMm} mm'),
+                            '${placement.plane} plane - 1:1 scale - ${placement.widthMm} x ${placement.heightMm} x ${placement.depthMm} mm'),
                         trailing: Wrap(children: [
                           IconButton(
                               tooltip: 'Edit placement',
-                              onPressed: () =>
-                                  _editPlacement(context, placement),
+                              onPressed: placement.isLocked
+                                  ? null
+                                  : () => _editPlacement(context, placement),
                               icon: const Icon(Icons.edit_outlined)),
+                          IconButton(
+                              tooltip: placement.isLocked
+                                  ? 'Unlock placement'
+                                  : 'Lock placement',
+                              onPressed: () => _toggleLock(placement),
+                              icon: Icon(placement.isLocked
+                                  ? Icons.lock_outline
+                                  : Icons.lock_open_outlined)),
                           IconButton(
                               tooltip: 'Duplicate placement',
                               onPressed: () => _duplicatePlacement(placement),
                               icon: const Icon(Icons.copy_outlined)),
                           IconButton(
                               tooltip: 'Delete placement',
-                              onPressed: () =>
-                                  _deletePlacement(context, placement),
+                              onPressed: placement.isLocked
+                                  ? null
+                                  : () => _deletePlacement(context, placement),
                               icon: const Icon(Icons.delete_outline)),
                         ]),
                       )),
@@ -297,6 +307,10 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
           initial: placement),
     );
     if (updated != null) _upsert(updated);
+  }
+
+  void _toggleLock(SpatialPlacement placement) {
+    _upsert(placement.copyWith(isLocked: !placement.isLocked));
   }
 
   void _duplicatePlacement(SpatialPlacement placement) {
@@ -428,6 +442,7 @@ class _PlacementPlannerDialogState extends State<PlacementPlannerDialog> {
         offsetYMm: number(y),
         offsetZMm: number(z),
         rotationDegrees: number(rotation),
+        isLocked: widget.initial?.isLocked ?? false,
       ),
     );
   }
@@ -441,6 +456,11 @@ class _PlacementPlannerDialogState extends State<PlacementPlannerDialog> {
             key: formKey,
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Chip(
+                  avatar: Icon(Icons.aspect_ratio),
+                  label: Text('True scale locked at 1:1'),
+                ),
+                const SizedBox(height: 8),
                 Text(widget.source == 'camera_ar'
                     ? 'Camera AR is available. This plan will be ready for a live plane anchor.'
                     : 'Manual fallback: enter measured values without claiming an AR anchor.'),

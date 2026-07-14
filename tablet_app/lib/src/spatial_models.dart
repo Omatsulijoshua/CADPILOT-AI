@@ -12,6 +12,7 @@ class SpatialPlacement {
     required this.offsetYMm,
     required this.offsetZMm,
     required this.rotationDegrees,
+    this.isLocked = false,
   });
 
   final String id;
@@ -26,6 +27,9 @@ class SpatialPlacement {
   final double offsetYMm;
   final double offsetZMm;
   final double rotationDegrees;
+  final bool isLocked;
+
+  static const double trueScale = 1.0;
 
   SpatialPlacement copyWith({
     String? id,
@@ -40,6 +44,7 @@ class SpatialPlacement {
     double? offsetYMm,
     double? offsetZMm,
     double? rotationDegrees,
+    bool? isLocked,
   }) =>
       SpatialPlacement(
         id: id ?? this.id,
@@ -54,6 +59,7 @@ class SpatialPlacement {
         offsetYMm: offsetYMm ?? this.offsetYMm,
         offsetZMm: offsetZMm ?? this.offsetZMm,
         rotationDegrees: rotationDegrees ?? this.rotationDegrees,
+        isLocked: isLocked ?? this.isLocked,
       );
   Map<String, Object?> toJson() => {
         'id': id,
@@ -68,6 +74,8 @@ class SpatialPlacement {
         'offsetYMm': offsetYMm,
         'offsetZMm': offsetZMm,
         'rotationDegrees': rotationDegrees,
+        'scale': trueScale,
+        'isLocked': isLocked,
       };
 
   factory SpatialPlacement.fromJson(Map<String, Object?> json) =>
@@ -84,5 +92,6 @@ class SpatialPlacement {
         offsetYMm: (json['offsetYMm'] as num?)?.toDouble() ?? 0,
         offsetZMm: (json['offsetZMm'] as num?)?.toDouble() ?? 0,
         rotationDegrees: (json['rotationDegrees'] as num?)?.toDouble() ?? 0,
+        isLocked: json['isLocked'] as bool? ?? false,
       );
 }
