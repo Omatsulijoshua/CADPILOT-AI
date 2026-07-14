@@ -63,11 +63,51 @@ class SpatialCapabilities {
       };
 }
 
+enum CameraPermissionState {
+  granted,
+  notDetermined,
+  denied,
+  permanentlyDenied,
+  restricted,
+  unavailable;
+
+  static CameraPermissionState fromNative(String? value) => switch (value) {
+        'granted' => granted,
+        'not_determined' => notDetermined,
+        'denied' => denied,
+        'permanently_denied' => permanentlyDenied,
+        'restricted' => restricted,
+        _ => unavailable,
+      };
+
+  String get label => switch (this) {
+        granted => 'Camera access granted',
+        notDetermined => 'Camera access not requested',
+        denied => 'Camera access denied',
+        permanentlyDenied => 'Camera access blocked in system settings',
+        restricted => 'Camera access restricted by device policy',
+        unavailable => 'Camera access unavailable',
+      };
+}
+
 class SpatialCapabilityService {
   const SpatialCapabilityService({
     MethodChannel channel = const MethodChannel('cadpilot/spatial'),
   }) : _channel = channel;
   final MethodChannel _channel;
+
+  Future<CameraPermissionState> cameraPermission({bool request = false}) async {
+    if (kIsWeb) return CameraPermissionState.unavailable;
+    try {
+      final value = await _channel.invokeMethod<String>(
+          request ? 'requestCameraPermission' : 'getCameraPermission');
+      return CameraPermissionState.fromNative(value);
+    } on PlatformException {
+      return CameraPermissionState.unavailable;
+    } on MissingPluginException {
+      return CameraPermissionState.unavailable;
+    }
+  }
 
   Future<SpatialCapabilities> detect() async {
     if (kIsWeb) return SpatialCapabilities.unsupported;
@@ -166,9 +206,11 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: value.cameraSupported ? () {} : null,
-                      icon: const Icon(Icons.document_scanner),
-                      label: const Text('Scan capture (next increment)'),
+                      onPressed: value.cameraSupported
+                          ? () => _requestCameraAccess(context)
+                          : null,
+                      icon: const Icon(Icons.camera_alt_outlined),
+                      label: const Text('Check camera access'),
                     ),
                   ),
                 ]),
@@ -213,6 +255,25 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
               child: const Text('Close'))
         ],
       );
+
+  Future<void> _requestCameraAccess(BuildContext context) async {
+    final state = await widget.service.cameraPermission(request: true);
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Camera readiness'),
+        content: Text(state == CameraPermissionState.granted
+            ? 'Camera access is ready. Live AR and scan capture will start only when you choose a capture workflow.'
+            : '${state.label}. Manual placement remains available.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close')),
+        ],
+      ),
+    );
+  }
 
   Future<void> _planPlacement(
       BuildContext context, SpatialCapabilities capabilities) async {

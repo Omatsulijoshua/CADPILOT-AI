@@ -51,4 +51,24 @@ void main() {
     expect(result, same(SpatialCapabilities.unsupported));
     expect(result.methodLabel, 'Manual measurement fallback');
   });
+
+  test('camera permission request decodes explicit native states', () async {
+    const channel = MethodChannel('cadpilot/spatial-permission');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'requestCameraPermission');
+      return 'permanently_denied';
+    });
+    final state = await const SpatialCapabilityService(channel: channel)
+        .cameraPermission(request: true);
+    expect(state, CameraPermissionState.permanentlyDenied);
+    expect(state.label, contains('system settings'));
+  });
+
+  test('missing camera permission plugin fails closed', () async {
+    const channel = MethodChannel('cadpilot/spatial-permission-missing');
+    final state = await const SpatialCapabilityService(channel: channel)
+        .cameraPermission(request: true);
+    expect(state, CameraPermissionState.unavailable);
+  });
 }
