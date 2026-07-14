@@ -13,7 +13,7 @@ enum CadMaterial {
   final double densityGramsPerCm3;
 }
 
-enum ModelOperationKind { extrude, circularCut, linearPattern }
+enum ModelOperationKind { extrude, circularCut, linearPattern, mirrorCut }
 
 class ModelOperation {
   const ModelOperation({
@@ -44,6 +44,7 @@ class ModelOperation {
         ModelOperationKind.extrude => 'Extrude',
         ModelOperationKind.circularCut => 'Circular cut',
         ModelOperationKind.linearPattern => 'Linear pattern',
+        ModelOperationKind.mirrorCut => 'Mirror cut',
       };
   ModelOperation copyWith(
           {double? depth,
@@ -168,6 +169,37 @@ class EvaluatedSolid {
           0, (sum, cut) => sum + math.pi * cut.radius * cut.radius * depth);
 }
 
+class MirrorCutValidator {
+  const MirrorCutValidator();
+
+  String? validate(EvaluatedSolid solid, SketchEntity profile) {
+    if (profile.kind != SketchEntityKind.circle) {
+      return 'A mirrored cut requires a circular profile.';
+    }
+    final radius = profile.primaryDimension;
+    final bounds = Rect.fromLTWH(
+        solid.origin.dx, solid.origin.dy, solid.width, solid.height);
+    if (profile.start.dx - radius < bounds.left ||
+        profile.start.dx + radius > bounds.right ||
+        profile.start.dy - radius < bounds.top ||
+        profile.start.dy + radius > bounds.bottom) {
+      return 'The source hole extends outside the solid.';
+    }
+    final mirrored =
+        Offset(bounds.left + bounds.right - profile.start.dx, profile.start.dy);
+    for (final cut in solid.cuts) {
+      if ((mirrored - cut.center).distance < radius + cut.radius - 0.001) {
+        return 'The mirrored hole overlaps existing cut geometry.';
+      }
+    }
+    return null;
+  }
+
+  Offset mirroredCenter(EvaluatedSolid solid, SketchEntity profile) => Offset(
+      solid.origin.dx + solid.origin.dx + solid.width - profile.start.dx,
+      profile.start.dy);
+}
+
 class LinearPatternValidator {
   const LinearPatternValidator();
 
@@ -267,6 +299,16 @@ class ModelEvaluator {
               center: profile.start + Offset(operation.spacing * index, 0),
               radius: profile.primaryDimension));
         }
+      }
+      if (operation.kind == ModelOperationKind.mirrorCut &&
+          profile.kind == SketchEntityKind.circle &&
+          base != null &&
+          activeOperations.contains(operation.sourceOperationId)) {
+        final rect = Rect.fromPoints(base.start, base.end);
+        cuts.add(CircularCut(
+            center: Offset(
+                rect.left + rect.right - profile.start.dx, profile.start.dy),
+            radius: profile.primaryDimension));
       }
     }
     if (base == null || depth == null) return null;

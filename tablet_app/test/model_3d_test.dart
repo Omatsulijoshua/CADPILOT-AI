@@ -263,4 +263,71 @@ void main() {
         contains('outside'));
     expect(validator.validate(solid, circle, count: 3, spacing: 20), isNull);
   });
+
+  test('mirror cut persists and evaluates across the vertical center plane',
+      () {
+    final cut = ModelOperation(
+        id: 'cut-source',
+        kind: ModelOperationKind.circularCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026));
+    final mirror = ModelOperation(
+        id: 'mirror-1',
+        kind: ModelOperationKind.mirrorCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026),
+        sourceOperationId: cut.id);
+    final decoded = ModelDocument.fromJson(
+        ModelDocument(operations: [extrude, cut, mirror]).toJson());
+    expect(decoded.operations.last.kind, ModelOperationKind.mirrorCut);
+    expect(decoded.operations.last.sourceOperationId, cut.id);
+    final solid = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle, circle]), decoded)!;
+    expect(solid.cuts.map((item) => item.center.dx), [45, 75]);
+    expect(solid.volume, closeTo(40000 - 2 * math.pi * 25 * 8, 0.001));
+    expect(
+        const SolidMesher(targetCells: 64).tessellate(solid).isClosedManifold,
+        isTrue);
+  });
+
+  test('mirror cut follows source suppression', () {
+    final cut = ModelOperation(
+        id: 'cut-source',
+        kind: ModelOperationKind.circularCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026),
+        suppressed: true);
+    final mirror = ModelOperation(
+        id: 'mirror-1',
+        kind: ModelOperationKind.mirrorCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026),
+        sourceOperationId: cut.id);
+    final solid = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle, circle]),
+        ModelDocument(operations: [extrude, cut, mirror]))!;
+    expect(solid.cuts, isEmpty);
+  });
+
+  test('mirror validator rejects a self-overlapping centerline hole', () {
+    const centerlineCircle = SketchEntity(
+        id: 'center',
+        kind: SketchEntityKind.circle,
+        start: Offset(60, 40),
+        end: Offset(65, 40));
+    const solid = EvaluatedSolid(
+        origin: Offset(10, 20),
+        width: 100,
+        height: 50,
+        depth: 8,
+        cuts: [CircularCut(center: Offset(60, 40), radius: 5)]);
+    const validator = MirrorCutValidator();
+    expect(validator.validate(solid, centerlineCircle), contains('overlaps'));
+    expect(validator.mirroredCenter(solid, centerlineCircle),
+        const Offset(60, 40));
+  });
 }

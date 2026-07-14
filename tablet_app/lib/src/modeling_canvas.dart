@@ -216,6 +216,31 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
     widget.onChanged(history.document);
   }
 
+  void mirrorCut(ModelOperation source) {
+    final current = solid;
+    final profile = widget.sketch.entities
+        .where((item) => item.id == source.profileId)
+        .firstOrNull;
+    if (current == null || profile == null) {
+      message('The source circular cut is no longer valid.');
+      return;
+    }
+    final validation = const MirrorCutValidator().validate(current, profile);
+    if (validation != null) {
+      message(validation);
+      return;
+    }
+    history.add(ModelOperation(
+        id: const Uuid().v4(),
+        kind: ModelOperationKind.mirrorCut,
+        profileId: source.profileId,
+        depth: current.depth,
+        createdAt: DateTime.now().toUtc(),
+        sourceOperationId: source.id));
+    setState(() {});
+    widget.onChanged(history.document);
+  }
+
   void assignMaterial(CadMaterial material) {
     setState(() => history.commit(model.copyWith(material: material)));
     widget.onChanged(history.document);
@@ -446,6 +471,8 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                               ModelOperationKind
                                                     .linearPattern =>
                                                 Icons.grid_view,
+                                              ModelOperationKind.mirrorCut =>
+                                                Icons.flip,
                                             },
                                             color: operation.suppressed
                                                 ? Colors.grey
@@ -453,11 +480,15 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                         title: Text(operation.displayName),
                                         subtitle: Text(operation.suppressed
                                             ? 'Suppressed'
-                                            : operation.kind ==
-                                                    ModelOperationKind
-                                                        .linearPattern
-                                                ? '${operation.instanceCount} x ${operation.spacing.toStringAsFixed(1)} mm'
-                                                : '${operation.depth.toStringAsFixed(1)} mm'),
+                                            : switch (operation.kind) {
+                                                ModelOperationKind
+                                                      .linearPattern =>
+                                                  '${operation.instanceCount} x ${operation.spacing.toStringAsFixed(1)} mm',
+                                                ModelOperationKind.mirrorCut =>
+                                                  'Vertical center plane',
+                                                _ =>
+                                                  '${operation.depth.toStringAsFixed(1)} mm',
+                                              }),
                                         enabled: !operation.suppressed,
                                         trailing: PopupMenuButton<String>(
                                           onSelected: (value) {
@@ -466,6 +497,9 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                             }
                                             if (value == 'pattern') {
                                               patternCut(operation);
+                                            }
+                                            if (value == 'mirror') {
+                                              mirrorCut(operation);
                                             }
                                             if (value == 'rename') {
                                               renameOperation(operation);
@@ -478,19 +512,26 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                             }
                                           },
                                           itemBuilder: (_) => [
-                                            PopupMenuItem(
-                                                value: 'edit',
-                                                child: Text(operation.kind ==
-                                                        ModelOperationKind
-                                                            .linearPattern
-                                                    ? 'Edit pattern'
-                                                    : 'Edit depth')),
+                                            if (operation.kind !=
+                                                ModelOperationKind.mirrorCut)
+                                              PopupMenuItem(
+                                                  value: 'edit',
+                                                  child: Text(operation.kind ==
+                                                          ModelOperationKind
+                                                              .linearPattern
+                                                      ? 'Edit pattern'
+                                                      : 'Edit depth')),
                                             if (operation.kind ==
-                                                ModelOperationKind.circularCut)
+                                                ModelOperationKind
+                                                    .circularCut) ...[
                                               const PopupMenuItem(
                                                   value: 'pattern',
                                                   child:
                                                       Text('Linear pattern')),
+                                              const PopupMenuItem(
+                                                  value: 'mirror',
+                                                  child: Text('Mirror cut')),
+                                            ],
                                             const PopupMenuItem(
                                                 value: 'rename',
                                                 child: Text('Rename')),
