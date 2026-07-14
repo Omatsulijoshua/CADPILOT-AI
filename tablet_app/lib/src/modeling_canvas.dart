@@ -179,15 +179,18 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
       return;
     }
     try {
-      final content = const StlExporter().export(current,
+      const mesher = SolidMesher();
+      final mesh = mesher.tessellate(current);
+      final content = const StlExporter(mesher: mesher).export(current,
           name: widget.projectName.replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_'));
       final directory = await getApplicationDocumentsDirectory();
       final file = File(
           '${directory.path}/${widget.projectName.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}.stl');
       await file.writeAsString(content, flush: true);
-      message('STL saved to ${file.path}');
-    } on UnsupportedError catch (error) {
-      message(error.message ?? error.toString());
+      message(
+          'STL saved to ${file.path} (mesh tolerance ${mesh.tolerance.toStringAsFixed(2)} mm)');
+    } on StateError catch (error) {
+      message(error.message);
     }
   }
 

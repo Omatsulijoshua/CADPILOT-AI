@@ -60,7 +60,7 @@ void main() {
     expect(stl.trim(), endsWith('endsolid bracket'));
   });
 
-  test('export refuses to silently omit circular cuts', () {
+  test('cut-solid tessellation is closed manifold and volume-bounded', () {
     final cut = ModelOperation(
         id: 'op-2',
         kind: ModelOperationKind.circularCut,
@@ -70,7 +70,29 @@ void main() {
     final solid = const ModelEvaluator().evaluate(
         const SketchDocument(entities: [rectangle, circle]),
         ModelDocument(operations: [extrude, cut]))!;
-    expect(() => const StlExporter().export(solid), throwsUnsupportedError);
+    final mesh = const SolidMesher(targetCells: 48).tessellate(solid);
+    expect(mesh.isClosedManifold, isTrue);
+    expect(mesh.triangles.length, greaterThan(12));
+    final relativeError =
+        (mesh.estimatedVolume - solid.volume).abs() / solid.volume;
+    expect(relativeError, lessThan(0.03));
+    expect(mesh.tolerance, lessThanOrEqualTo(100 / 48));
+  });
+
+  test('cut-solid STL contains the tessellated hole', () {
+    final cut = ModelOperation(
+        id: 'op-2',
+        kind: ModelOperationKind.circularCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026));
+    final solid = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle, circle]),
+        ModelDocument(operations: [extrude, cut]))!;
+    final stl = const StlExporter(mesher: SolidMesher(targetCells: 48))
+        .export(solid, name: 'cut_bracket');
+    expect(RegExp('facet normal').allMatches(stl).length, greaterThan(12));
+    expect(stl.trim(), endsWith('endsolid cut_bracket'));
   });
 
   test('model history edit suppress delete undo and redo are deterministic',

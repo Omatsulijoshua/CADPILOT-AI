@@ -162,23 +162,118 @@ class ModelEvaluator {
   }
 }
 
-class StlExporter {
-  const StlExporter();
-  String export(EvaluatedSolid solid, {String name = 'cadpilot_part'}) {
-    if (solid.cuts.isNotEmpty) {
-      throw UnsupportedError(
-          'STL export for cut solids is not enabled in this Phase 3 increment.');
+class MeshPoint {
+  const MeshPoint(this.x, this.y, this.z);
+  final double x, y, z;
+  String get key =>
+      '${x.toStringAsFixed(8)},${y.toStringAsFixed(8)},${z.toStringAsFixed(8)}';
+}
+
+class MeshTriangle {
+  const MeshTriangle(this.a, this.b, this.c);
+  final MeshPoint a, b, c;
+  List<MeshPoint> get vertices => [a, b, c];
+}
+
+class SolidMesh {
+  const SolidMesh(
+      {required this.triangles,
+      required this.tolerance,
+      required this.estimatedVolume});
+  final List<MeshTriangle> triangles;
+  final double tolerance;
+  final double estimatedVolume;
+  bool get isClosedManifold {
+    final edges = <String, int>{};
+    for (final triangle in triangles) {
+      final vertices = triangle.vertices;
+      for (var index = 0; index < 3; index++) {
+        final first = vertices[index].key;
+        final second = vertices[(index + 1) % 3].key;
+        final key =
+            first.compareTo(second) < 0 ? '$first|$second' : '$second|$first';
+        edges[key] = (edges[key] ?? 0) + 1;
+      }
     }
+    return edges.isNotEmpty && edges.values.every((count) => count == 2);
+  }
+}
+
+class SolidMesher {
+  const SolidMesher({this.targetCells = 56});
+  final int targetCells;
+  SolidMesh tessellate(EvaluatedSolid solid) {
+    if (solid.cuts.isEmpty) return _cuboid(solid);
+    final nx = targetCells.clamp(12, 120);
+    final ny =
+        (targetCells * solid.height / solid.width).round().clamp(12, 120);
+    final dx = solid.width / nx;
+    final dy = solid.height / ny;
+    final occupied = List.generate(
+        nx,
+        (x) => List.generate(ny, (y) {
+              final point = Offset(solid.origin.dx + (x + 0.5) * dx,
+                  solid.origin.dy + (y + 0.5) * dy);
+              return solid.cuts
+                  .every((cut) => (point - cut.center).distance >= cut.radius);
+            }));
+    final triangles = <MeshTriangle>[];
+    var cells = 0;
+    bool filled(int x, int y) =>
+        x >= 0 && y >= 0 && x < nx && y < ny && occupied[x][y];
+    for (var x = 0; x < nx; x++) {
+      for (var y = 0; y < ny; y++) {
+        if (!occupied[x][y]) continue;
+        cells++;
+        final x0 = x * dx,
+            x1 = (x + 1) * dx,
+            y0 = y * dy,
+            y1 = (y + 1) * dy,
+            z = solid.depth;
+        final b00 = MeshPoint(x0, y0, 0),
+            b10 = MeshPoint(x1, y0, 0),
+            b11 = MeshPoint(x1, y1, 0),
+            b01 = MeshPoint(x0, y1, 0);
+        final t00 = MeshPoint(x0, y0, z),
+            t10 = MeshPoint(x1, y0, z),
+            t11 = MeshPoint(x1, y1, z),
+            t01 = MeshPoint(x0, y1, z);
+        triangles
+          ..add(MeshTriangle(t00, t10, t11))
+          ..add(MeshTriangle(t00, t11, t01));
+        triangles
+          ..add(MeshTriangle(b00, b11, b10))
+          ..add(MeshTriangle(b00, b01, b11));
+        if (!filled(x - 1, y)) _quad(triangles, b00, t00, t01, b01);
+        if (!filled(x + 1, y)) _quad(triangles, b10, b11, t11, t10);
+        if (!filled(x, y - 1)) _quad(triangles, b00, b10, t10, t00);
+        if (!filled(x, y + 1)) _quad(triangles, b01, t01, t11, b11);
+      }
+    }
+    return SolidMesh(
+        triangles: triangles,
+        tolerance: math.max(dx, dy),
+        estimatedVolume: cells * dx * dy * solid.depth);
+  }
+
+  void _quad(List<MeshTriangle> target, MeshPoint a, MeshPoint b, MeshPoint c,
+      MeshPoint d) {
+    target
+      ..add(MeshTriangle(a, b, c))
+      ..add(MeshTriangle(a, c, d));
+  }
+
+  SolidMesh _cuboid(EvaluatedSolid solid) {
     final x = solid.width, y = solid.height, z = solid.depth;
-    final vertices = <List<double>>[
-      [0, 0, 0],
-      [x, 0, 0],
-      [x, y, 0],
-      [0, y, 0],
-      [0, 0, z],
-      [x, 0, z],
-      [x, y, z],
-      [0, y, z]
+    final v = <MeshPoint>[
+      const MeshPoint(0, 0, 0),
+      MeshPoint(x, 0, 0),
+      MeshPoint(x, y, 0),
+      MeshPoint(0, y, 0),
+      MeshPoint(0, 0, z),
+      MeshPoint(x, 0, z),
+      MeshPoint(x, y, z),
+      MeshPoint(0, y, z)
     ];
     const faces = <List<int>>[
       [0, 2, 1],
@@ -194,25 +289,41 @@ class StlExporter {
       [3, 0, 4],
       [3, 4, 7]
     ];
+    return SolidMesh(
+        triangles: faces
+            .map((face) => MeshTriangle(v[face[0]], v[face[1]], v[face[2]]))
+            .toList(),
+        tolerance: 0,
+        estimatedVolume: solid.width * solid.height * solid.depth);
+  }
+}
+
+class StlExporter {
+  const StlExporter({this.mesher = const SolidMesher()});
+  final SolidMesher mesher;
+  String export(EvaluatedSolid solid, {String name = 'cadpilot_part'}) {
+    final mesh = mesher.tessellate(solid);
+    if (!mesh.isClosedManifold) {
+      throw StateError('Tessellation did not produce a closed manifold mesh.');
+    }
     final buffer = StringBuffer('solid $name\n');
-    for (final face in faces) {
-      final a = vertices[face[0]], b = vertices[face[1]], c = vertices[face[2]];
-      final ux = b[0] - a[0],
-          uy = b[1] - a[1],
-          uz = b[2] - a[2],
-          vx = c[0] - a[0],
-          vy = c[1] - a[1],
-          vz = c[2] - a[2];
+    for (final triangle in mesh.triangles) {
+      final a = triangle.a, b = triangle.b, c = triangle.c;
+      final ux = b.x - a.x,
+          uy = b.y - a.y,
+          uz = b.z - a.z,
+          vx = c.x - a.x,
+          vy = c.y - a.y,
+          vz = c.z - a.z;
       final nx = uy * vz - uz * vy,
           ny = uz * vx - ux * vz,
-          nz = ux * vy - uy * vx;
-      final length = math.sqrt(nx * nx + ny * ny + nz * nz);
+          nz = ux * vy - uy * vx,
+          length = math.sqrt(nx * nx + ny * ny + nz * nz);
       buffer.writeln(
           '  facet normal ${nx / length} ${ny / length} ${nz / length}');
       buffer.writeln('    outer loop');
-      for (final index in face) {
-        final v = vertices[index];
-        buffer.writeln('      vertex ${v[0]} ${v[1]} ${v[2]}');
+      for (final point in triangle.vertices) {
+        buffer.writeln('      vertex ${point.x} ${point.y} ${point.z}');
       }
       buffer.writeln('    endloop\n  endfacet');
     }

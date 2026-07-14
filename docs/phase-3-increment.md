@@ -1,6 +1,6 @@
 # Phase 3 increment verification
 
-This increment adds persisted extrude and circular through-cut operations, evaluated solid dimensions and volume, an orbit/pan/zoom tablet viewport, editable operation history with rename/suppress/delete and undo/redo, face/edge picking, and local ASCII STL export for uncut cuboids.
+This increment adds persisted extrude and circular through-cut operations, evaluated solid dimensions and volume, an orbit/pan/zoom tablet viewport, editable operation history with rename/suppress/delete and undo/redo, face/edge picking, and local watertight ASCII STL export for both uncut and circular-cut solids.
 
 ## Verify
 
@@ -12,7 +12,9 @@ This increment adds persisted extrude and circular through-cut operations, evalu
 6. Rename, edit, suppress, delete, undo, and redo model-tree operations.
 7. Close and reopen the project and confirm operations are restored.
 8. Export an uncut extrusion and validate the STL contains twelve triangles.
+9. Export a circular-cut solid and confirm the success message reports the mesh tolerance.
+10. Validate the cut STL in a mesh inspector; every undirected edge should belong to exactly two triangles.
 
 ## Honest limitations
 
-The current evaluator is an MVP Dart geometry layer behind a replaceable contract. STL export deliberately refuses cut solids rather than silently exporting incorrect geometry. Native OpenCascade integration, cut-solid tessellation, face/edge picking, operation editing/suppression, and robust arbitrary profiles remain required before Phase 3 is complete.
+The current evaluator is an MVP Dart geometry layer behind a replaceable contract. Circular boundaries are represented by a bounded grid tessellation, so the exported hole is a watertight staircase approximation; the app reports the maximum cell-size tolerance at export. Exact native curves, robust arbitrary profiles, richer Boolean operations, and production-grade OpenCascade integration remain required before Phase 3 is complete.
