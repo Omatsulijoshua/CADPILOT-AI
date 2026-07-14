@@ -39,6 +39,17 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
     history = ModelHistory(widget.model);
   }
 
+  @override
+  void didUpdateWidget(covariant ModelingCanvas oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(widget.model, oldWidget.model) &&
+        !identical(widget.model, history.document)) {
+      history = ModelHistory(widget.model);
+      selectedFace = null;
+      selectedEdge = null;
+    }
+  }
+
   EvaluatedSolid? get solid => evaluator.evaluate(widget.sketch, model);
 
   void selectAt(TapUpDetails details) {

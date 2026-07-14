@@ -27,8 +27,8 @@ Set `OPENAI_API_KEY` only on the server. `OPENAI_CAD_MODEL` defaults to `gpt-5.6
 
 ## Persistence and audit
 
-Applied and explicitly cancelled previews are stored as project-level AI command records with command ID, summary, status, and UTC timestamp. Project deserialization now restores both the 3D model document and AI audit history.
+Applied and explicitly cancelled previews are stored as project-level AI command records with command ID, summary, status, and UTC timestamp. Applied records also persist the pre-command model snapshot; the latest applied command exposes an Undo action in the history sidebar and remains undoable after reopening. Project deserialization now restores both the 3D model document and AI audit history.
 
 ## Honest limitations
 
-Natural-language generation is available only to signed-in users on a server configured with an OpenAI API key; guests retain the local structured editor. Broader modeling operations, streaming chat, response signatures, quotas, and integration with the interactive model canvas undo stack remain for later Phase 4 increments.
+Natural-language generation is available only to signed-in users on a server configured with an OpenAI API key; guests retain the local structured editor. Broader modeling operations, streaming chat, response signatures, quotas, and multi-level AI redo remain for later increments. AI undo is stack-safe and persisted, but currently restores only the latest still-applied AI command.

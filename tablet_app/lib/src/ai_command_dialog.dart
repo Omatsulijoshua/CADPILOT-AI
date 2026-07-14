@@ -142,7 +142,9 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
               commandId: value.command.commandId,
               summary: value.summary,
               status: status,
-              createdAt: DateTime.now().toUtc()),
+              createdAt: DateTime.now().toUtc(),
+              previousModel:
+                  status == AiCommandStatus.applied ? widget.model : null),
         ));
   }
 

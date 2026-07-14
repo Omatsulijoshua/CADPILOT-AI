@@ -1,30 +1,41 @@
 import 'model_3d.dart';
 import 'sketch_models.dart';
 
-enum AiCommandStatus { previewed, applied, cancelled, rejected }
+enum AiCommandStatus { previewed, applied, cancelled, rejected, undone }
 
 class AiCommandRecord {
   const AiCommandRecord(
       {required this.commandId,
       required this.summary,
       required this.status,
-      required this.createdAt});
+      required this.createdAt,
+      this.previousModel});
   final String commandId;
   final String summary;
   final AiCommandStatus status;
   final DateTime createdAt;
+  final ModelDocument? previousModel;
+  AiCommandRecord copyWith({AiCommandStatus? status}) => AiCommandRecord(
+      commandId: commandId,
+      summary: summary,
+      status: status ?? this.status,
+      createdAt: createdAt,
+      previousModel: previousModel);
   Map<String, Object?> toJson() => {
         'commandId': commandId,
         'summary': summary,
         'status': status.name,
-        'createdAt': createdAt.toIso8601String()
+        'createdAt': createdAt.toIso8601String(),
+        if (previousModel != null) 'previousModel': previousModel!.toJson()
       };
   factory AiCommandRecord.fromJson(Map<String, Object?> json) =>
       AiCommandRecord(
           commandId: json['commandId']! as String,
           summary: json['summary']! as String,
           status: AiCommandStatus.values.byName(json['status']! as String),
-          createdAt: DateTime.parse(json['createdAt']! as String));
+          createdAt: DateTime.parse(json['createdAt']! as String),
+          previousModel: ModelDocument.fromJson(
+              json['previousModel'] as Map<String, Object?>?));
 }
 
 class AiCadCommand {

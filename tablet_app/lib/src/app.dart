@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'ai_command_dialog.dart';
+import 'ai_commands.dart';
 import 'controllers.dart';
 import 'models.dart';
 import 'modeling_canvas.dart';
@@ -412,6 +413,37 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
     }
   }
 
+  bool canUndoAiCommand(CadProject project, AiCommandRecord record) {
+    if (record.status != AiCommandStatus.applied ||
+        record.previousModel == null) {
+      return false;
+    }
+    final index = project.aiHistory.indexOf(record);
+    return index >= 0 &&
+        !project.aiHistory
+            .skip(index + 1)
+            .any((item) => item.status == AiCommandStatus.applied);
+  }
+
+  Future<void> undoAiCommand(CadProject project, AiCommandRecord record) async {
+    final previous = record.previousModel;
+    if (!canUndoAiCommand(project, record) || previous == null) return;
+    final history = project.aiHistory
+        .map((item) => identical(item, record)
+            ? item.copyWith(status: AiCommandStatus.undone)
+            : item)
+        .toList();
+    await ref
+        .read(projectsProvider.notifier)
+        .save(project.copyWith(model: previous, aiHistory: history));
+    if (mounted) {
+      setState(() {
+        modeling = true;
+        status = 'AI command undone';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final project = ref
@@ -537,6 +569,14 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis),
                                   subtitle: Text(record.status.name),
+                                  trailing: canUndoAiCommand(project, record)
+                                      ? IconButton(
+                                          tooltip: 'Undo AI command',
+                                          onPressed: () =>
+                                              undoAiCommand(project, record),
+                                          icon: const Icon(Icons.undo),
+                                        )
+                                      : null,
                                 )),
                     ]))),
       ]),

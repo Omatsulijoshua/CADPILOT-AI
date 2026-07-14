@@ -90,4 +90,25 @@ void main() {
             .preview(parsed, sketch, const ModelDocument()),
         throwsFormatException);
   });
+
+  test('AI audit records persist the undo snapshot and status', () {
+    final before = ModelDocument(operations: [
+      ModelOperation(
+          id: 'base-op',
+          kind: ModelOperationKind.extrude,
+          profileId: 'base',
+          depth: 8,
+          createdAt: DateTime.utc(2026))
+    ]);
+    final record = AiCommandRecord(
+        commandId: 'command-undo',
+        summary: 'Cut circular profile hole',
+        status: AiCommandStatus.applied,
+        createdAt: DateTime.utc(2026),
+        previousModel: before);
+    final decoded = AiCommandRecord.fromJson(record.toJson());
+    expect(decoded.previousModel!.operations.single.id, 'base-op');
+    expect(decoded.copyWith(status: AiCommandStatus.undone).status,
+        AiCommandStatus.undone);
+  });
 }
