@@ -1,3 +1,5 @@
+import 'sketch_models.dart';
+
 enum SessionKind { signedIn, guest }
 
 class Session {
@@ -5,18 +7,12 @@ class Session {
   final SessionKind kind;
   final String displayName;
   final String? email;
-
-  Map<String, Object?> toJson() => {
-        'kind': kind.name,
-        'displayName': displayName,
-        'email': email,
-      };
-
+  Map<String, Object?> toJson() =>
+      {'kind': kind.name, 'displayName': displayName, 'email': email};
   factory Session.fromJson(Map<String, Object?> json) => Session(
-        kind: SessionKind.values.byName(json['kind']! as String),
-        displayName: json['displayName']! as String,
-        email: json['email'] as String?,
-      );
+      kind: SessionKind.values.byName(json['kind']! as String),
+      displayName: json['displayName']! as String,
+      email: json['email'] as String?);
 }
 
 enum SyncState { localOnly, pending, synced }
@@ -30,8 +26,8 @@ class CadProject {
     required this.updatedAt,
     required this.revision,
     required this.syncState,
+    this.sketch = const SketchDocument(),
   });
-
   final String id;
   final String name;
   final String note;
@@ -39,8 +35,13 @@ class CadProject {
   final DateTime updatedAt;
   final int revision;
   final SyncState syncState;
+  final SketchDocument sketch;
 
-  CadProject copyWith({String? name, String? note, SyncState? syncState}) =>
+  CadProject copyWith(
+          {String? name,
+          String? note,
+          SyncState? syncState,
+          SketchDocument? sketch}) =>
       CadProject(
         id: id,
         name: name ?? this.name,
@@ -49,6 +50,7 @@ class CadProject {
         updatedAt: DateTime.now().toUtc(),
         revision: revision + 1,
         syncState: syncState ?? SyncState.pending,
+        sketch: sketch ?? this.sketch,
       );
 
   Map<String, Object?> toJson() => {
@@ -59,6 +61,7 @@ class CadProject {
         'updatedAt': updatedAt.toIso8601String(),
         'revision': revision,
         'syncState': syncState.name,
+        'sketch': sketch.toJson(),
       };
 
   factory CadProject.fromJson(Map<String, Object?> json) => CadProject(
@@ -69,5 +72,7 @@ class CadProject {
         updatedAt: DateTime.parse(json['updatedAt']! as String),
         revision: json['revision']! as int,
         syncState: SyncState.values.byName(json['syncState']! as String),
+        sketch:
+            SketchDocument.fromJson(json['sketch'] as Map<String, Object?>?),
       );
 }

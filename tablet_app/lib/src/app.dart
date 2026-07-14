@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'controllers.dart';
 import 'models.dart';
+import 'sketch_canvas.dart';
 
 class CadPilotApp extends StatelessWidget {
   const CadPilotApp({super.key});
@@ -173,7 +174,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     const SizedBox(height: 20),
                     FilledButton(
                         onPressed: busy ? null : submit,
-                        child: Text(busy ? 'Signing in…' : 'Sign in')),
+                        child: Text(busy ? 'Signing inâ€¦' : 'Sign in')),
                     const SizedBox(height: 12),
                     OutlinedButton(
                         onPressed: busy
@@ -336,7 +337,7 @@ class ProjectGrid extends ConsumerWidget {
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w700)),
                               Text(
-                                  'Revision ${project.revision} • ${project.syncState == SyncState.synced ? 'Synced' : 'Saved locally'}',
+                                  'Revision ${project.revision} â€¢ ${project.syncState == SyncState.synced ? 'Synced' : 'Saved locally'}',
                                   style: Theme.of(context).textTheme.bodySmall),
                             ]),
                       )));
@@ -367,7 +368,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
   }
 
   void schedule(CadProject project) {
-    setState(() => status = 'Saving…');
+    setState(() => status = 'Savingâ€¦');
     autosave?.cancel();
     autosave = Timer(const Duration(milliseconds: 600), () async {
       await ref
@@ -398,7 +399,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
         actions: [
           Text(status),
           const SizedBox(width: 16),
-          const Chip(label: Text('Foundation workspace')),
+          const Chip(label: Text('2D sketch workspace')),
           const SizedBox(width: 16)
         ],
       ),
@@ -412,19 +413,17 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
               icon: Icon(Icons.straighten), label: Text('Measure')),
         ]),
         Expanded(
-            child: Container(
-                color: const Color(0xff081017),
-                child: const Center(
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.view_in_ar_outlined,
-                      size: 74, color: Color(0xff29d3b2)),
-                  SizedBox(height: 16),
-                  Text('CAD viewport arrives in Phase 2–3',
-                      style: TextStyle(fontSize: 22)),
-                  SizedBox(height: 6),
-                  Text(
-                      'This Phase 1 workspace verifies project lifecycle and autosave.')
-                ])))),
+          child: SketchCanvas(
+            document: project.sketch,
+            onChanged: (document) async {
+              setState(() => status = 'Saving sketch…');
+              await ref.read(projectsProvider.notifier).save(
+                    project.copyWith(sketch: document),
+                  );
+              if (mounted) setState(() => status = 'Sketch saved locally');
+            },
+          ),
+        ),
         SizedBox(
             width: 340,
             child: Padding(
@@ -442,7 +441,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                           maxLines: 8,
                           decoration: const InputDecoration(
                               hintText:
-                                  'Add design intent, dimensions, or manufacturing notes…')),
+                                  'Add design intent, dimensions, or manufacturing notesâ€¦')),
                       const SizedBox(height: 20),
                       const Text('SYNC'),
                       const ListTile(
