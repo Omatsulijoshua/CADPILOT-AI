@@ -857,6 +857,7 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
   String? duplicatingId;
   String? exportingId;
   String? syncingId;
+  bool backingUpPending = false;
 
   Future<void> duplicate(CadProject project) async {
     if (deletingId != null || duplicatingId != null) return;
@@ -940,6 +941,57 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
     }
   }
 
+  Future<void> backupPendingProjects(int pendingCount) async {
+    if (backingUpPending || syncingId != null || pendingCount == 0) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Back up pending projects?'),
+        content: Text(
+          'Back up $pendingCount pending project${pendingCount == 1 ? '' : 's'} to the cloud? Projects with cloud conflicts will be left unchanged.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.cloud_upload_outlined),
+            label: const Text('Back up pending'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => backingUpPending = true);
+    try {
+      final result = await ref.read(projectsProvider.notifier).backupPending();
+      if (!mounted) return;
+      final parts = <String>[
+        if (result.backedUp > 0) '${result.backedUp} backed up',
+        if (result.conflicted > 0)
+          '${result.conflicted} conflict${result.conflicted == 1 ? '' : 's'} left unchanged',
+        if (result.failed > 0) '${result.failed} failed',
+      ];
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(parts.isEmpty
+                ? 'No pending projects to back up.'
+                : parts.join('; '))),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(error.toString().replaceFirst('Bad state: ', ''))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => backingUpPending = false);
+    }
+  }
+
   Future<void> delete(CadProject project) async {
     if (deletingId != null) return;
     final cloudCopyExists = project.lastSyncedRevision != null;
@@ -987,6 +1039,9 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
                   project.name.toLowerCase().contains(normalizedQuery))
               .toList()
             ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+          final pendingCount = projects
+              .where((project) => project.syncState == SyncState.pending)
+              .length;
           if (visibleProjects.isEmpty) {
             return Center(
               child: Text(normalizedQuery.isEmpty
@@ -994,125 +1049,156 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
                   : 'No projects match your search.'),
             );
           }
-          return GridView.builder(
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 330,
-                childAspectRatio: 1.35,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16),
-            itemCount: visibleProjects.length,
-            itemBuilder: (context, index) {
-              final project = visibleProjects[index];
-              return Card(
-                  child: InkWell(
-                      onTap: () => widget.onOpen(project),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                  child: Container(
-                                      decoration: BoxDecoration(
-                                          color: const Color(0xff1a2935),
-                                          borderRadius:
-                                              BorderRadius.circular(8)),
-                                      child: const Center(
-                                          child: Icon(Icons.view_in_ar,
-                                              size: 44,
-                                              color: Color(0xff29d3b2))))),
-                              const SizedBox(height: 12),
-                              Row(
+          return Column(children: [
+            if (pendingCount > 0)
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: FilledButton.tonalIcon(
+                    onPressed: backingUpPending || syncingId != null
+                        ? null
+                        : () => backupPendingProjects(pendingCount),
+                    icon: backingUpPending
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.cloud_upload_outlined),
+                    label: Text(backingUpPending
+                        ? 'Backing up...'
+                        : 'Back up $pendingCount pending'),
+                  ),
+                ),
+              ),
+            Expanded(
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 330,
+                    childAspectRatio: 1.35,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16),
+                itemCount: visibleProjects.length,
+                itemBuilder: (context, index) {
+                  final project = visibleProjects[index];
+                  return Card(
+                      child: InkWell(
+                          onTap: () => widget.onOpen(project),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Expanded(
-                                    child: Text(project.name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w700)),
-                                  ),
-                                  IconButton(
-                                    tooltip: 'Duplicate project',
-                                    onPressed: deletingId == null &&
-                                            duplicatingId == null &&
-                                            exportingId == null
-                                        ? () => duplicate(project)
-                                        : null,
-                                    icon: duplicatingId == project.id
-                                        ? const SizedBox.square(
-                                            dimension: 18,
-                                            child: CircularProgressIndicator(
-                                                strokeWidth: 2),
-                                          )
-                                        : const Icon(Icons.copy_outlined),
-                                  ),
-                                  IconButton(
-                                    tooltip: 'Export project manifest',
-                                    onPressed: deletingId == null &&
-                                            duplicatingId == null &&
-                                            exportingId == null &&
-                                            syncingId == null
-                                        ? () => exportProject(project)
-                                        : null,
-                                    icon: exportingId == project.id
-                                        ? const SizedBox.square(
-                                            dimension: 18,
-                                            child: CircularProgressIndicator(
-                                                strokeWidth: 2),
-                                          )
-                                        : const Icon(
-                                            Icons.file_download_outlined),
-                                  ),
-                                  IconButton(
-                                    tooltip:
-                                        project.syncState == SyncState.synced
+                                      child: Container(
+                                          decoration: BoxDecoration(
+                                              color: const Color(0xff1a2935),
+                                              borderRadius:
+                                                  BorderRadius.circular(8)),
+                                          child: const Center(
+                                              child: Icon(Icons.view_in_ar,
+                                                  size: 44,
+                                                  color: Color(0xff29d3b2))))),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(project.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w700)),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Duplicate project',
+                                        onPressed: deletingId == null &&
+                                                duplicatingId == null &&
+                                                exportingId == null
+                                            ? () => duplicate(project)
+                                            : null,
+                                        icon: duplicatingId == project.id
+                                            ? const SizedBox.square(
+                                                dimension: 18,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2),
+                                              )
+                                            : const Icon(Icons.copy_outlined),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Export project manifest',
+                                        onPressed: deletingId == null &&
+                                                duplicatingId == null &&
+                                                exportingId == null &&
+                                                syncingId == null
+                                            ? () => exportProject(project)
+                                            : null,
+                                        icon: exportingId == project.id
+                                            ? const SizedBox.square(
+                                                dimension: 18,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2),
+                                              )
+                                            : const Icon(
+                                                Icons.file_download_outlined),
+                                      ),
+                                      IconButton(
+                                        tooltip: project.syncState ==
+                                                SyncState.synced
                                             ? 'Cloud backup current'
                                             : 'Back up project',
-                                    onPressed: deletingId == null &&
-                                            duplicatingId == null &&
-                                            exportingId == null &&
-                                            syncingId == null &&
-                                            project.syncState !=
-                                                SyncState.synced
-                                        ? () => backupProject(project)
-                                        : null,
-                                    icon: syncingId == project.id
-                                        ? const SizedBox.square(
-                                            dimension: 18,
-                                            child: CircularProgressIndicator(
-                                                strokeWidth: 2),
-                                          )
-                                        : Icon(project.syncState ==
-                                                SyncState.synced
-                                            ? Icons.cloud_done_outlined
-                                            : Icons.cloud_upload_outlined),
+                                        onPressed: deletingId == null &&
+                                                duplicatingId == null &&
+                                                exportingId == null &&
+                                                syncingId == null &&
+                                                project.syncState !=
+                                                    SyncState.synced
+                                            ? () => backupProject(project)
+                                            : null,
+                                        icon: syncingId == project.id
+                                            ? const SizedBox.square(
+                                                dimension: 18,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2),
+                                              )
+                                            : Icon(project.syncState ==
+                                                    SyncState.synced
+                                                ? Icons.cloud_done_outlined
+                                                : Icons.cloud_upload_outlined),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Delete local project',
+                                        onPressed: deletingId == null &&
+                                                duplicatingId == null &&
+                                                exportingId == null &&
+                                                syncingId == null
+                                            ? () => delete(project)
+                                            : null,
+                                        icon: deletingId == project.id
+                                            ? const SizedBox.square(
+                                                dimension: 18,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2),
+                                              )
+                                            : const Icon(Icons.delete_outline),
+                                      ),
+                                    ],
                                   ),
-                                  IconButton(
-                                    tooltip: 'Delete local project',
-                                    onPressed: deletingId == null &&
-                                            duplicatingId == null &&
-                                            exportingId == null &&
-                                            syncingId == null
-                                        ? () => delete(project)
-                                        : null,
-                                    icon: deletingId == project.id
-                                        ? const SizedBox.square(
-                                            dimension: 18,
-                                            child: CircularProgressIndicator(
-                                                strokeWidth: 2),
-                                          )
-                                        : const Icon(Icons.delete_outline),
-                                  ),
-                                ],
-                              ),
-                              Text(
-                                  'Revision ${project.revision} - ${project.syncState == SyncState.synced ? 'Synced' : 'Saved locally'}',
-                                  style: Theme.of(context).textTheme.bodySmall),
-                            ]),
-                      )));
-            },
-          );
+                                  Text(
+                                      'Revision ${project.revision} - ${project.syncState == SyncState.synced ? 'Synced' : 'Saved locally'}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall),
+                                ]),
+                          )));
+                },
+              ),
+            ),
+          ]);
         },
       );
 }

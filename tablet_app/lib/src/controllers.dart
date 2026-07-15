@@ -27,6 +27,19 @@ final projectsProvider =
   ProjectsController.new,
 );
 
+class PendingBackupResult {
+  const PendingBackupResult({
+    required this.backedUp,
+    required this.conflicted,
+    required this.failed,
+  });
+
+  final int backedUp;
+  final int conflicted;
+  final int failed;
+  int get total => backedUp + conflicted + failed;
+}
+
 class SessionController extends AsyncNotifier<Session?> {
   LocalStore get _store => ref.read(localStoreProvider);
 
@@ -272,6 +285,49 @@ class ProjectsController extends AsyncNotifier<List<CadProject>> {
     final synced = project.markSynced(result.appliedRevision);
     await save(synced);
     return synced;
+  }
+
+  Future<PendingBackupResult> backupPending() async {
+    final projects = [...state.valueOrNull ?? const <CadProject>[]];
+    final pendingIndexes = <int>[
+      for (var index = 0; index < projects.length; index++)
+        if (projects[index].syncState == SyncState.pending) index,
+    ];
+    if (pendingIndexes.isEmpty) {
+      return const PendingBackupResult(backedUp: 0, conflicted: 0, failed: 0);
+    }
+    final token = await _requireCloudToken(
+      'Sign in to back up pending projects to the cloud.',
+    );
+    var backedUp = 0;
+    var conflicted = 0;
+    var failed = 0;
+    for (final index in pendingIndexes) {
+      final project = projects[index];
+      try {
+        final result =
+            await ref.read(cloudApiProvider).pushProject(project, token);
+        projects[index] = project.markSynced(result.appliedRevision);
+        backedUp++;
+      } on CloudApiException catch (error) {
+        if (error.statusCode == 409) {
+          conflicted++;
+        } else {
+          failed++;
+        }
+      } catch (_) {
+        failed++;
+      }
+    }
+    if (backedUp > 0) {
+      await _store.writeProjects(projects);
+      state = AsyncData(projects);
+    }
+    return PendingBackupResult(
+      backedUp: backedUp,
+      conflicted: conflicted,
+      failed: failed,
+    );
   }
 
   Future<void> archiveCloudCopy(String projectId) async {

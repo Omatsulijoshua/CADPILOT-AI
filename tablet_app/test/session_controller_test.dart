@@ -142,6 +142,73 @@ void main() {
     expect(imported.lastSyncedRevision, isNull);
     expect(store.projects.single.id, imported.id);
   });
+  test('backs up pending projects without overwriting cloud conflicts',
+      () async {
+    final now = DateTime.utc(2026, 7, 15);
+    final store = _MemoryLocalStore(signedIn)
+      ..projects = [
+        CadProject(
+          id: '11111111-1111-4111-8111-111111111111',
+          name: 'Ready to back up',
+          note: '',
+          createdAt: now,
+          updatedAt: now,
+          revision: 2,
+          syncState: SyncState.pending,
+        ),
+        CadProject(
+          id: '22222222-2222-4222-8222-222222222222',
+          name: 'Conflicted design',
+          note: '',
+          createdAt: now,
+          updatedAt: now,
+          revision: 3,
+          syncState: SyncState.pending,
+          lastSyncedRevision: 1,
+        ),
+        CadProject(
+          id: '33333333-3333-4333-8333-333333333333',
+          name: 'Portable local draft',
+          note: '',
+          createdAt: now,
+          updatedAt: now,
+          revision: 1,
+          syncState: SyncState.localOnly,
+        ),
+      ];
+    final api = CloudApi(
+      baseUrl: 'https://api.test/v1',
+      client: MockClient((request) async {
+        if (request.url.path.contains('22222222-2222-4222-8222-222222222222')) {
+          return http.Response('{}', 409);
+        }
+        return http.Response(
+          jsonEncode({'mutationId': 'm', 'appliedRevision': 4}),
+          201,
+        );
+      }),
+    );
+    final container = _container(
+      store,
+      _MemoryTokenStore()..accessToken = 'access',
+      api,
+    );
+    addTearDown(container.dispose);
+    container.read(cloudSessionStatusProvider.notifier).state =
+        CloudSessionStatus.verified;
+    await container.read(projectsProvider.future);
+
+    final result =
+        await container.read(projectsProvider.notifier).backupPending();
+
+    expect(result.backedUp, 1);
+    expect(result.conflicted, 1);
+    expect(result.failed, 0);
+    expect(store.projects[0].syncState, SyncState.synced);
+    expect(store.projects[0].lastSyncedRevision, 4);
+    expect(store.projects[1].syncState, SyncState.pending);
+    expect(store.projects[2].syncState, SyncState.localOnly);
+  });
   test('archives the remote cloud copy with a verified token', () async {
     final tokens = _MemoryTokenStore()..accessToken = 'access';
     final api = CloudApi(
