@@ -229,7 +229,7 @@ Conflicts must never silently discard project data. See [docs/cad-file-format.md
 CadPilot can move a complete project between devices as a portable
 `*.cadpilot.json` file. Use **Export project manifest** on a project card, then
 use **Import manifest** from the dashboard. The browser starts a download;
-Android opens the system save or document picker. Import always creates a new,
+Android and iOS use the system save or document picker. Import always creates a new,
 local-only project with a new ID. It never overwrites a local design and never
 uploads a file automatically.
 

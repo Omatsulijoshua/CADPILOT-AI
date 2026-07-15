@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-`t<key>NSCameraUsageDescription</key>
-`t<string>CadPilot uses the camera only when you start AR placement or spatial scanning.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>CadPilot uses the camera only when you start AR placement or spatial scanning.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -30,19 +30,13 @@
 	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
-`t<key>NSCameraUsageDescription</key>
-`t<string>CadPilot uses the camera only when you start AR placement or spatial scanning.</string>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 		<key>UISceneConfigurations</key>
 		<dict>
-`t<key>NSCameraUsageDescription</key>
-`t<string>CadPilot uses the camera only when you start AR placement or spatial scanning.</string>
 			<key>UIWindowSceneSessionRoleApplication</key>
 			<array>
 				<dict>
-`t<key>NSCameraUsageDescription</key>
-`t<string>CadPilot uses the camera only when you start AR placement or spatial scanning.</string>
 					<key>UISceneClassName</key>
 					<string>UIWindowScene</string>
 					<key>UISceneConfigurationName</key>
