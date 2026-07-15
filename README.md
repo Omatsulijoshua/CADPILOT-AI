@@ -525,6 +525,7 @@ Check `DATABASE_URL`, container health, ports, and migrations.
 | [OpenAI provider hardening](docs/openai-provider-hardening-increment.md) | Responses API timeout, validation, privacy, metering, and safe failures |
 | [Backend TypeScript lint gate](docs/backend-typescript-lint-gate.md) | ESLint activation, verification workflow, and dependency-audit baseline |
 | [Backend continuous integration](docs/backend-ci.md) | GitHub Actions triggers, least-privilege model, quality gates, local parity, and branch protection |
+| [PostgreSQL integration CI](docs/postgresql-integration-ci.md) | Disposable database lifecycle, real API persistence flow, isolation model, and safe local invocation |
 | [Flutter continuous integration](docs/flutter-ci.md) | Locked SDK/dependencies, analysis, 158 tests, Wasm and standard web releases, Android debug compilation, and trust boundary |
 | [Phase 6B depth/point-cloud contract](docs/phase-6b-depth-point-cloud-contract.md) | Capability gating, normalized coordinates, sensor poses, registration, bounded cleanup, advisory measurements, processing statistics, safety limits, and reconstruction roadmap |
 | [NestJS 11 security migration](docs/nestjs-11-security-migration.md) | Express 5 compatibility, Node 20 floor, HTTP regression tests, request-size protection, and zero-audit verification |

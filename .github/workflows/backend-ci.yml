@@ -56,3 +56,52 @@ jobs:
 
       - name: Audit production dependencies
         run: npm audit --omit=dev
+  postgres_integration:
+    name: PostgreSQL integration API
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: server
+    env:
+      DATABASE_URL: postgresql://cadpilot_test:cadpilot_test@localhost:5432/cadpilot_test?schema=public
+      JWT_ACCESS_SECRET: ci-only-access-secret-not-for-production
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-not-for-production
+      RUN_POSTGRES_INTEGRATION: 'true'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cadpilot_test
+          POSTGRES_PASSWORD: cadpilot_test
+          POSTGRES_DB: cadpilot_test
+        options: >-
+          --health-cmd "pg_isready -U cadpilot_test -d cadpilot_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Create isolated schema
+        run: npx prisma db push --accept-data-loss
+
+      - name: Run PostgreSQL integration test
+        run: npm run test:postgres

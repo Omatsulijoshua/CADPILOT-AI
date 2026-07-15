@@ -68,7 +68,7 @@ In GitHub repository settings, add a branch protection rule for `main` and requi
 
 The next CI layers should be introduced as separately observable jobs:
 
-1. PostgreSQL-backed integration tests using an ephemeral service container.
+1. Expand PostgreSQL coverage for ownership isolation, token rotation, and concurrent revision conflicts.
 2. Endpoint-level rate-limit and abuse tests.
 3. Dependency review and software-bill-of-materials generation.
 4. Signed backend deployment workflows with protected environments.

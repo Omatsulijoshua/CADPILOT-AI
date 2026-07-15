@@ -157,7 +157,7 @@ The limit is intentionally centralized in `server/src/http-config.ts`. Raising i
 
 ## Remaining backend hardening
 
-- Extend hosted CI with PostgreSQL integration coverage.
+- Expand PostgreSQL integration coverage for ownership and concurrency.
 - Add endpoint-specific rate limits and abuse telemetry before opening the API publicly.
 - Upgrade Prisma 5 through its separately documented major-version path.
 - Review npm install-script allowlisting for deployment reproducibility.

@@ -6,7 +6,8 @@
     "build": "nest build",
     "start:dev": "nest start --watch",
     "lint": "eslint \"{src,test}/**/*.ts\"",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "test:postgres": "jest --runInBand src/postgres.integration.spec.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.28",
