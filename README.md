@@ -72,7 +72,7 @@ Open the browser build at **[cadpilot.vercel.app](https://cadpilot.vercel.app)**
 | Parametric history | Implemented | Ordered features, rebuild behavior, and history UI |
 | CAD kernel boundary | Foundation | Stable Dart/native ABI under `cad_core/` |
 | Intelligent commands | Foundation | Plan, validation, preview, deterministic application |
-| Cloud API | Foundation | Auth, projects, versions, sync, plans, spatial sessions, audits |
+| Cloud API | Foundation | Authenticated project backup, remote revisions, conflicts, plans, spatial sessions, and audits |
 | Database | Foundation | Prisma schema and PostgreSQL migrations |
 | Spatial controller | Implemented | Capability, permission, readiness, lifecycle, recovery |
 | ARCore availability | Implemented | Official asynchronous Android detection |
@@ -326,7 +326,7 @@ Use compatible physical hardware for ARCore. On macOS/iOS, run `open ios/Runner.
 
 ## Testing
 
-At the latest verified point, the Flutter suite contains **115 passing tests**. Run it locally because the count evolves.
+At the latest verified point, the Flutter suite contains **120 passing tests**. Run it locally because the count evolves.
 
 ```powershell
 cd tablet_app

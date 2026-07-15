@@ -87,6 +87,17 @@ class ProjectsController extends AsyncNotifier<List<CadProject>> {
     state = AsyncData(projects);
   }
 
+  Future<CadProject> sync(CadProject project) async {
+    final token = await ref.read(tokenStoreProvider).readAccessToken();
+    if (token == null || token.trim().isEmpty) {
+      throw StateError('Sign in to back up this project to the cloud.');
+    }
+    final result = await ref.read(cloudApiProvider).pushProject(project, token);
+    final synced = project.markSynced(result.appliedRevision);
+    await save(synced);
+    return synced;
+  }
+
   Future<void> delete(String id) async {
     final next = (state.valueOrNull ?? const <CadProject>[])
         .where((project) => project.id != id)

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'ai_command_dialog.dart';
 import 'ai_commands.dart';
+import 'cloud_api.dart';
 import 'controllers.dart';
 import 'models.dart';
 import 'modeling_canvas.dart';
@@ -365,6 +366,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
   bool initialized = false;
   String status = 'Saved locally';
   bool modeling = false;
+  bool syncing = false;
 
   @override
   void dispose() {
@@ -382,6 +384,26 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
           .save(project.copyWith(note: note.text));
       if (mounted) setState(() => status = 'Saved locally');
     });
+  }
+
+  Future<void> syncProject(CadProject project) async {
+    if (syncing) return;
+    setState(() {
+      syncing = true;
+      status = 'Backing up...';
+    });
+    try {
+      await ref.read(projectsProvider.notifier).sync(project);
+      if (mounted) setState(() => status = 'Backed up to cloud');
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = error is CloudApiException
+            ? error.message
+            : error.toString().replaceFirst('Bad state: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => syncing = false);
+    }
   }
 
   Future<void> runAiCommand(CadProject project) async {
@@ -565,12 +587,26 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                                   'Add design intent, dimensions, or manufacturing notes...')),
                       const SizedBox(height: 20),
                       const Text('SYNC'),
-                      const ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.cloud_off_outlined),
-                          title: Text('Local-first'),
-                          subtitle:
-                              Text('Cloud changes will queue when offline.')),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(project.syncState == SyncState.synced
+                            ? Icons.cloud_done_outlined
+                            : Icons.cloud_upload_outlined),
+                        title: Text(project.syncState == SyncState.synced
+                            ? 'Cloud backup current'
+                            : 'Local changes pending'),
+                        subtitle: Text(project.lastSyncedRevision == null
+                            ? 'This project has not been backed up yet.'
+                            : 'Remote revision ${project.lastSyncedRevision}'),
+                        trailing: FilledButton.tonal(
+                          onPressed:
+                              syncing || project.syncState == SyncState.synced
+                                  ? null
+                                  : () => syncProject(project),
+                          child:
+                              Text(syncing ? 'Backing up...' : 'Back up now'),
+                        ),
+                      ),
                       const Divider(),
                       const Text('AI COMMAND HISTORY'),
                       const SizedBox(height: 8),

@@ -30,6 +30,7 @@ class CadProject {
     required this.updatedAt,
     required this.revision,
     required this.syncState,
+    this.lastSyncedRevision,
     this.sketch = const SketchDocument(),
     this.model = const ModelDocument(),
     this.aiHistory = const [],
@@ -43,6 +44,7 @@ class CadProject {
   final DateTime updatedAt;
   final int revision;
   final SyncState syncState;
+  final int? lastSyncedRevision;
   final SketchDocument sketch;
   final ModelDocument model;
   final List<AiCommandRecord> aiHistory;
@@ -53,6 +55,7 @@ class CadProject {
           {String? name,
           String? note,
           SyncState? syncState,
+          int? lastSyncedRevision,
           SketchDocument? sketch,
           ModelDocument? model,
           List<AiCommandRecord>? aiHistory,
@@ -66,12 +69,35 @@ class CadProject {
         updatedAt: DateTime.now().toUtc(),
         revision: revision + 1,
         syncState: syncState ?? SyncState.pending,
+        lastSyncedRevision: lastSyncedRevision ?? this.lastSyncedRevision,
         sketch: sketch ?? this.sketch,
         model: model ?? this.model,
         aiHistory: aiHistory ?? this.aiHistory,
         spatialPlacements: spatialPlacements ?? this.spatialPlacements,
         arScreenshots: arScreenshots ?? this.arScreenshots,
       );
+
+  CadProject markSynced(int remoteRevision) {
+    if (remoteRevision < 1) {
+      throw ArgumentError.value(
+          remoteRevision, 'remoteRevision', 'must be positive');
+    }
+    return CadProject(
+      id: id,
+      name: name,
+      note: note,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      revision: revision,
+      syncState: SyncState.synced,
+      lastSyncedRevision: remoteRevision,
+      sketch: sketch,
+      model: model,
+      aiHistory: aiHistory,
+      spatialPlacements: spatialPlacements,
+      arScreenshots: arScreenshots,
+    );
+  }
 
   Map<String, Object?> toJson() => {
         'id': id,
@@ -81,6 +107,7 @@ class CadProject {
         'updatedAt': updatedAt.toIso8601String(),
         'revision': revision,
         'syncState': syncState.name,
+        'lastSyncedRevision': lastSyncedRevision,
         'sketch': sketch.toJson(),
         'model': model.toJson(),
         'aiHistory': aiHistory.map((item) => item.toJson()).toList(),
@@ -97,6 +124,7 @@ class CadProject {
         updatedAt: DateTime.parse(json['updatedAt']! as String),
         revision: json['revision']! as int,
         syncState: SyncState.values.byName(json['syncState']! as String),
+        lastSyncedRevision: json['lastSyncedRevision'] as int?,
         sketch:
             SketchDocument.fromJson(json['sketch'] as Map<String, Object?>?),
         model: ModelDocument.fromJson(json['model'] as Map<String, Object?>?),

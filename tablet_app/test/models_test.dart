@@ -89,4 +89,25 @@ void main() {
     };
     expect(CadProject.fromJson(legacy).arScreenshots, isEmpty);
   });
+  test('cloud sync metadata persists without advancing local revision', () {
+    final now = DateTime.utc(2026, 7, 15);
+    final project = CadProject(
+      id: 'sync-project',
+      name: 'Synced part',
+      note: '',
+      createdAt: now,
+      updatedAt: now,
+      revision: 8,
+      syncState: SyncState.pending,
+    );
+    final synced = project.markSynced(3);
+    expect(synced.revision, 8);
+    expect(synced.syncState, SyncState.synced);
+    expect(synced.lastSyncedRevision, 3);
+    final edited = synced.copyWith(note: 'Changed after backup');
+    expect(edited.revision, 9);
+    expect(edited.syncState, SyncState.pending);
+    expect(edited.lastSyncedRevision, 3);
+    expect(CadProject.fromJson(edited.toJson()).lastSyncedRevision, 3);
+  });
 }

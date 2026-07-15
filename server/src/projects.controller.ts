@@ -3,7 +3,7 @@ import { IsInt, IsObject, IsString, IsUUID, Min } from 'class-validator';
 import { AccessTokenGuard, AuthenticatedRequest } from './auth.guard';
 import { ProjectsService } from './projects.service';
 class CreateProjectDto { @IsString() name!: string; }
-class SyncDto { @IsUUID() mutationId!: string; @IsInt() @Min(1) baseRevision!: number; @IsObject() payload!: object; }
+class SyncDto { @IsUUID() mutationId!: string; @IsInt() @Min(0) baseRevision!: number; @IsObject() payload!: object; }
 @Controller('projects')
 @UseGuards(AccessTokenGuard)
 export class ProjectsController {

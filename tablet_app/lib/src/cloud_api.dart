@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:uuid/uuid.dart';
 import 'models.dart';
 
 class CloudCredentials {
@@ -16,6 +17,16 @@ class AiCommandResponse {
   const AiCommandResponse({required this.command, required this.totalTokens});
   final Map<String, Object?> command;
   final int totalTokens;
+}
+
+class ProjectSyncResult {
+  const ProjectSyncResult({
+    required this.mutationId,
+    required this.appliedRevision,
+  });
+
+  final String mutationId;
+  final int appliedRevision;
 }
 
 class CloudApiException implements Exception {
@@ -88,7 +99,16 @@ class CloudApi {
     );
   }
 
-  Future<void> pushProject(CadProject project, String token) async {
+  Future<ProjectSyncResult> pushProject(
+    CadProject project,
+    String token, {
+    String? mutationId,
+  }) async {
+    final requestId = mutationId ??
+        const Uuid().v5(
+          Namespace.url.value,
+          'cadpilot:${project.id}:${project.revision}:${project.lastSyncedRevision ?? 0}',
+        );
     final response = await client.post(
         Uri.parse('$baseUrl/projects/${project.id}/sync'),
         headers: {
@@ -96,12 +116,27 @@ class CloudApi {
           'authorization': 'Bearer $token'
         },
         body: jsonEncode({
-          'mutationId': project.id,
-          'baseRevision': project.revision,
+          'mutationId': requestId,
+          'baseRevision': project.lastSyncedRevision ?? 0,
           'payload': project.toJson()
         }));
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw CloudApiException('Project sync failed', response.statusCode);
+      throw CloudApiException(
+        response.statusCode == 409
+            ? 'Project changed in the cloud. Refresh before backing up again.'
+            : 'Project sync failed.',
+        response.statusCode,
+      );
     }
+    final body = jsonDecode(response.body) as Map<String, Object?>;
+    final appliedRevision = body['appliedRevision'] as int?;
+    if (appliedRevision == null || appliedRevision < 1) {
+      throw const CloudApiException(
+          'Project sync returned an invalid revision.');
+    }
+    return ProjectSyncResult(
+      mutationId: body['mutationId'] as String? ?? requestId,
+      appliedRevision: appliedRevision,
+    );
   }
 }
