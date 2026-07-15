@@ -110,6 +110,26 @@ void main() {
     expect(store.session, isNull);
     expect(tokens.wasCleared, isTrue);
   });
+  test('archives the remote cloud copy with a verified token', () async {
+    final tokens = _MemoryTokenStore()..accessToken = 'access';
+    final api = CloudApi(
+        baseUrl: 'https://api.test/v1',
+        client: MockClient((request) async {
+          expect(request.method, 'DELETE');
+          expect(request.headers['authorization'], 'Bearer access');
+          return http.Response('{"success":true}', 200);
+        }));
+    final container = _container(_MemoryLocalStore(signedIn), tokens, api);
+    addTearDown(container.dispose);
+    container.read(cloudSessionStatusProvider.notifier).state =
+        CloudSessionStatus.verified;
+    await container.read(projectsProvider.future);
+    await expectLater(
+        container
+            .read(projectsProvider.notifier)
+            .archiveCloudCopy('cloud-project'),
+        completes);
+  });
 }
 
 ProviderContainer _container(
