@@ -28,10 +28,11 @@ export class ProjectsService {
     return { success: true };
   }
   create(ownerId: string, name: string) {
+    const normalizedName = name.trim() || 'Untitled design';
     return this.prisma.project.create({
       data: {
         ownerId,
-        name,
+        name: normalizedName,
         manifest: { formatVersion: 1, operations: [] },
       },
     });

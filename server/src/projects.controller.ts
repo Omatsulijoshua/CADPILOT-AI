@@ -1,8 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
-import { IsInt, IsObject, IsString, IsUUID, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsObject, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 import { AccessTokenGuard, AuthenticatedRequest } from './auth.guard';
 import { ProjectsService } from './projects.service';
-class CreateProjectDto { @IsString() name!: string; }
+class CreateProjectDto { @IsString() @IsNotEmpty() @MaxLength(80) name!: string; }
 class SyncDto { @IsUUID() mutationId!: string; @IsInt() @Min(0) baseRevision!: number; @IsObject() payload!: object; }
 @Controller('projects')
 @UseGuards(AccessTokenGuard)

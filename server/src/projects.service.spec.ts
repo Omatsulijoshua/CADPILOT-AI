@@ -33,6 +33,22 @@ function createPrisma() {
   };
 }
 
+describe('ProjectsService create', () => {
+  test('trims project names before persisting them', async () => {
+    const { prisma } = createPrisma();
+    prisma.project.create.mockResolvedValue({ id: 'project-1' });
+    const service = new ProjectsService(prisma as never);
+
+    await service.create('owner-1', '  Kitchen cabinet  ');
+
+    expect(prisma.project.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        ownerId: 'owner-1',
+        name: 'Kitchen cabinet',
+      }),
+    });
+  });
+});
 describe('ProjectsService sync', () => {
   test('first sync atomically creates the owned project at remote revision one', async () => {
     const { prisma, transactionClient } = createPrisma();
