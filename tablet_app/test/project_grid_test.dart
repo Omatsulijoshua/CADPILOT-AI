@@ -42,6 +42,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Kitchen cabinet'), findsOneWidget);
     expect(find.text('Mounting bracket'), findsNothing);
+    expect(find.byTooltip('Back up project'), findsOneWidget);
 
     await tester.pumpWidget(
       ProviderScope(

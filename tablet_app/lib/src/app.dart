@@ -856,6 +856,7 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
   String? deletingId;
   String? duplicatingId;
   String? exportingId;
+  String? syncingId;
 
   Future<void> duplicate(CadProject project) async {
     if (deletingId != null || duplicatingId != null) return;
@@ -905,6 +906,37 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
       }
     } finally {
       if (mounted) setState(() => exportingId = null);
+    }
+  }
+
+  Future<void> backupProject(CadProject project) async {
+    if (deletingId != null ||
+        duplicatingId != null ||
+        exportingId != null ||
+        syncingId != null ||
+        project.syncState == SyncState.synced) {
+      return;
+    }
+    setState(() => syncingId = project.id);
+    try {
+      await ref.read(projectsProvider.notifier).sync(project);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${project.name} backed up to cloud.')),
+        );
+      }
+    } catch (error) {
+      final message = error is CloudApiException && error.statusCode == 409
+          ? 'Cloud changes detected. ${project.name} was not overwritten.'
+          : error is CloudApiException
+              ? error.message
+              : error.toString().replaceFirst('Bad state: ', '');
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
+      }
+    } finally {
+      if (mounted) setState(() => syncingId = null);
     }
   }
 
@@ -1019,7 +1051,8 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
                                     tooltip: 'Export project manifest',
                                     onPressed: deletingId == null &&
                                             duplicatingId == null &&
-                                            exportingId == null
+                                            exportingId == null &&
+                                            syncingId == null
                                         ? () => exportProject(project)
                                         : null,
                                     icon: exportingId == project.id
@@ -1032,10 +1065,35 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
                                             Icons.file_download_outlined),
                                   ),
                                   IconButton(
+                                    tooltip:
+                                        project.syncState == SyncState.synced
+                                            ? 'Cloud backup current'
+                                            : 'Back up project',
+                                    onPressed: deletingId == null &&
+                                            duplicatingId == null &&
+                                            exportingId == null &&
+                                            syncingId == null &&
+                                            project.syncState !=
+                                                SyncState.synced
+                                        ? () => backupProject(project)
+                                        : null,
+                                    icon: syncingId == project.id
+                                        ? const SizedBox.square(
+                                            dimension: 18,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2),
+                                          )
+                                        : Icon(project.syncState ==
+                                                SyncState.synced
+                                            ? Icons.cloud_done_outlined
+                                            : Icons.cloud_upload_outlined),
+                                  ),
+                                  IconButton(
                                     tooltip: 'Delete local project',
                                     onPressed: deletingId == null &&
                                             duplicatingId == null &&
-                                            exportingId == null
+                                            exportingId == null &&
+                                            syncingId == null
                                         ? () => delete(project)
                                         : null,
                                     icon: deletingId == project.id
