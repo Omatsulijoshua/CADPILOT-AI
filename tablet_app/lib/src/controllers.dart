@@ -27,6 +27,29 @@ class SessionController extends AsyncNotifier<Session?> {
   @override
   Future<Session?> build() => _store.readSession();
 
+  Future<void> register(
+    String displayName,
+    String email,
+    String password,
+  ) async {
+    if (displayName.trim().length < 2) {
+      throw const FormatException(
+          'Enter a display name of at least 2 characters.');
+    }
+    if (!email.contains('@') || password.length < 8) {
+      throw const FormatException(
+          'Use a valid email and at least 8 password characters.');
+    }
+    final credentials =
+        await ref.read(cloudApiProvider).register(displayName, email, password);
+    await ref.read(tokenStoreProvider).write(
+          accessToken: credentials.accessToken,
+          refreshToken: credentials.refreshToken,
+        );
+    await _store.writeSession(credentials.session);
+    state = AsyncData(credentials.session);
+  }
+
   Future<void> signIn(String email, String password) async {
     if (!email.contains('@') || password.length < 8) {
       throw const FormatException(

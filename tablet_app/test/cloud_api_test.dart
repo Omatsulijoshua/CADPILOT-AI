@@ -281,4 +281,77 @@ void main() {
       throwsA(isA<CloudApiException>()),
     );
   });
+  test('registration normalizes identity and returns credentials', () async {
+    final client = MockClient((request) async {
+      expect(request.method, 'POST');
+      expect(request.url.path, '/v1/auth/register');
+      final body = jsonDecode(request.body) as Map<String, Object?>;
+      expect(body, {
+        'displayName': 'Joshua Designer',
+        'email': 'designer@example.com',
+        'password': 'password123',
+      });
+      return http.Response(
+        jsonEncode({
+          'user': {
+            'id': 'user-1',
+            'email': 'designer@example.com',
+            'displayName': 'Joshua Designer',
+          },
+          'accessToken': 'access-token',
+          'refreshToken': 'refresh-token',
+        }),
+        201,
+      );
+    });
+    final credentials = await CloudApi(
+      client: client,
+      baseUrl: 'https://api.test/v1',
+    ).register(
+      '  Joshua Designer  ',
+      '  DESIGNER@EXAMPLE.COM  ',
+      'password123',
+    );
+    expect(credentials.session.kind, SessionKind.signedIn);
+    expect(credentials.session.displayName, 'Joshua Designer');
+    expect(credentials.accessToken, 'access-token');
+  });
+
+  test('registration reports duplicate email without exposing server data',
+      () async {
+    final client = MockClient((_) async => http.Response(
+          jsonEncode({'message': 'database detail'}),
+          409,
+        ));
+    expect(
+      () => CloudApi(client: client, baseUrl: 'https://api.test/v1')
+          .register('Designer', 'designer@example.com', 'password123'),
+      throwsA(isA<CloudApiException>()
+          .having((error) => error.statusCode, 'statusCode', 409)
+          .having(
+            (error) => error.message,
+            'message',
+            'An account already exists for this email.',
+          )),
+    );
+  });
+
+  test('malformed authentication credentials fail closed', () async {
+    final client = MockClient((_) async => http.Response(
+          jsonEncode({
+            'user': {
+              'email': 'designer@example.com',
+              'displayName': 'Designer',
+            },
+            'accessToken': '',
+            'refreshToken': 'refresh-token',
+          }),
+          201,
+        ));
+    expect(
+      () => CloudApi(client: client, baseUrl: 'https://api.test/v1')
+          .register('Designer', 'designer@example.com', 'password123'),
+      throwsA(isA<CloudApiException>()),
+    );
+  });
 }

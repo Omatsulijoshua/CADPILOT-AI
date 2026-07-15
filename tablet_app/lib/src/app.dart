@@ -95,10 +95,20 @@ class SignInScreen extends ConsumerStatefulWidget {
 }
 
 class _SignInScreenState extends ConsumerState<SignInScreen> {
+  final displayName = TextEditingController();
   final email = TextEditingController();
   final password = TextEditingController();
   String? error;
   bool busy = false;
+  bool creatingAccount = false;
+
+  @override
+  void dispose() {
+    displayName.dispose();
+    email.dispose();
+    password.dispose();
+    super.dispose();
+  }
 
   Future<void> submit() async {
     setState(() {
@@ -106,9 +116,16 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       error = null;
     });
     try {
-      await ref
-          .read(sessionProvider.notifier)
-          .signIn(email.text, password.text);
+      final controller = ref.read(sessionProvider.notifier);
+      if (creatingAccount) {
+        await controller.register(
+          displayName.text,
+          email.text,
+          password.text,
+        );
+      } else {
+        await controller.signIn(email.text, password.text);
+      }
     } catch (value) {
       setState(() =>
           error = value is FormatException ? value.message : value.toString());
@@ -154,13 +171,26 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('Welcome back',
-                        style: TextStyle(
+                    Text(
+                        creatingAccount
+                            ? 'Create your account'
+                            : 'Welcome back',
+                        style: const TextStyle(
                             fontSize: 30, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    const Text(
-                        'Phase 1 stores your projects locally on this tablet.'),
+                    Text(creatingAccount
+                        ? 'Create an account to back up and restore projects across devices.'
+                        : 'Sign in for cloud backup, restore, and intelligent commands.'),
                     const SizedBox(height: 28),
+                    if (creatingAccount) ...[
+                      TextField(
+                        controller: displayName,
+                        textInputAction: TextInputAction.next,
+                        decoration:
+                            const InputDecoration(labelText: 'Display name'),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     TextField(
                         controller: email,
                         keyboardType: TextInputType.emailAddress,
@@ -180,8 +210,26 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     const SizedBox(height: 20),
                     FilledButton(
                         onPressed: busy ? null : submit,
-                        child: Text(busy ? 'Signing in...' : 'Sign in')),
-                    const SizedBox(height: 12),
+                        child: Text(busy
+                            ? (creatingAccount
+                                ? 'Creating account...'
+                                : 'Signing in...')
+                            : (creatingAccount
+                                ? 'Create account'
+                                : 'Sign in'))),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: busy
+                          ? null
+                          : () => setState(() {
+                                creatingAccount = !creatingAccount;
+                                error = null;
+                              }),
+                      child: Text(creatingAccount
+                          ? 'Already have an account? Sign in'
+                          : 'New to CadPilot? Create account'),
+                    ),
+                    const SizedBox(height: 8),
                     OutlinedButton(
                         onPressed: busy
                             ? null

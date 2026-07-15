@@ -82,6 +82,31 @@ class CloudApi {
   final http.Client client;
   final String baseUrl;
 
+  Future<CloudCredentials> register(
+    String displayName,
+    String email,
+    String password,
+  ) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/auth/register'),
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode({
+        'displayName': displayName.trim(),
+        'email': email.trim().toLowerCase(),
+        'password': password,
+      }),
+    );
+    if (response.statusCode != 201) {
+      throw CloudApiException(
+        response.statusCode == 409
+            ? 'An account already exists for this email.'
+            : 'Could not create your account. Check your details and connection.',
+        response.statusCode,
+      );
+    }
+    return _credentials(response);
+  }
+
   Future<CloudCredentials> login(String email, String password) async {
     final response = await client.post(Uri.parse('$baseUrl/auth/login'),
         headers: {'content-type': 'application/json'},
@@ -91,16 +116,41 @@ class CloudApi {
           'Could not sign in. Check your details and connection.',
           response.statusCode);
     }
-    final body = jsonDecode(response.body) as Map<String, Object?>;
-    final user = body['user']! as Map<String, Object?>;
-    return CloudCredentials(
-      session: Session(
+    return _credentials(response);
+  }
+
+  CloudCredentials _credentials(http.Response response) {
+    try {
+      final body = jsonDecode(response.body) as Map<String, Object?>;
+      final user = body['user']! as Map<String, Object?>;
+      final displayName = user['displayName'] as String?;
+      final email = user['email'] as String?;
+      final accessToken = body['accessToken'] as String?;
+      final refreshToken = body['refreshToken'] as String?;
+      if (displayName == null ||
+          displayName.trim().isEmpty ||
+          email == null ||
+          !email.contains('@') ||
+          accessToken == null ||
+          accessToken.isEmpty ||
+          refreshToken == null ||
+          refreshToken.isEmpty) {
+        throw const FormatException('Invalid authentication response.');
+      }
+      return CloudCredentials(
+        session: Session(
           kind: SessionKind.signedIn,
-          displayName: user['displayName']! as String,
-          email: user['email']! as String),
-      accessToken: body['accessToken']! as String,
-      refreshToken: body['refreshToken']! as String,
-    );
+          displayName: displayName,
+          email: email,
+        ),
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      );
+    } catch (_) {
+      throw const CloudApiException(
+        'The authentication response was invalid. Please try again.',
+      );
+    }
   }
 
   Future<AiCommandResponse> generateAiCommand({
