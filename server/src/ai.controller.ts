@@ -1,5 +1,6 @@
 import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
 import { IsObject, IsString, Length } from 'class-validator';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AccessTokenGuard, AuthenticatedRequest } from './auth.guard';
 import { AiService } from './ai.service';
 
@@ -9,7 +10,8 @@ class GenerateCadCommandDto {
 }
 
 @Controller('ai')
-@UseGuards(AccessTokenGuard)
+@UseGuards(ThrottlerGuard, AccessTokenGuard)
+@Throttle({ default: { ttl: 60_000, limit: 10 } })
 export class AiController {
   constructor(private readonly ai: AiService) {}
 

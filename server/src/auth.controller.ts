@@ -1,10 +1,13 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { IsEmail, IsString, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
 class RegisterDto { @IsEmail() email!: string; @IsString() @MinLength(8) password!: string; @IsString() @MinLength(2) displayName!: string; }
 class LoginDto { @IsEmail() email!: string; @IsString() @MinLength(8) password!: string; }
 class RefreshDto { @IsString() @MinLength(60) refreshToken!: string; }
 @Controller('auth')
+@UseGuards(ThrottlerGuard)
+@Throttle({ default: { ttl: 60_000, limit: 5 } })
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
   @Post('register') register(@Body() dto: RegisterDto) { return this.auth.register(dto.email.toLowerCase(), dto.password, dto.displayName); }
