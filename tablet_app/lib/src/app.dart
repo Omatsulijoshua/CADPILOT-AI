@@ -863,6 +863,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
 
   Future<void> syncProject(CadProject project) async {
     if (syncing) return;
+    var hasCloudConflict = false;
     setState(() {
       syncing = true;
       status = 'Backing up...';
@@ -871,13 +872,33 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
       await ref.read(projectsProvider.notifier).sync(project);
       if (mounted) setState(() => status = 'Backed up to cloud');
     } catch (error) {
+      hasCloudConflict = error is CloudApiException && error.statusCode == 409;
       if (mounted) {
-        setState(() => status = error is CloudApiException
-            ? error.message
-            : error.toString().replaceFirst('Bad state: ', ''));
+        setState(() => status = hasCloudConflict
+            ? 'Cloud changes detected. Your local edits are still safe.'
+            : error is CloudApiException
+                ? error.message
+                : error.toString().replaceFirst('Bad state: ', ''));
       }
     } finally {
       if (mounted) setState(() => syncing = false);
+    }
+    if (hasCloudConflict && mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Cloud changes detected'),
+          content: const Text(
+            'This project was updated from another device. Your local edits have not been changed. Use Restore cloud copy only if you want to replace your local edits with the latest cloud version.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Keep local edits'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -1008,8 +1029,13 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
         leading: const BackButton(),
         title: Text(project.name),
         actions: [
-          Text(status),
-          const SizedBox(width: 12),
+          Tooltip(
+            message: status,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.info_outline),
+            ),
+          ),
           OutlinedButton.icon(
               onPressed: () => showDialog<void>(
                   context: context,
