@@ -1458,29 +1458,45 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
             ),
           ),
           OutlinedButton.icon(
-              onPressed: () => showDialog<void>(
-                  context: context,
-                  builder: (_) => SpatialCapabilityPanel(
-                        projectName: project.name,
-                        placements: project.spatialPlacements,
-                        scans: project.spatialScans,
-                        onPlacementsChanged: (placements) async {
-                          await ref.read(projectsProvider.notifier).save(
-                                project.copyWith(spatialPlacements: placements),
-                              );
-                          if (mounted) {
-                            setState(() => status = 'Spatial placements saved');
-                          }
-                        },
-                        onScansChanged: (scans) async {
-                          await ref.read(projectsProvider.notifier).save(
-                                project.copyWith(spatialScans: scans),
-                              );
-                          if (mounted) {
-                            setState(() => status = 'Advisory scans saved');
-                          }
-                        },
-                      )),
+              onPressed: () {
+                // The dialog can edit placements and scans before its parent
+                // rebuilds. Keep both collections together so either callback
+                // cannot save a stale project snapshot over the other.
+                var placements = project.spatialPlacements;
+                var scans = project.spatialScans;
+                showDialog<void>(
+                    context: context,
+                    builder: (_) => SpatialCapabilityPanel(
+                          projectName: project.name,
+                          placements: placements,
+                          scans: scans,
+                          onPlacementsChanged: (value) async {
+                            placements = value;
+                            await ref.read(projectsProvider.notifier).save(
+                                  project.copyWith(
+                                    spatialPlacements: placements,
+                                    spatialScans: scans,
+                                  ),
+                                );
+                            if (mounted) {
+                              setState(
+                                  () => status = 'Spatial placements saved');
+                            }
+                          },
+                          onScansChanged: (value) async {
+                            scans = value;
+                            await ref.read(projectsProvider.notifier).save(
+                                  project.copyWith(
+                                    spatialPlacements: placements,
+                                    spatialScans: scans,
+                                  ),
+                                );
+                            if (mounted) {
+                              setState(() => status = 'Advisory scans saved');
+                            }
+                          },
+                        ));
+              },
               icon: const Icon(Icons.view_in_ar),
               label: const Text('AR / Scan')),
           const SizedBox(width: 8),

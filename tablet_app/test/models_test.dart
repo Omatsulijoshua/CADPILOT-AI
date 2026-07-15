@@ -106,6 +106,53 @@ void main() {
     expect(decoded.spatialScans.single.widthMm, 450);
   });
 
+  test('spatial collection updates can preserve placements and scan records',
+      () {
+    final now = DateTime.utc(2026, 7, 15);
+    final placement = SpatialPlacement(
+      id: 'placement-1',
+      name: 'Wall',
+      createdAt: now,
+      source: 'manual',
+      plane: 'wall',
+      widthMm: 100,
+      heightMm: 100,
+      depthMm: 100,
+      offsetXMm: 0,
+      offsetYMm: 0,
+      offsetZMm: 0,
+      rotationDegrees: 0,
+    );
+    final scan = SpatialScanRecord(
+      id: 'scan-1',
+      sessionId: 'session-1',
+      capturedAt: now,
+      frameCount: 3,
+      pointCount: 20,
+      widthMm: 100,
+      heightMm: 200,
+      depthMm: 300,
+      meanConfidence: .8,
+      resolutionMm: 10,
+    );
+    final project = CadProject(
+      id: 'spatial',
+      name: 'Spatial',
+      note: '',
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+      syncState: SyncState.pending,
+      spatialPlacements: [placement],
+    );
+    final merged = project.copyWith(
+      spatialPlacements: project.spatialPlacements,
+      spatialScans: [scan],
+    );
+    expect(merged.spatialPlacements.single.id, placement.id);
+    expect(merged.spatialScans.single.id, scan.id);
+  });
+
   test('legacy projects load with an empty AR screenshot collection', () {
     final now = DateTime.utc(2026, 7, 15);
     final legacy = <String, Object?>{
