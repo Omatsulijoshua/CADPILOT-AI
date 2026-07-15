@@ -1,6 +1,6 @@
 # Phase 6 Shell Increment
 
-CadPilot AI now supports a persisted, editable open-top shell operation for rectangular extrusions.
+CadPilot now supports a persisted, editable open-top shell operation for rectangular extrusions.
 
 ## Delivered
 

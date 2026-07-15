@@ -1,6 +1,6 @@
 # Phase 6 Boolean Subtraction Increment
 
-CadPilot AI now supports explicit rectangular Boolean subtraction through a supported plate solid.
+CadPilot now supports explicit rectangular Boolean subtraction through a supported plate solid.
 
 ## Delivered
 

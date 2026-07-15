@@ -16,7 +16,7 @@ class CadPilotApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'CadPilot AI',
+        title: 'CadPilot',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
@@ -52,7 +52,7 @@ class TabletGate extends StatelessWidget {
                     children: [
                       Icon(Icons.tablet_mac, size: 56),
                       SizedBox(height: 20),
-                      Text('CadPilot AI requires a tablet-sized display.',
+                      Text('CadPilot requires a tablet-sized display.',
                           textAlign: TextAlign.center,
                           style: TextStyle(fontSize: 24)),
                       SizedBox(height: 8),
@@ -124,21 +124,22 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               child: Container(
                 padding: const EdgeInsets.all(56),
                 color: const Color(0xff0e1821),
-                child: const Column(
+                child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.view_in_ar, color: Color(0xff29d3b2), size: 52),
-                    SizedBox(height: 24),
-                    Text('CADPILOT AI',
+                    Image.asset('assets/branding/cadpilot-icon-master.png',
+                        width: 96, height: 96),
+                    const SizedBox(height: 24),
+                    const Text('CADPILOT',
                         style: TextStyle(
                             fontWeight: FontWeight.w800, letterSpacing: 2)),
-                    SizedBox(height: 12),
-                    Text('Design in context.',
+                    const SizedBox(height: 12),
+                    const Text('Design in context.',
                         style: TextStyle(
                             fontSize: 44, fontWeight: FontWeight.w700)),
-                    SizedBox(height: 12),
-                    Text(
+                    const SizedBox(height: 12),
+                    const Text(
                         'A local-first workspace built for tablet, stylus, and professional CAD workflows.'),
                   ],
                 ),

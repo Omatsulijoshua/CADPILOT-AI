@@ -1,6 +1,6 @@
 # Phase 6 Circular Cut-Pattern Increment
 
-CadPilot AI now supports circular repetition of a source through-hole around the rectangular base solid's center.
+CadPilot now supports circular repetition of a source through-hole around the rectangular base solid's center.
 
 ## Delivered
 

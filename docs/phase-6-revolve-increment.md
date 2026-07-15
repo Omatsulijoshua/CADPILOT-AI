@@ -1,6 +1,6 @@
 # Phase 6 Revolve Increment
 
-CadPilot AI now supports a persisted full-revolution base feature that turns a rectangular radial section into a cylindrical solid.
+CadPilot now supports a persisted full-revolution base feature that turns a rectangular radial section into a cylindrical solid.
 
 ## Delivered
 

@@ -3,7 +3,7 @@
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
     <application
-        android:label="cadpilot_tablet"
+        android:label="CadPilot"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

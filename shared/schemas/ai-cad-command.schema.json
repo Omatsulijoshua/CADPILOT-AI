@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://cadpilot.ai/schemas/ai-cad-command.v1.json",
-  "title": "CadPilot AI command",
+  "title": "CadPilot command",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "commandId", "intent", "target", "operations", "assumptions", "requiresConfirmation"],

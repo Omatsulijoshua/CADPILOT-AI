@@ -1,6 +1,6 @@
 # Phase 6 Chamfer Increment
 
-CadPilot AI now supports a persisted, editable chamfer operation that trims all four vertical corners of a rectangular extrusion.
+CadPilot now supports a persisted, editable chamfer operation that trims all four vertical corners of a rectangular extrusion.
 
 ## Delivered
 

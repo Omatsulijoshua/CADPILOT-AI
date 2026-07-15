@@ -1,6 +1,6 @@
 # Phase 6 Fillet Increment
 
-CadPilot AI now supports a persisted, editable fillet operation that rounds all four vertical corners of a rectangular extrusion.
+CadPilot now supports a persisted, editable fillet operation that rounds all four vertical corners of a rectangular extrusion.
 
 ## Delivered
 

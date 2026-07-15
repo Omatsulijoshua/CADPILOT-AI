@@ -1,5 +1,5 @@
 name: cadpilot_tablet
-description: CadPilot AI tablet application
+description: CadPilot tablet application
 publish_to: none
 version: 0.1.0+1
 environment:
@@ -19,3 +19,5 @@ dev_dependencies:
   flutter_lints: ^4.0.0
 flutter:
   uses-material-design: true
+  assets:
+    - assets/branding/cadpilot-icon-master.png
