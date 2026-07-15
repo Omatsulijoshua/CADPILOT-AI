@@ -9,7 +9,7 @@
 
 ## Project status
 
-CadPilot is an actively developed local-first CAD platform built with Flutter, Dart, C++, NestJS, Prisma, and PostgreSQL. This repository contains a working cross-platform app, deterministic CAD foundations, local persistence, intelligent-command infrastructure, cloud-service foundations, and native AR runtime-readiness integration.
+CadPilot is an actively developed local-first CAD platform built with Flutter, Dart, C++, NestJS, Prisma, and PostgreSQL. The current application release is **0.2.0+2** and contains a working cross-platform app, deterministic CAD foundations, local persistence, intelligent-command infrastructure, cloud-service foundations, and native AR runtime-readiness integration.
 
 > **Important:** ARCore availability detection and spatial-session state are implemented. Full native AR rendering, LiDAR reconstruction, and real-time collaboration remain in development. The OpenAI Responses API integration is implemented as a hardened foundation; production evaluation, quotas, and billing controls remain. This README separates implemented foundations from planned capabilities.
 
