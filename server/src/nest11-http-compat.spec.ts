@@ -12,7 +12,7 @@ describe('NestJS 11 HTTP compatibility', () => {
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
-      .useValue({})
+      .useValue({ $queryRaw: jest.fn().mockResolvedValue([{ ready: 1 }]) })
       .compile();
     app = module.createNestApplication({ bodyParser: false, logger: false });
     configureHttpApp(app);
@@ -34,6 +34,12 @@ describe('NestJS 11 HTTP compatibility', () => {
     );
   });
 
+  it('serves a database-backed readiness route through Express 5', async () => {
+    const response = await fetch(`${baseUrl}/v1/health/ready`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ status: 'ready' });
+  });
   it('preserves the access-token guard on protected project routes', async () => {
     const response = await fetch(`${baseUrl}/v1/projects`);
 
