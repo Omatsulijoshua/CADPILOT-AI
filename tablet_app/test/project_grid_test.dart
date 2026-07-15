@@ -91,6 +91,11 @@ void main() {
     expect(duplicate.lastSyncedRevision, isNull);
     expect(
         find.textContaining('Created Original bracket copy'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Duplicate project').last);
+    await tester.pumpAndSettle();
+    expect(store.projects, hasLength(3));
+    expect(store.projects.first.name, 'Original bracket copy 2');
   });
   testWidgets('local project deletion requires confirmation', (tester) async {
     final store = _MemoryLocalStore([

@@ -195,9 +195,18 @@ class ProjectsController extends AsyncNotifier<List<CadProject>> {
 
   Future<CadProject> duplicate(CadProject source) async {
     final now = DateTime.now().toUtc();
+    final existingNames = (state.valueOrNull ?? const <CadProject>[])
+        .map((project) => project.name.trim().toLowerCase())
+        .toSet();
+    var copyNumber = 1;
+    var name = '${source.name} copy';
+    while (existingNames.contains(name.toLowerCase())) {
+      copyNumber++;
+      name = '${source.name} copy $copyNumber';
+    }
     final duplicate = CadProject(
       id: const Uuid().v4(),
-      name: '${source.name} copy',
+      name: name,
       note: source.note,
       createdAt: now,
       updatedAt: now,
