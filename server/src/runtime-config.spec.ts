@@ -9,11 +9,11 @@ const productionSecrets = {
 
 describe('runtime configuration validation', () => {
   it('keeps development startup convenient with the default port', () => {
-    expect(validateRuntimeConfig({ NODE_ENV: 'development' })).toEqual({ port: 3000, corsAllowedOrigins: [] });
+    expect(validateRuntimeConfig({ NODE_ENV: 'development' })).toEqual({ port: 3000, corsAllowedOrigins: [], isProduction: false });
   });
 
   it('accepts independent production secrets and a valid port', () => {
-    expect(validateRuntimeConfig({ ...productionSecrets, PORT: '8080' })).toEqual({ port: 8080, corsAllowedOrigins: ['https://cadpilot.vercel.app'] });
+    expect(validateRuntimeConfig({ ...productionSecrets, PORT: '8080' })).toEqual({ port: 8080, corsAllowedOrigins: ['https://cadpilot.vercel.app'], isProduction: true });
   });
 
   it.each(['', 'replace-with-a-long-random-access-secret', 'development-only-access-secret-change-me', 'short-secret'])('rejects an unsafe production access secret: %s', (secret) => {

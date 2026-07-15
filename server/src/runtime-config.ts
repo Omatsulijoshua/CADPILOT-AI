@@ -4,6 +4,7 @@ const PLACEHOLDER_MARKERS = ['replace-with-', 'change-me', 'development-only'];
 export interface RuntimeConfig {
   port: number;
   corsAllowedOrigins: string[];
+  isProduction: boolean;
 }
 
 function requiredProductionSecret(environment: NodeJS.ProcessEnv, name: string): void {
@@ -49,7 +50,7 @@ export function validateRuntimeConfig(environment: NodeJS.ProcessEnv = process.e
     }
   }
 
-  return { port, corsAllowedOrigins: isProduction ? productionCorsOrigins(environment) : [] };
+  return { port, corsAllowedOrigins: isProduction ? productionCorsOrigins(environment) : [], isProduction };
 }
 
 export { DEVELOPMENT_ACCESS_SECRET };
