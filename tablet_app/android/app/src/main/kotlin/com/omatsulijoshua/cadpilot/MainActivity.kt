@@ -1,7 +1,11 @@
 package com.omatsulijoshua.cadpilot
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
+import java.io.ByteArrayOutputStream
+import java.nio.charset.StandardCharsets
 import com.google.ar.core.ArCoreApk
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException
 import androidx.core.app.ActivityCompat
@@ -12,7 +16,10 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val cameraRequestCode = 7401
+    private val projectImportRequestCode = 7402
+    private val maxProjectManifestBytes = 2 * 1024 * 1024
     private var pendingCameraResult: MethodChannel.Result? = null
+    private var pendingProjectImportResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -36,6 +43,13 @@ class MainActivity : FlutterActivity() {
                         call.arguments
                     )
                     "stopArSession" -> result.success(false)
+                    else -> result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "cadpilot/files")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "pickProjectManifest" -> pickProjectManifest(result)
                     else -> result.notImplemented()
                 }
             }
@@ -112,6 +126,56 @@ class MainActivity : FlutterActivity() {
             arrayOf(Manifest.permission.CAMERA),
             cameraRequestCode
         )
+    }
+
+    private fun pickProjectManifest(result: MethodChannel.Result) {
+        if (pendingProjectImportResult != null) {
+            result.error("request_in_progress", "A project manifest picker is already active.", null)
+            return
+        }
+        pendingProjectImportResult = result
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/json"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/json", "text/json"))
+        }
+        startActivityForResult(intent, projectImportRequestCode)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != projectImportRequestCode) return
+
+        val pendingResult = pendingProjectImportResult ?: return
+        pendingProjectImportResult = null
+        val uri = data?.data
+        if (resultCode != Activity.RESULT_OK || uri == null) {
+            pendingResult.success(null)
+            return
+        }
+
+        try {
+            val content = contentResolver.openInputStream(uri)?.use { input ->
+                val bytes = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    if (bytes.size() + read > maxProjectManifestBytes) {
+                        throw IllegalArgumentException("Project manifest is larger than 2 MiB.")
+                    }
+                    bytes.write(buffer, 0, read)
+                }
+                bytes.toString(StandardCharsets.UTF_8.name())
+            } ?: throw IllegalArgumentException("Could not read selected project manifest.")
+            pendingResult.success(content)
+        } catch (error: Exception) {
+            pendingResult.error(
+                "project_manifest_read_failed",
+                "Could not read the selected project manifest.",
+                error.message
+            )
+        }
     }
 
     override fun onRequestPermissionsResult(
