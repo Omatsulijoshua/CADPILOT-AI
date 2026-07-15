@@ -1,4 +1,4 @@
-package com.example.cadpilot_tablet
+package com.omatsulijoshua.cadpilot
 
 import android.Manifest
 import android.content.pm.PackageManager
