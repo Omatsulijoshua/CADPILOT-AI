@@ -19,6 +19,42 @@ class AiCommandResponse {
   final int totalTokens;
 }
 
+class CloudProjectSummary {
+  const CloudProjectSummary({
+    required this.id,
+    required this.name,
+    required this.revision,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String name;
+  final int revision;
+  final DateTime updatedAt;
+
+  factory CloudProjectSummary.fromMap(Map<String, Object?> value) {
+    final id = value['id'] as String?;
+    final name = value['name'] as String?;
+    final revision = value['revision'] as int?;
+    final updatedAt = DateTime.tryParse(value['updatedAt'] as String? ?? '');
+    if (id == null ||
+        id.trim().isEmpty ||
+        name == null ||
+        name.trim().isEmpty ||
+        revision == null ||
+        revision < 1 ||
+        updatedAt == null) {
+      throw const FormatException('Invalid cloud project summary.');
+    }
+    return CloudProjectSummary(
+      id: id,
+      name: name,
+      revision: revision,
+      updatedAt: updatedAt.toUtc(),
+    );
+  }
+}
+
 class ProjectSyncResult {
   const ProjectSyncResult({
     required this.mutationId,
@@ -97,6 +133,31 @@ class CloudApi {
       command: Map<String, Object?>.from(body['command']! as Map),
       totalTokens: usage['totalTokens']! as int,
     );
+  }
+
+  Future<List<CloudProjectSummary>> listProjects(String token) async {
+    final response = await client.get(
+      Uri.parse('$baseUrl/projects'),
+      headers: {'authorization': 'Bearer $token'},
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CloudApiException(
+        'Could not load cloud projects.',
+        response.statusCode,
+      );
+    }
+    try {
+      final values = jsonDecode(response.body) as List<Object?>;
+      return values
+          .map((value) => CloudProjectSummary.fromMap(
+                Map<String, Object?>.from(value! as Map),
+              ))
+          .toList(growable: false);
+    } catch (_) {
+      throw const CloudApiException(
+        'Cloud project list is invalid and could not be displayed.',
+      );
+    }
   }
 
   Future<CadProject> pullProject(String projectId, String token) async {

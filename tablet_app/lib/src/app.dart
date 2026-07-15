@@ -198,54 +198,71 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       );
 }
 
-class Dashboard extends ConsumerWidget {
+class Dashboard extends ConsumerStatefulWidget {
   const Dashboard({required this.session, super.key});
   final Session session;
 
-  Future<void> create(BuildContext context, WidgetRef ref) async {
+  @override
+  ConsumerState<Dashboard> createState() => _DashboardState();
+}
+
+class _DashboardState extends ConsumerState<Dashboard> {
+  int selectedIndex = 0;
+
+  Future<void> create() async {
     final controller = TextEditingController();
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('New project'),
         content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(labelText: 'Project name')),
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Project name'),
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              child: const Text('Create')),
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Create'),
+          ),
         ],
       ),
     );
-    if (name == null || !context.mounted) return;
+    controller.dispose();
+    if (name == null || !mounted) return;
     final project = await ref.read(projectsProvider.notifier).create(name);
-    if (context.mounted) {
-      await Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (_) => ProjectWorkspace(projectId: project.id)));
-    }
+    if (mounted) await openProject(project);
   }
 
+  Future<void> openProject(CadProject project) => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProjectWorkspace(projectId: project.id),
+        ),
+      );
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Scaffold(
+  Widget build(BuildContext context) => Scaffold(
         body: Row(
           children: [
             NavigationRail(
               extended: MediaQuery.sizeOf(context).width > 1050,
-              selectedIndex: 0,
+              selectedIndex: selectedIndex,
+              onDestinationSelected: (value) =>
+                  setState(() => selectedIndex = value),
               destinations: const [
                 NavigationRailDestination(
-                    icon: Icon(Icons.grid_view), label: Text('Projects')),
+                  icon: Icon(Icons.grid_view),
+                  label: Text('Projects'),
+                ),
                 NavigationRailDestination(
-                    icon: Icon(Icons.cloud_outlined), label: Text('Cloud')),
-                NavigationRailDestination(
-                    icon: Icon(Icons.star_outline), label: Text('Favorites')),
+                  icon: Icon(Icons.cloud_outlined),
+                  label: Text('Cloud'),
+                ),
               ],
             ),
             const VerticalDivider(width: 1),
@@ -255,39 +272,261 @@ class Dashboard extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(children: [
-                      Expanded(
+                    Row(
+                      children: [
+                        Expanded(
                           child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                            Text('Good to see you, ${session.displayName}',
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                selectedIndex == 0
+                                    ? 'Good to see you, ${widget.session.displayName}'
+                                    : 'Cloud projects',
                                 style: const TextStyle(
-                                    fontSize: 30, fontWeight: FontWeight.bold)),
-                            const Text('Your local design workspace'),
-                          ])),
-                      FilledButton.icon(
-                          onPressed: () => create(context, ref),
-                          icon: const Icon(Icons.add),
-                          label: const Text('New project')),
-                      const SizedBox(width: 8),
-                      IconButton(
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(selectedIndex == 0
+                                  ? 'Your local design workspace'
+                                  : 'Authenticated backups available to this account'),
+                            ],
+                          ),
+                        ),
+                        if (selectedIndex == 0)
+                          FilledButton.icon(
+                            onPressed: create,
+                            icon: const Icon(Icons.add),
+                            label: const Text('New project'),
+                          ),
+                        const SizedBox(width: 8),
+                        IconButton(
                           tooltip: 'Sign out',
                           onPressed: ref.read(sessionProvider.notifier).signOut,
-                          icon: const Icon(Icons.logout)),
-                    ]),
+                          icon: const Icon(Icons.logout),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 30),
                     Expanded(
-                        child: ProjectGrid(
-                            onOpen: (project) => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) => ProjectWorkspace(
-                                        projectId: project.id))))),
+                      child: selectedIndex == 0
+                          ? ProjectGrid(onOpen: openProject)
+                          : CloudProjectsPanel(
+                              session: widget.session,
+                              onOpen: openProject,
+                            ),
+                    ),
                   ],
                 ),
               ),
             ),
           ],
+        ),
+      );
+}
+
+class CloudProjectsPanel extends ConsumerStatefulWidget {
+  const CloudProjectsPanel({
+    required this.session,
+    required this.onOpen,
+    super.key,
+  });
+
+  final Session session;
+  final ValueChanged<CadProject> onOpen;
+
+  @override
+  ConsumerState<CloudProjectsPanel> createState() => _CloudProjectsPanelState();
+}
+
+class _CloudProjectsPanelState extends ConsumerState<CloudProjectsPanel> {
+  late Future<List<CloudProjectSummary>> projects;
+  String? importingId;
+  String? message;
+
+  @override
+  void initState() {
+    super.initState();
+    projects = load();
+  }
+
+  Future<List<CloudProjectSummary>> load() async {
+    if (widget.session.kind != SessionKind.signedIn) {
+      throw StateError('Sign in to browse and restore cloud projects.');
+    }
+    final token = await ref.read(tokenStoreProvider).readAccessToken();
+    if (token == null || token.trim().isEmpty) {
+      throw StateError('Your cloud session is unavailable. Sign in again.');
+    }
+    return ref.read(cloudApiProvider).listProjects(token);
+  }
+
+  void refresh() => setState(() {
+        message = null;
+        projects = load();
+      });
+
+  Future<void> import(CloudProjectSummary summary) async {
+    if (importingId != null) return;
+    setState(() {
+      importingId = summary.id;
+      message = null;
+    });
+    try {
+      final project =
+          await ref.read(projectsProvider.notifier).importFromCloud(summary.id);
+      if (!mounted) return;
+      widget.onOpen(project);
+    } catch (error) {
+      if (mounted) {
+        setState(() => message = error is CloudApiException
+            ? error.message
+            : error.toString().replaceFirst('Bad state: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => importingId = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      FutureBuilder<List<CloudProjectSummary>>(
+        future: projects,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return _CloudMessage(
+              icon: Icons.cloud_off_outlined,
+              title: 'Cloud projects unavailable',
+              message:
+                  snapshot.error.toString().replaceFirst('Bad state: ', ''),
+              actionLabel: 'Retry',
+              onAction: refresh,
+            );
+          }
+          final values = snapshot.data ?? const <CloudProjectSummary>[];
+          if (values.isEmpty) {
+            return _CloudMessage(
+              icon: Icons.cloud_queue,
+              title: 'No cloud backups yet',
+              message:
+                  'Open a local project and choose Back up now to add it here.',
+              actionLabel: 'Refresh',
+              onAction: refresh,
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '${values.length} cloud project${values.length == 1 ? '' : 's'}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: 'Refresh cloud projects',
+                    onPressed: importingId == null ? refresh : null,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
+              ),
+              if (message != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    message!,
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: values.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final project = values[index];
+                    final busy = importingId == project.id;
+                    return Card(
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 10,
+                        ),
+                        leading: const CircleAvatar(
+                          child: Icon(Icons.view_in_ar_outlined),
+                        ),
+                        title: Text(project.name),
+                        subtitle: Text(
+                          'Cloud revision ${project.revision} · Updated ${_date(project.updatedAt)}',
+                        ),
+                        trailing: FilledButton.tonalIcon(
+                          onPressed: importingId == null
+                              ? () => import(project)
+                              : null,
+                          icon: busy
+                              ? const SizedBox.square(
+                                  dimension: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.cloud_download_outlined),
+                          label:
+                              Text(busy ? 'Downloading...' : 'Download & open'),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      );
+
+  static String _date(DateTime value) =>
+      value.toLocal().toIso8601String().split('T').first;
+}
+
+class _CloudMessage extends StatelessWidget {
+  const _CloudMessage({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String actionLabel;
+  final VoidCallback onAction;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 52),
+              const SizedBox(height: 16),
+              Text(title, style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              Text(message, textAlign: TextAlign.center),
+              const SizedBox(height: 18),
+              OutlinedButton.icon(
+                onPressed: onAction,
+                icon: const Icon(Icons.refresh),
+                label: Text(actionLabel),
+              ),
+            ],
+          ),
         ),
       );
 }

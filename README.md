@@ -66,7 +66,7 @@ Open the browser build at **[cadpilot.vercel.app](https://cadpilot.vercel.app)**
 |---|---|---|
 | Flutter shell | Implemented | Responsive navigation, projects, editor, settings, branded web shell |
 | Authentication | Foundation | Local session flow and backend authentication boundary |
-| Project management | Implemented | Create, open, rename, persist, and manage projects |
+| Project management | Implemented | Create, open, persist, back up, browse cloud projects, restore, and manage projects |
 | Durable autosave | Implemented | Lifecycle-aware local persistence |
 | Sketching | Implemented | Entities, selection, dimensions, constraints, tools, viewport |
 | Parametric history | Implemented | Ordered features, rebuild behavior, and history UI |
@@ -326,7 +326,7 @@ Use compatible physical hardware for ARCore. On macOS/iOS, run `open ios/Runner.
 
 ## Testing
 
-At the latest verified point, the Flutter suite contains **123 passing tests**. Run it locally because the count evolves.
+At the latest verified point, the Flutter suite contains **125 passing tests**. Run it locally because the count evolves.
 
 ```powershell
 cd tablet_app

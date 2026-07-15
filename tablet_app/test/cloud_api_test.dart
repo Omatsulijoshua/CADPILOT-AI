@@ -241,4 +241,44 @@ void main() {
       throwsA(isA<CloudApiException>()),
     );
   });
+  test('cloud project list validates summaries and authentication', () async {
+    final client = MockClient((request) async {
+      expect(request.method, 'GET');
+      expect(request.url.path, '/v1/projects');
+      expect(request.headers['authorization'], 'Bearer access');
+      return http.Response(
+        jsonEncode([
+          {
+            'id': 'project-1',
+            'name': 'Workshop table',
+            'revision': 6,
+            'updatedAt': '2026-07-15T10:30:00.000Z',
+          }
+        ]),
+        200,
+      );
+    });
+    final projects = await CloudApi(
+      client: client,
+      baseUrl: 'https://api.test/v1',
+    ).listProjects('access');
+    expect(projects, hasLength(1));
+    expect(projects.single.name, 'Workshop table');
+    expect(projects.single.revision, 6);
+    expect(projects.single.updatedAt.isUtc, isTrue);
+  });
+
+  test('malformed cloud project list fails closed', () async {
+    final client = MockClient((_) async => http.Response(
+          jsonEncode([
+            {'id': 'project-1', 'name': '', 'revision': 0}
+          ]),
+          200,
+        ));
+    expect(
+      () => CloudApi(client: client, baseUrl: 'https://api.test/v1')
+          .listProjects('access'),
+      throwsA(isA<CloudApiException>()),
+    );
+  });
 }

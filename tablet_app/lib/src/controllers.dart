@@ -98,6 +98,30 @@ class ProjectsController extends AsyncNotifier<List<CadProject>> {
     return synced;
   }
 
+  Future<CadProject> importFromCloud(String projectId) async {
+    final token = await ref.read(tokenStoreProvider).readAccessToken();
+    if (token == null || token.trim().isEmpty) {
+      throw StateError('Sign in to download cloud projects.');
+    }
+    final restored =
+        await ref.read(cloudApiProvider).pullProject(projectId, token);
+    final projects = [...state.valueOrNull ?? const <CadProject>[]];
+    final index = projects.indexWhere((project) => project.id == projectId);
+    if (index >= 0 && projects[index].syncState == SyncState.pending) {
+      throw StateError(
+        'This project has pending local changes. Open it locally and use Restore cloud copy.',
+      );
+    }
+    if (index < 0) {
+      projects.insert(0, restored);
+    } else {
+      projects[index] = restored;
+    }
+    await _store.writeProjects(projects);
+    state = AsyncData(projects);
+    return restored;
+  }
+
   Future<CadProject> restoreFromCloud(String projectId) async {
     final token = await ref.read(tokenStoreProvider).readAccessToken();
     if (token == null || token.trim().isEmpty) {
