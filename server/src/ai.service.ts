@@ -18,8 +18,57 @@ const commandSchema = {
   }
 } as const;
 
-type ResponseUsage = { input_tokens?: number; output_tokens?: number; total_tokens?: number };
-type OpenAiResponse = { id?: string; output?: Array<{ content?: Array<{ type?: string; text?: string }> }>; usage?: ResponseUsage };
+const defaultTimeoutMs = 30_000;
+const minTimeoutMs = 1_000;
+const maxTimeoutMs = 120_000;
+
+type JsonRecord = Record<string, unknown>;
+type ResponseUsage = { input_tokens?: unknown; output_tokens?: unknown; total_tokens?: unknown };
+type OpenAiResponse = { id?: unknown; output?: unknown; usage?: ResponseUsage };
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function tokenCount(value: unknown): number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+function timeoutMs(value: string | undefined): number {
+  if (value == null || value.trim() === '') return defaultTimeoutMs;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= minTimeoutMs && parsed <= maxTimeoutMs
+    ? parsed
+    : defaultTimeoutMs;
+}
+
+function outputText(result: OpenAiResponse): string | null {
+  if (!Array.isArray(result.output)) return null;
+  for (const item of result.output) {
+    if (!isRecord(item) || !Array.isArray(item.content)) continue;
+    for (const content of item.content) {
+      if (isRecord(content) && content.type === 'output_text' && typeof content.text === 'string' && content.text.trim() !== '') {
+        return content.text;
+      }
+    }
+  }
+  return null;
+}
+
+function validCommand(value: unknown): value is JsonRecord {
+  if (!isRecord(value) || value.schemaVersion !== 1 || typeof value.commandId !== 'string' || value.commandId.trim() === '') return false;
+  if (value.intent !== 'create_model' && value.intent !== 'modify_model') return false;
+  if (!isRecord(value.target) || !['model', 'selection', 'sketch'].includes(String(value.target.type)) || !Array.isArray(value.target.ids)) return false;
+  if (!value.target.ids.every(id => typeof id === 'string' && id.trim() !== '')) return false;
+  if (!Array.isArray(value.operations) || value.operations.length < 1 || value.operations.length > 12) return false;
+  if (!value.operations.every(operation => isRecord(operation)
+    && typeof operation.operationId === 'string'
+    && operation.operationId.trim() !== ''
+    && ['extrude', 'cut', 'rename', 'delete'].includes(String(operation.type))
+    && isRecord(operation.parameters))) return false;
+  if (!Array.isArray(value.assumptions) || value.assumptions.length > 12 || !value.assumptions.every(item => typeof item === 'string')) return false;
+  return value.requiresConfirmation === true;
+}
 
 @Injectable()
 export class AiService {
@@ -29,28 +78,55 @@ export class AiService {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new ServiceUnavailableException('AI commands are not configured on this server');
     const model = process.env.OPENAI_CAD_MODEL ?? 'gpt-5.6-luna';
-    const response = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        store: false,
-        instructions: 'Convert the user request into a safe CadPilot command. Use only IDs present in context. Never invent geometry IDs. All dimensions are millimetres. Return requiresConfirmation=true.',
-        input: JSON.stringify({ prompt, context }),
-        text: { format: { type: 'json_schema', name: 'cadpilot_command', strict: true, schema: commandSchema } }
-      })
-    });
+    let response: Response;
+    try {
+      response = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          store: false,
+          instructions: 'Convert the user request into a safe CadPilot command. Use only IDs present in context. Never invent geometry IDs. All dimensions are millimetres. Return requiresConfirmation=true.',
+          input: JSON.stringify({ prompt, context }),
+          text: { format: { type: 'json_schema', name: 'cadpilot_command', strict: true, schema: commandSchema } }
+        }),
+        signal: AbortSignal.timeout(timeoutMs(process.env.OPENAI_TIMEOUT_MS)),
+      });
+    } catch {
+      throw new ServiceUnavailableException('AI command generation is temporarily unavailable');
+    }
     if (!response.ok) throw new ServiceUnavailableException('AI command generation is temporarily unavailable');
-    const result = await response.json() as OpenAiResponse;
-    const text = result.output?.flatMap(item => item.content ?? []).find(item => item.type === 'output_text')?.text;
-    if (!text) throw new ServiceUnavailableException('AI returned no structured command');
-    const command = JSON.parse(text) as object;
-    const usage = result.usage ?? {};
+
+    let decoded: unknown;
+    try {
+      decoded = await response.json();
+    } catch {
+      throw new ServiceUnavailableException('AI returned an invalid response');
+    }
+    if (!isRecord(decoded)) throw new ServiceUnavailableException('AI returned an invalid response');
+    const result = decoded as OpenAiResponse;
+    const usage = {
+      inputTokens: tokenCount(result.usage?.input_tokens),
+      outputTokens: tokenCount(result.usage?.output_tokens),
+      totalTokens: tokenCount(result.usage?.total_tokens),
+    };
     await this.prisma.aiUsage.create({ data: {
-      userId, provider: 'openai', model, responseId: result.id,
-      inputTokens: usage.input_tokens ?? 0, outputTokens: usage.output_tokens ?? 0,
-      totalTokens: usage.total_tokens ?? 0,
+      userId,
+      provider: 'openai',
+      model,
+      responseId: typeof result.id === 'string' ? result.id : undefined,
+      ...usage,
     }});
-    return { command, usage: { inputTokens: usage.input_tokens ?? 0, outputTokens: usage.output_tokens ?? 0, totalTokens: usage.total_tokens ?? 0 } };
+
+    const text = outputText(result);
+    if (!text) throw new ServiceUnavailableException('AI returned no structured command');
+    let command: unknown;
+    try {
+      command = JSON.parse(text);
+    } catch {
+      throw new ServiceUnavailableException('AI returned an invalid structured command');
+    }
+    if (!validCommand(command)) throw new ServiceUnavailableException('AI returned an invalid structured command');
+    return { command, usage };
   }
 }

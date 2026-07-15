@@ -10,7 +10,7 @@
 
 CadPilot is an actively developed local-first CAD platform built with Flutter, Dart, C++, NestJS, Prisma, and PostgreSQL. This repository contains a working cross-platform app, deterministic CAD foundations, local persistence, intelligent-command infrastructure, cloud-service foundations, and native AR runtime-readiness integration.
 
-> **Important:** ARCore availability detection and spatial-session state are implemented. Full native AR rendering, LiDAR reconstruction, real-time collaboration, and production AI-provider integration remain in development. This README separates implemented foundations from planned capabilities.
+> **Important:** ARCore availability detection and spatial-session state are implemented. Full native AR rendering, LiDAR reconstruction, and real-time collaboration remain in development. The OpenAI Responses API integration is implemented as a hardened foundation; production evaluation, quotas, and billing controls remain. This README separates implemented foundations from planned capabilities.
 
 ## Contents
 
@@ -79,7 +79,7 @@ Open the browser build at **[cadpilot.vercel.app](https://cadpilot.vercel.app)**
 | Native AR renderer | In progress | Planes, anchors, occlusion, rendering, placement UX remain |
 | LiDAR reconstruction | Planned | Processing, meshing, cleanup, export remain |
 | Collaboration | Planned | Presence and robust multi-user conflicts remain |
-| Production AI | Planned | Provider, policy, metering, hardening remain |
+| Production AI | Implemented foundation | OpenAI Responses API, strict command schema, bounded timeout, safe failures, review-before-apply, and token metering; production evals, quotas, and billing remain |
 
 ## Architecture
 
@@ -284,8 +284,12 @@ Typical development `server/.env`:
 
 ```dotenv
 DATABASE_URL="postgresql://cadpilot:cadpilot@localhost:5432/cadpilot?schema=public"
-JWT_SECRET="replace-with-a-long-development-secret"
+JWT_ACCESS_SECRET="replace-with-a-long-random-access-secret"
+JWT_REFRESH_SECRET="replace-with-a-different-long-random-refresh-secret"
 PORT=3000
+OPENAI_API_KEY=""
+OPENAI_CAD_MODEL="gpt-5.6-luna"
+OPENAI_TIMEOUT_MS=30000
 ```
 
 Match credentials to [docker-compose.yml](docker-compose.yml). Never commit secrets.
@@ -513,6 +517,7 @@ Check `DATABASE_URL`, container health, ports, and migrations.
 | [Session refresh and revocation](docs/session-refresh-and-revocation-increment.md) | Client token rotation, offline recovery, invalidation, and logout behavior |
 | [Offline cloud verification](docs/offline-cloud-session-verification-increment.md) | Visible offline state, retry flow, and stale-token cloud guards |
 | [Secure storage v10 migration](docs/secure-storage-v10-migration.md) | Cipher modernization, automatic token migration, Web/Wasm compatibility |
+| [OpenAI provider hardening](docs/openai-provider-hardening-increment.md) | Responses API timeout, validation, privacy, metering, and safe failures |
 | [Phase notes](docs/) | Decisions and verification evidence |
 | [Flutter notes](tablet_app/README.md) | Client-specific guidance |
 
