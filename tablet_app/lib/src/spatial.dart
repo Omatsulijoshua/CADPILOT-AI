@@ -16,6 +16,7 @@ class SpatialCapabilities {
     required this.motionTrackingSupported,
     required this.captureMethod,
     this.nativeArRendererAvailable = false,
+    this.nativeDepthCaptureAvailable = false,
     this.arRuntimeInstalled = false,
   });
 
@@ -29,6 +30,7 @@ class SpatialCapabilities {
   final bool motionTrackingSupported;
   final String captureMethod;
   final bool nativeArRendererAvailable;
+  final bool nativeDepthCaptureAvailable;
   final bool arRuntimeInstalled;
 
   factory SpatialCapabilities.fromMap(Map<Object?, Object?> value) =>
@@ -47,6 +49,8 @@ class SpatialCapabilities {
         captureMethod: value['captureMethod'] as String? ?? 'manual',
         nativeArRendererAvailable:
             value['nativeArRendererAvailable'] as bool? ?? false,
+        nativeDepthCaptureAvailable:
+            value['nativeDepthCaptureAvailable'] as bool? ?? false,
         arRuntimeInstalled: value['arRuntimeInstalled'] as bool? ?? false,
       );
 
@@ -62,12 +66,23 @@ class SpatialCapabilities {
     captureMethod: 'manual',
   );
 
-  String get methodLabel => switch (captureMethod) {
-        'lidar' => 'LiDAR depth scanning',
-        'depth_camera' => 'Depth-camera scanning',
-        'camera_ar' => 'Camera AR tracking',
-        _ => 'Manual measurement fallback',
-      };
+  bool get depthCaptureReady =>
+      sceneDepthSupported &&
+      nativeDepthCaptureAvailable &&
+      (captureMethod == 'lidar' || captureMethod == 'depth_camera');
+
+  String get methodLabel {
+    if ((lidarSupported || sceneDepthSupported) &&
+        !nativeDepthCaptureAvailable) {
+      return 'Depth hardware detected; native capture unavailable';
+    }
+    return switch (captureMethod) {
+      'lidar' => 'LiDAR depth scanning',
+      'depth_camera' => 'Depth-camera scanning',
+      'camera_ar' => 'Camera AR tracking',
+      _ => 'Manual measurement fallback',
+    };
+  }
 }
 
 enum CameraPermissionState {
@@ -278,11 +293,13 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                             ? Icons.view_in_ar
                             : Icons.straighten),
                     title: Text(value.methodLabel),
-                    subtitle: Text(value.lidarSupported
-                        ? 'Hardware LiDAR capability confirmed.'
-                        : value.arSupported
-                            ? 'LiDAR is not reported; camera tracking is labeled separately.'
-                            : 'AR is unavailable. CAD and manual measurements remain available.'),
+                    subtitle: Text(value.depthCaptureReady
+                        ? 'Native depth capture is ready for advisory scan processing.'
+                        : (value.lidarSupported || value.sceneDepthSupported)
+                            ? 'Depth hardware is detected, but CadPilot native capture is not available in this build.'
+                            : value.arSupported
+                                ? 'LiDAR is not reported; camera tracking is labeled separately.'
+                                : 'AR is unavailable. CAD and manual measurements remain available.'),
                   ),
                   const Divider(),
                   Wrap(spacing: 12, runSpacing: 8, children: [
@@ -292,7 +309,9 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                     _status('CadPilot AR renderer',
                         value.nativeArRendererAvailable),
                     _status('LiDAR', value.lidarSupported),
-                    _status('Scene depth', value.sceneDepthSupported),
+                    _status('Scene depth hardware', value.sceneDepthSupported),
+                    _status('CadPilot depth capture',
+                        value.nativeDepthCaptureAvailable),
                     _status('Mesh reconstruction',
                         value.meshReconstructionSupported),
                     _status('Plane detection', value.planeDetectionSupported),

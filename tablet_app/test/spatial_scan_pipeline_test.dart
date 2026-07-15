@@ -16,6 +16,7 @@ const capabilities = SpatialCapabilities(
   planeDetectionSupported: true,
   motionTrackingSupported: true,
   captureMethod: 'depth_camera',
+  nativeDepthCaptureAvailable: true,
 );
 
 Map<Object?, Object?> frame(String id, double offset) => {

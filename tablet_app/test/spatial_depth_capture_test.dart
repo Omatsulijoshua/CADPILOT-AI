@@ -20,6 +20,7 @@ void main() {
     planeDetectionSupported: true,
     motionTrackingSupported: true,
     captureMethod: 'lidar',
+    nativeDepthCaptureAvailable: true,
   );
 
   tearDown(() {

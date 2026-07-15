@@ -218,9 +218,9 @@ class SpatialDepthCaptureService {
     final normalizedSessionId = _requiredId(sessionId, 'sessionId');
     final depthMethod = capabilities.captureMethod == 'lidar' ||
         capabilities.captureMethod == 'depth_camera';
-    if (!capabilities.sceneDepthSupported || !depthMethod) {
+    if (!capabilities.depthCaptureReady || !depthMethod) {
       throw StateError(
-        'Native depth capability is required before point-cloud capture.',
+        'CadPilot native depth capture must be available before point-cloud capture.',
       );
     }
     if (kIsWeb) return null;

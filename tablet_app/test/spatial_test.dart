@@ -40,6 +40,7 @@ void main() {
                   'planeDetectionSupported': true,
                   'motionTrackingSupported': true,
                   'captureMethod': 'lidar',
+                  'nativeDepthCaptureAvailable': true,
                 });
     final result =
         await const SpatialCapabilityService(channel: channel).detect();
@@ -47,6 +48,26 @@ void main() {
     expect(result.methodLabel, 'LiDAR depth scanning');
   });
 
+  test('hardware depth support does not imply a CadPilot capture adapter', () {
+    final capabilities = SpatialCapabilities.fromMap(const {
+      'platform': 'ios',
+      'cameraSupported': true,
+      'arSupported': true,
+      'lidarSupported': true,
+      'sceneDepthSupported': true,
+      'meshReconstructionSupported': true,
+      'planeDetectionSupported': true,
+      'motionTrackingSupported': true,
+      'captureMethod': 'lidar',
+      'nativeDepthCaptureAvailable': false,
+    });
+
+    expect(capabilities.depthCaptureReady, isFalse);
+    expect(
+      capabilities.methodLabel,
+      'Depth hardware detected; native capture unavailable',
+    );
+  });
   test('missing native plugin returns manual fallback', () async {
     const channel = MethodChannel('cadpilot/spatial-missing');
     final result =

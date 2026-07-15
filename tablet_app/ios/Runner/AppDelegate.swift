@@ -33,6 +33,12 @@ import ARKit
         AVCaptureDevice.requestAccess(for: .video) { granted in
           DispatchQueue.main.async { result(granted ? "granted" : self.cameraPermission()) }
         }
+      case "captureDepthFrame":
+        result(FlutterError(
+          code: "depth_capture_unavailable",
+          message: "CadPilot native depth capture is not available in this build.",
+          details: call.arguments
+        ))
       case "startArSession", "createFloorAnchor", "captureArScreenshot":
         result(FlutterError(
           code: "ar_renderer_unavailable",
@@ -76,7 +82,7 @@ import ARKit
       "meshReconstructionSupported": meshSupported, "planeDetectionSupported": arSupported,
       "motionTrackingSupported": arSupported,
       "captureMethod": lidarSupported ? "lidar" : (arSupported ? "camera_ar" : "manual"),
-      "nativeArRendererAvailable": false
+      "nativeArRendererAvailable": false, "nativeDepthCaptureAvailable": false
     ]
     #else
     return [
@@ -85,7 +91,7 @@ import ARKit
       "arRuntimeInstalled": false,
       "meshReconstructionSupported": false, "planeDetectionSupported": false,
       "motionTrackingSupported": false, "captureMethod": "manual",
-      "nativeArRendererAvailable": false
+      "nativeArRendererAvailable": false, "nativeDepthCaptureAvailable": false
     ]
     #endif
   }

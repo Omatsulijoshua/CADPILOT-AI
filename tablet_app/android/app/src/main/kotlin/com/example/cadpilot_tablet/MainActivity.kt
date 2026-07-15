@@ -58,7 +58,8 @@ class MainActivity : FlutterActivity() {
                 "planeDetectionSupported" to ar,
                 "motionTrackingSupported" to gyro,
                 "captureMethod" to if (ar) "camera_ar" else "manual",
-                "nativeArRendererAvailable" to false
+                "nativeArRendererAvailable" to false,
+                "nativeDepthCaptureAvailable" to false
             )
             runOnUiThread { result.success(capabilities) }
         }

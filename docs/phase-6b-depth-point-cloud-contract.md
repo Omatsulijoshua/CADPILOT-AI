@@ -128,9 +128,9 @@ capture. Android's native adapter remains unavailable until its ARCore depth ses
 implemented and verified on compatible physical hardware.
 ## Capability gate
 
-Capture is callable only when the capability snapshot reports `sceneDepthSupported` and identifies the method as `lidar` or `depth_camera`. Web and missing plugins return no frame. Platform errors also return no frame. Malformed frames throw `FormatException` so programming/data-contract errors remain distinguishable from unavailable hardware.
+Capture is callable only when the capability snapshot reports depth hardware support, identifies the method as `lidar` or `depth_camera`, and explicitly reports `nativeDepthCaptureAvailable`. Web and missing plugins return no frame. Platform errors also return no frame. Malformed frames throw `FormatException` so programming/data-contract errors remain distinguishable from unavailable hardware.
 
-Android currently reports `sceneDepthSupported: false` and handles `captureDepthFrame` with the explicit `depth_capture_unavailable` platform error. This preserves truthful product behavior until an ARCore Depth session, camera texture, render/update loop, and depth-image conversion are implemented and verified on physical hardware.
+Android reports `sceneDepthSupported: false`; iOS may report ARKit depth hardware support, but both hosts report `nativeDepthCaptureAvailable: false` and handle `captureDepthFrame` with the explicit `depth_capture_unavailable` platform error. This preserves truthful product behavior until an ARCore Depth session, camera texture, render/update loop, and depth-image conversion are implemented and verified on physical hardware.
 
 ## Safety properties
 
