@@ -212,6 +212,13 @@ class ProjectsController extends AsyncNotifier<List<CadProject>> {
     return synced;
   }
 
+  Future<void> archiveCloudCopy(String projectId) async {
+    final token = await _requireCloudToken(
+      'Sign in to archive this cloud project.',
+    );
+    await ref.read(cloudApiProvider).archiveProject(projectId, token);
+  }
+
   Future<CadProject> importFromCloud(String projectId) async {
     final token = await _requireCloudToken(
       'Sign in to download cloud projects.',
