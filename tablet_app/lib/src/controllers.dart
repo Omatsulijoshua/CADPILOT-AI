@@ -13,6 +13,12 @@ final localStoreProvider =
 final cloudApiProvider = Provider<CloudApi>((ref) => CloudApi());
 final tokenStoreProvider =
     Provider<TokenStore>((ref) => const SecureTokenStore());
+
+enum CloudSessionStatus { notApplicable, verified, offline }
+
+final cloudSessionStatusProvider = StateProvider<CloudSessionStatus>(
+  (ref) => CloudSessionStatus.notApplicable,
+);
 final sessionProvider = AsyncNotifierProvider<SessionController, Session?>(
   SessionController.new,
 );
@@ -24,18 +30,28 @@ final projectsProvider =
 class SessionController extends AsyncNotifier<Session?> {
   LocalStore get _store => ref.read(localStoreProvider);
 
+  void _setCloudStatus(CloudSessionStatus status) =>
+      ref.read(cloudSessionStatusProvider.notifier).state = status;
+
   @override
   Future<Session?> build() async {
     final storedSession = await _store.readSession();
     if (storedSession == null || storedSession.kind == SessionKind.guest) {
+      _setCloudStatus(CloudSessionStatus.notApplicable);
       return storedSession;
     }
+    return _refresh(storedSession, updateState: false);
+  }
+
+  Future<Session?> _refresh(
+    Session storedSession, {
+    required bool updateState,
+  }) async {
     final tokens = ref.read(tokenStoreProvider);
     try {
       final refreshToken = await tokens.readRefreshToken();
-      if (refreshToken == null) {
-        await tokens.clear();
-        await _store.writeSession(null);
+      if (refreshToken == null || refreshToken.trim().isEmpty) {
+        await _clearSession(tokens, updateState: updateState);
         return null;
       }
       final credentials =
@@ -45,17 +61,38 @@ class SessionController extends AsyncNotifier<Session?> {
         refreshToken: credentials.refreshToken,
       );
       await _store.writeSession(credentials.session);
+      _setCloudStatus(CloudSessionStatus.verified);
+      if (updateState) state = AsyncData(credentials.session);
       return credentials.session;
     } on CloudApiException catch (error) {
       if (error.statusCode == 400 || error.statusCode == 401) {
-        await tokens.clear();
-        await _store.writeSession(null);
+        await _clearSession(tokens, updateState: updateState);
         return null;
       }
+      _setCloudStatus(CloudSessionStatus.offline);
       return storedSession;
     } catch (_) {
+      _setCloudStatus(CloudSessionStatus.offline);
       return storedSession;
     }
+  }
+
+  Future<void> _clearSession(
+    TokenStore tokens, {
+    required bool updateState,
+  }) async {
+    await tokens.clear();
+    await _store.writeSession(null);
+    _setCloudStatus(CloudSessionStatus.notApplicable);
+    if (updateState) state = const AsyncData(null);
+  }
+
+  Future<bool> retryCloudVerification() async {
+    final current = state.valueOrNull;
+    if (current == null || current.kind != SessionKind.signedIn) return false;
+    final refreshed = await _refresh(current, updateState: true);
+    return refreshed != null &&
+        ref.read(cloudSessionStatusProvider) == CloudSessionStatus.verified;
   }
 
   Future<void> register(
@@ -78,6 +115,7 @@ class SessionController extends AsyncNotifier<Session?> {
           refreshToken: credentials.refreshToken,
         );
     await _store.writeSession(credentials.session);
+    _setCloudStatus(CloudSessionStatus.verified);
     state = AsyncData(credentials.session);
   }
 
@@ -92,6 +130,7 @@ class SessionController extends AsyncNotifier<Session?> {
           refreshToken: credentials.refreshToken,
         );
     await _store.writeSession(credentials.session);
+    _setCloudStatus(CloudSessionStatus.verified);
     state = AsyncData(credentials.session);
   }
 
@@ -99,6 +138,7 @@ class SessionController extends AsyncNotifier<Session?> {
     const session =
         Session(kind: SessionKind.guest, displayName: 'Guest designer');
     await _store.writeSession(session);
+    _setCloudStatus(CloudSessionStatus.notApplicable);
     state = const AsyncData(session);
   }
 
@@ -112,9 +152,7 @@ class SessionController extends AsyncNotifier<Session?> {
     } catch (_) {
       // Local sign-out must succeed even when revocation cannot reach the API.
     } finally {
-      await tokens.clear();
-      await _store.writeSession(null);
-      state = const AsyncData(null);
+      await _clearSession(tokens, updateState: true);
     }
   }
 }
@@ -124,6 +162,19 @@ class ProjectsController extends AsyncNotifier<List<CadProject>> {
 
   @override
   Future<List<CadProject>> build() => _store.readProjects();
+
+  Future<String> _requireCloudToken(String signedOutMessage) async {
+    if (ref.read(cloudSessionStatusProvider) == CloudSessionStatus.offline) {
+      throw StateError(
+        'Reconnect and verify your cloud session before using cloud projects.',
+      );
+    }
+    final token = await ref.read(tokenStoreProvider).readAccessToken();
+    if (token == null || token.trim().isEmpty) {
+      throw StateError(signedOutMessage);
+    }
+    return token;
+  }
 
   Future<CadProject> create(String name) async {
     final now = DateTime.now().toUtc();
@@ -152,10 +203,9 @@ class ProjectsController extends AsyncNotifier<List<CadProject>> {
   }
 
   Future<CadProject> sync(CadProject project) async {
-    final token = await ref.read(tokenStoreProvider).readAccessToken();
-    if (token == null || token.trim().isEmpty) {
-      throw StateError('Sign in to back up this project to the cloud.');
-    }
+    final token = await _requireCloudToken(
+      'Sign in to back up this project to the cloud.',
+    );
     final result = await ref.read(cloudApiProvider).pushProject(project, token);
     final synced = project.markSynced(result.appliedRevision);
     await save(synced);
@@ -163,10 +213,9 @@ class ProjectsController extends AsyncNotifier<List<CadProject>> {
   }
 
   Future<CadProject> importFromCloud(String projectId) async {
-    final token = await ref.read(tokenStoreProvider).readAccessToken();
-    if (token == null || token.trim().isEmpty) {
-      throw StateError('Sign in to download cloud projects.');
-    }
+    final token = await _requireCloudToken(
+      'Sign in to download cloud projects.',
+    );
     final restored =
         await ref.read(cloudApiProvider).pullProject(projectId, token);
     final projects = [...state.valueOrNull ?? const <CadProject>[]];
@@ -187,10 +236,9 @@ class ProjectsController extends AsyncNotifier<List<CadProject>> {
   }
 
   Future<CadProject> restoreFromCloud(String projectId) async {
-    final token = await ref.read(tokenStoreProvider).readAccessToken();
-    if (token == null || token.trim().isEmpty) {
-      throw StateError('Sign in to restore this project from the cloud.');
-    }
+    final token = await _requireCloudToken(
+      'Sign in to restore this project from the cloud.',
+    );
     final restored =
         await ref.read(cloudApiProvider).pullProject(projectId, token);
     await save(restored);

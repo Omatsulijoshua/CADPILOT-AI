@@ -110,7 +110,7 @@ The increment adds seven tests: three HTTP contract tests and four session-contr
 
 ## Remaining production hardening
 
-- Add an explicit retry/re-authentication banner when a cached signed-in session is retained offline.
+- Delivered in `offline-cloud-session-verification-increment.md`: explicit retry banner and cloud-operation guards for cached offline sessions.
 - Add refresh request coalescing if multiple API requests can independently trigger rotation.
 - Support server-managed device/session lists and per-device revocation.
 - Add refresh-token reuse detection and security audit events on the backend.

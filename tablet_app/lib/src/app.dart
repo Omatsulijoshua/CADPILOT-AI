@@ -294,81 +294,134 @@ class _DashboardState extends ConsumerState<Dashboard> {
       );
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        body: Row(
-          children: [
-            NavigationRail(
-              extended: MediaQuery.sizeOf(context).width > 1050,
-              selectedIndex: selectedIndex,
-              onDestinationSelected: (value) =>
-                  setState(() => selectedIndex = value),
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.grid_view),
-                  label: Text('Projects'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.cloud_outlined),
-                  label: Text('Cloud'),
-                ),
-              ],
+  Widget build(BuildContext context) {
+    final cloudStatus = ref.watch(cloudSessionStatusProvider);
+    return Scaffold(
+      body: Row(
+        children: [
+          NavigationRail(
+            extended: MediaQuery.sizeOf(context).width > 1050,
+            selectedIndex: selectedIndex,
+            onDestinationSelected: (value) =>
+                setState(() => selectedIndex = value),
+            destinations: const [
+              NavigationRailDestination(
+                icon: Icon(Icons.grid_view),
+                label: Text('Projects'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.cloud_outlined),
+                label: Text('Cloud'),
+              ),
+            ],
+          ),
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              selectedIndex == 0
+                                  ? 'Good to see you, ${widget.session.displayName}'
+                                  : 'Cloud projects',
+                              style: const TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(selectedIndex == 0
+                                ? 'Your local design workspace'
+                                : 'Authenticated backups available to this account'),
+                          ],
+                        ),
+                      ),
+                      if (selectedIndex == 0)
+                        FilledButton.icon(
+                          onPressed: create,
+                          icon: const Icon(Icons.add),
+                          label: const Text('New project'),
+                        ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        tooltip: 'Sign out',
+                        onPressed: ref.read(sessionProvider.notifier).signOut,
+                        icon: const Icon(Icons.logout),
+                      ),
+                    ],
+                  ),
+                  if (widget.session.kind == SessionKind.signedIn &&
+                      cloudStatus == CloudSessionStatus.offline) ...[
+                    const SizedBox(height: 16),
+                    CloudSessionBanner(
+                      onRetry: ref
+                          .read(sessionProvider.notifier)
+                          .retryCloudVerification,
+                    ),
+                  ],
+                  const SizedBox(height: 30),
+                  Expanded(
+                    child: selectedIndex == 0
+                        ? ProjectGrid(onOpen: openProject)
+                        : CloudProjectsPanel(
+                            session: widget.session,
+                            onOpen: openProject,
+                          ),
+                  ),
+                ],
+              ),
             ),
-            const VerticalDivider(width: 1),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CloudSessionBanner extends StatelessWidget {
+  const CloudSessionBanner({required this.onRetry, super.key});
+
+  final Future<bool> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Theme.of(context).colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              const Icon(Icons.cloud_off_outlined),
+              const SizedBox(width: 12),
+              const Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                selectedIndex == 0
-                                    ? 'Good to see you, ${widget.session.displayName}'
-                                    : 'Cloud projects',
-                                style: const TextStyle(
-                                  fontSize: 30,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              Text(selectedIndex == 0
-                                  ? 'Your local design workspace'
-                                  : 'Authenticated backups available to this account'),
-                            ],
-                          ),
-                        ),
-                        if (selectedIndex == 0)
-                          FilledButton.icon(
-                            onPressed: create,
-                            icon: const Icon(Icons.add),
-                            label: const Text('New project'),
-                          ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          tooltip: 'Sign out',
-                          onPressed: ref.read(sessionProvider.notifier).signOut,
-                          icon: const Icon(Icons.logout),
-                        ),
-                      ],
+                    Text(
+                      'Working offline',
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 30),
-                    Expanded(
-                      child: selectedIndex == 0
-                          ? ProjectGrid(onOpen: openProject)
-                          : CloudProjectsPanel(
-                              session: widget.session,
-                              onOpen: openProject,
-                            ),
+                    Text(
+                      'Local projects remain available. Reconnect to verify your cloud session before backup or restore.',
                     ),
                   ],
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              TextButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
         ),
       );
 }
@@ -399,6 +452,11 @@ class _CloudProjectsPanelState extends ConsumerState<CloudProjectsPanel> {
   }
 
   Future<List<CloudProjectSummary>> load() async {
+    if (ref.read(cloudSessionStatusProvider) == CloudSessionStatus.offline) {
+      throw StateError(
+        'Reconnect and verify your cloud session before browsing backups.',
+      );
+    }
     if (widget.session.kind != SessionKind.signedIn) {
       throw StateError('Sign in to browse and restore cloud projects.');
     }

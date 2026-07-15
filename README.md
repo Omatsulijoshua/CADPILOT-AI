@@ -65,7 +65,7 @@ Open the browser build at **[cadpilot.vercel.app](https://cadpilot.vercel.app)**
 | Area | Status | Current behavior |
 |---|---|---|
 | Flutter shell | Implemented | Responsive navigation, projects, editor, settings, branded web shell |
-| Authentication | Implemented foundation | Account registration, sign-in, secure token storage, refresh-token rotation, revocable logout, guest mode, and offline-tolerant session restoration |
+| Authentication | Implemented foundation | Account registration, sign-in, secure token storage, refresh-token rotation, revocable logout, guest mode, and offline-tolerant session restoration with a visible reconnect-and-verify state |
 | Project management | Implemented | Create, open, persist, back up, browse cloud projects, restore, and manage projects |
 | Durable autosave | Implemented | Lifecycle-aware local persistence |
 | Sketching | Implemented | Entities, selection, dimensions, constraints, tools, viewport |
@@ -326,7 +326,7 @@ Use compatible physical hardware for ARCore. On macOS/iOS, run `open ios/Runner.
 
 ## Testing
 
-At the latest verified point, the Flutter suite contains **135 passing tests**. Run it locally because the count evolves.
+At the latest verified point, the Flutter suite contains **139 passing tests**. Run it locally because the count evolves.
 
 ```powershell
 cd tablet_app
@@ -511,6 +511,7 @@ Check `DATABASE_URL`, container health, ports, and migrations.
 | [File format](docs/cad-file-format.md) | Versioned document representation |
 | [Security](docs/security.md) | Threats, permissions, secrets, trust boundaries |
 | [Session refresh and revocation](docs/session-refresh-and-revocation-increment.md) | Client token rotation, offline recovery, invalidation, and logout behavior |
+| [Offline cloud verification](docs/offline-cloud-session-verification-increment.md) | Visible offline state, retry flow, and stale-token cloud guards |
 | [Phase notes](docs/) | Decisions and verification evidence |
 | [Flutter notes](tablet_app/README.md) | Client-specific guidance |
 
