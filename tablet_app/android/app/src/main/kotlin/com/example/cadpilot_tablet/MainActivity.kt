@@ -18,7 +18,7 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "cadpilot/spatial")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "getCapabilities" -> result.success(spatialCapabilities())
+                    "getCapabilities" -> spatialCapabilities(result)
                     "getCameraPermission" -> result.success(cameraPermission())
                     "requestCameraPermission" -> requestCameraPermission(result)
                     "startArSession",
@@ -34,24 +34,26 @@ class MainActivity : FlutterActivity() {
             }
     }
 
-    private fun spatialCapabilities(): Map<String, Any> {
+    private fun spatialCapabilities(result: MethodChannel.Result) {
         val manager = packageManager
         val camera = manager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
         val gyro = manager.hasSystemFeature(PackageManager.FEATURE_SENSOR_GYROSCOPE)
-        val arCoreAvailability = ArCoreApk.getInstance().checkAvailability(this)
-        val ar = camera && gyro && arCoreAvailability.isSupported
-        return mapOf(
-            "platform" to "android",
-            "cameraSupported" to camera,
-            "arSupported" to ar,
-            "lidarSupported" to false,
-            "sceneDepthSupported" to false,
-            "meshReconstructionSupported" to false,
-            "planeDetectionSupported" to ar,
-            "motionTrackingSupported" to gyro,
-            "captureMethod" to if (ar) "camera_ar" else "manual",
-            "nativeArRendererAvailable" to false
-        )
+        ArCoreApk.getInstance().checkAvailabilityAsync(this) { availability ->
+            val ar = camera && gyro && availability.isSupported
+            val capabilities = mapOf(
+                "platform" to "android",
+                "cameraSupported" to camera,
+                "arSupported" to ar,
+                "lidarSupported" to false,
+                "sceneDepthSupported" to false,
+                "meshReconstructionSupported" to false,
+                "planeDetectionSupported" to ar,
+                "motionTrackingSupported" to gyro,
+                "captureMethod" to if (ar) "camera_ar" else "manual",
+                "nativeArRendererAvailable" to false
+            )
+            runOnUiThread { result.success(capabilities) }
+        }
     }
 
     private fun cameraPermission(): String = when {
