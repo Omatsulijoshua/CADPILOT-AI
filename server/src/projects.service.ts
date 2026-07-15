@@ -35,6 +35,20 @@ export class ProjectsService {
     if (result.count !== 1) throw new NotFoundException('Project not found');
     return { success: true };
   }
+  async changes(ownerId: string, projectId: string) {
+    await this.get(ownerId, projectId);
+    return this.prisma.syncMutation.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        mutationId: true,
+        baseRevision: true,
+        appliedRevision: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+  }
   create(ownerId: string, name: string) {
     const normalizedName = name.trim() || 'Untitled design';
     return this.prisma.project.create({

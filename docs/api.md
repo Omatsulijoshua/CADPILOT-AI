@@ -30,6 +30,15 @@ return `404` to avoid disclosing project existence.
 - Project and mutation lookups are ownership-scoped and do not disclose another user's records.
 
 Local edits remain pending until the client validates and persists the returned applied revision.
+
+### View project change metadata
+
+`GET /v1/projects/:id/changes` returns newest-first revision metadata for an
+active project owned by the authenticated user. Each item contains the mutation
+ID, base revision, applied revision, status, and timestamp. It intentionally
+does not include manifests or scan payloads; use the normal project download
+route to retrieve a selected current manifest. Missing, inactive, and foreign
+projects return `404`.
 ### Download one cloud project
 
 `GET /v1/projects/:id` returns the active project row for the authenticated owner, including the positive server `revision` and versioned `manifest`. Missing, inactive, and foreign project IDs return 404. Clients must validate that `manifest.id` matches the requested ID before replacing local data.

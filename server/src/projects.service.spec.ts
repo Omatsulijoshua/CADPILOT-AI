@@ -23,6 +23,7 @@ function createPrisma() {
       },
       syncMutation: {
         findUnique: jest.fn(),
+        findMany: jest.fn(),
         updateMany: jest.fn(),
       },
       $transaction: jest.fn(
@@ -227,5 +228,39 @@ describe('ProjectsService get', () => {
 
     await expect(service.get('owner-1', 'foreign-project')).rejects
       .toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('ProjectsService changes', () => {
+  test('returns only metadata for an owned active project history', async () => {
+    const { prisma } = createPrisma();
+    prisma.project.findFirst.mockResolvedValue({ id: 'project-1' });
+    prisma.syncMutation.findMany.mockResolvedValue([{ mutationId: 'mutation-1' }]);
+    const service = new ProjectsService(prisma as never);
+
+    await expect(service.changes('owner-1', 'project-1')).resolves.toEqual([
+      { mutationId: 'mutation-1' },
+    ]);
+    expect(prisma.syncMutation.findMany).toHaveBeenCalledWith({
+      where: { projectId: 'project-1' },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        mutationId: true,
+        baseRevision: true,
+        appliedRevision: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+  });
+
+  test('does not query history when project ownership check fails', async () => {
+    const { prisma } = createPrisma();
+    prisma.project.findFirst.mockResolvedValue(null);
+    const service = new ProjectsService(prisma as never);
+
+    await expect(service.changes('owner-1', 'foreign-project')).rejects
+      .toBeInstanceOf(NotFoundException);
+    expect(prisma.syncMutation.findMany).not.toHaveBeenCalled();
   });
 });

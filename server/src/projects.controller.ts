@@ -9,6 +9,7 @@ class SyncDto { @IsUUID() mutationId!: string; @IsInt() @Min(0) baseRevision!: n
 export class ProjectsController {
   constructor(private readonly projects: ProjectsService) {}
   @Get() list(@Req() request: AuthenticatedRequest) { return this.projects.list(request.user.id); }
+  @Get(':id/changes') changes(@Req() request: AuthenticatedRequest, @Param('id') id: string) { return this.projects.changes(request.user.id, id); }
   @Get(':id') get(@Req() request: AuthenticatedRequest, @Param('id') id: string) { return this.projects.get(request.user.id, id); }
   @Post() create(@Req() request: AuthenticatedRequest, @Body() dto: CreateProjectDto) { return this.projects.create(request.user.id, dto.name); }
   @Delete(':id') archive(@Req() request: AuthenticatedRequest, @Param('id') id: string) { return this.projects.archive(request.user.id, id); }
