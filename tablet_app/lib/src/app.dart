@@ -1364,6 +1364,53 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
     if (mounted) setState(() => status = 'Project renamed locally');
   }
 
+  Future<void> showCloudHistory(CadProject project) async {
+    final token = await ref.read(tokenStoreProvider).readAccessToken();
+    if (!mounted) return;
+    if (token == null) {
+      setState(() => status = 'Sign in to view cloud history');
+      return;
+    }
+    try {
+      final changes = await ref
+          .read(cloudApiProvider)
+          .listProjectChanges(project.id, token);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Cloud version history'),
+          content: SizedBox(
+            width: 520,
+            child: changes.isEmpty
+                ? const Text('No cloud changes have been recorded yet.')
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: changes.length,
+                    itemBuilder: (_, index) {
+                      final change = changes[index];
+                      return ListTile(
+                        leading: const Icon(Icons.history),
+                        title: Text(
+                            'Revision ${change.appliedRevision ?? 'pending'} - ${change.status}'),
+                        subtitle: Text(
+                            'From ${change.baseRevision} - ${change.createdAt.toLocal()}'),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close')),
+          ],
+        ),
+      );
+    } on CloudApiException catch (error) {
+      if (mounted) setState(() => status = error.message);
+    }
+  }
+
   Future<void> runAiCommand(CadProject project) async {
     final token = await ref.read(tokenStoreProvider).readAccessToken();
     if (!mounted) return;
@@ -1449,6 +1496,11 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
             tooltip: 'Rename project',
             onPressed: () => renameProject(project),
             icon: const Icon(Icons.drive_file_rename_outline),
+          ),
+          IconButton(
+            tooltip: 'Cloud version history',
+            onPressed: () => showCloudHistory(project),
+            icon: const Icon(Icons.history),
           ),
           Tooltip(
             message: status,

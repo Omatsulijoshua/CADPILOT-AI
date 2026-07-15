@@ -241,6 +241,29 @@ void main() {
       throwsA(isA<CloudApiException>()),
     );
   });
+
+  test('cloud history decodes metadata without a manifest payload', () async {
+    final client = MockClient((request) async {
+      expect(request.url.path, '/v1/projects/project-1/changes');
+      expect(request.headers['authorization'], 'Bearer access');
+      return http.Response(
+          jsonEncode([
+            {
+              'mutationId': 'mutation-1',
+              'baseRevision': 2,
+              'appliedRevision': 3,
+              'status': 'APPLIED',
+              'createdAt': '2026-07-16T00:00:00.000Z',
+            }
+          ]),
+          200);
+    });
+    final changes =
+        await CloudApi(client: client, baseUrl: 'https://api.test/v1')
+            .listProjectChanges('project-1', 'access');
+    expect(changes.single.appliedRevision, 3);
+    expect(changes.single.status, 'APPLIED');
+  });
   test('archives an owned cloud project with bearer authentication', () async {
     final client = MockClient((request) async {
       expect(request.method, 'DELETE');

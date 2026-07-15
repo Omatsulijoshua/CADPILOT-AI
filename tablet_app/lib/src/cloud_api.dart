@@ -65,6 +65,47 @@ class ProjectSyncResult {
   final int appliedRevision;
 }
 
+class CloudProjectChange {
+  const CloudProjectChange({
+    required this.mutationId,
+    required this.baseRevision,
+    required this.appliedRevision,
+    required this.status,
+    required this.createdAt,
+  });
+
+  final String mutationId;
+  final int baseRevision;
+  final int? appliedRevision;
+  final String status;
+  final DateTime createdAt;
+
+  factory CloudProjectChange.fromMap(Map<String, Object?> value) {
+    final mutationId = value['mutationId'] as String?;
+    final baseRevision = value['baseRevision'] as int?;
+    final appliedRevision = value['appliedRevision'] as int?;
+    final status = value['status'] as String?;
+    final createdAt = DateTime.tryParse(value['createdAt'] as String? ?? '');
+    if (mutationId == null ||
+        mutationId.trim().isEmpty ||
+        baseRevision == null ||
+        baseRevision < 0 ||
+        (appliedRevision != null && appliedRevision < 1) ||
+        status == null ||
+        status.trim().isEmpty ||
+        createdAt == null) {
+      throw const FormatException('Invalid cloud project change.');
+    }
+    return CloudProjectChange(
+      mutationId: mutationId,
+      baseRevision: baseRevision,
+      appliedRevision: appliedRevision,
+      status: status,
+      createdAt: createdAt.toUtc(),
+    );
+  }
+}
+
 class CloudApiException implements Exception {
   const CloudApiException(this.message, [this.statusCode]);
   final String message;
@@ -291,6 +332,37 @@ class CloudApi {
     } catch (_) {
       throw const CloudApiException(
         'Cloud project data is invalid and was not restored.',
+      );
+    }
+  }
+
+  Future<List<CloudProjectChange>> listProjectChanges(
+      String projectId, String token) async {
+    if (projectId.trim().isEmpty) {
+      throw ArgumentError.value(projectId, 'projectId', 'must not be empty');
+    }
+    final response = await client.get(
+      Uri.parse('$baseUrl/projects/$projectId/changes'),
+      headers: {'authorization': 'Bearer $token'},
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CloudApiException(
+        response.statusCode == 404
+            ? 'No cloud history was found for this project.'
+            : 'Could not load cloud project history.',
+        response.statusCode,
+      );
+    }
+    try {
+      final values = jsonDecode(response.body) as List<Object?>;
+      return values
+          .map((value) => CloudProjectChange.fromMap(
+                Map<String, Object?>.from(value! as Map),
+              ))
+          .toList(growable: false);
+    } catch (_) {
+      throw const CloudApiException(
+        'Cloud project history is invalid and could not be displayed.',
       );
     }
   }
