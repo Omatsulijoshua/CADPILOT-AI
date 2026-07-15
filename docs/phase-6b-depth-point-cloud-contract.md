@@ -103,6 +103,29 @@ The result includes width on X, height on Y, depth on Z, diagonal length, centro
 
 These are **axis-aligned scan bounds**, not oriented dimensions, watertight volume, surface area, toleranced inspection data, or certified measurements. The API always carries the label `Advisory scan bounds; not a certified measurement.` Physical-device calibration and an oriented/segmented geometry model are required before dimensions can drive manufacturing decisions.
 
+## Bounded scan pipeline
+
+`SpatialScanPipeline` is the orchestration boundary between native frame acquisition and
+advisory scan output. It captures sequentially, with an explicit upper bound of 50
+frames per scan, and then performs registration, cleanup, and measurement extraction in
+that order. It never invents a measurement: no native frame returns `unavailable`, and
+a scan with fewer than three validated processed points returns `insufficientData`.
+
+```mermaid
+flowchart LR
+    Request["Requested frames: 1-50"] --> Capture["Sequential native capture"]
+    Capture -->|"no frame"| Unavailable["unavailable result"]
+    Capture --> Frames["Validated frames"]
+    Frames --> Register["World-space registration"]
+    Register --> Clean["Confidence, voxel, outlier cleanup"]
+    Clean --> Enough{"At least 3 points?"}
+    Enough -->|"no"| Insufficient["insufficientData result"]
+    Enough -->|"yes"| Measurements["Advisory bounds"]
+```
+
+This is a Dart orchestration and safety boundary, not a claim of active device depth
+capture. Android's native adapter remains unavailable until its ARCore depth session is
+implemented and verified on compatible physical hardware.
 ## Capability gate
 
 Capture is callable only when the capability snapshot reports `sceneDepthSupported` and identifies the method as `lidar` or `depth_camera`. Web and missing plugins return no frame. Platform errors also return no frame. Malformed frames throw `FormatException` so programming/data-contract errors remain distinguishable from unavailable hardware.

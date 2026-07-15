@@ -531,7 +531,7 @@ Check `DATABASE_URL`, container health, ports, and migrations.
 | [Backend CORS allowlist](docs/backend-cors-allowlist.md) | Production browser-origin allowlist, deployment setup, and HTTP-level verification |
 | [Backend security headers](docs/backend-security-headers.md) | Helmet policy, local-versus-production behavior, and HTTP-level header verification |
 | [Flutter continuous integration](docs/flutter-ci.md) | Locked SDK/dependencies, analysis, 158 tests, Wasm and standard web releases, Android debug compilation, and trust boundary |
-| [Phase 6B depth/point-cloud contract](docs/phase-6b-depth-point-cloud-contract.md) | Capability gating, normalized coordinates, sensor poses, registration, bounded cleanup, advisory measurements, processing statistics, safety limits, and reconstruction roadmap |
+| [Phase 6B depth/point-cloud contract](docs/phase-6b-depth-point-cloud-contract.md) | Capability gating, normalized coordinates, sensor poses, 50-frame bounded orchestration, registration, bounded cleanup, advisory measurements, processing statistics, safety limits, and reconstruction roadmap |
 | [NestJS 11 security migration](docs/nestjs-11-security-migration.md) | Express 5 compatibility, Node 20 floor, HTTP regression tests, request-size protection, and zero-audit verification |
 | [Phase notes](docs/) | Decisions and verification evidence |
 | [Flutter notes](tablet_app/README.md) | Client-specific guidance |
