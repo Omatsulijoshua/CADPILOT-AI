@@ -62,6 +62,29 @@ class NativeSpatialTransform {
       throw ArgumentError.value(value.plane, 'plane',
           'A floor anchor transform requires floor placement.');
     }
+    final dimensions = {
+      'widthMm': value.widthMm,
+      'heightMm': value.heightMm,
+      'depthMm': value.depthMm,
+    };
+    for (final entry in dimensions.entries) {
+      if (!entry.value.isFinite || entry.value <= 0) {
+        throw ArgumentError.value(entry.value, entry.key,
+            'AR dimensions must be finite and above zero.');
+      }
+    }
+    final transforms = {
+      'offsetXMm': value.offsetXMm,
+      'offsetYMm': value.offsetYMm,
+      'offsetZMm': value.offsetZMm,
+      'rotationDegrees': value.rotationDegrees,
+    };
+    for (final entry in transforms.entries) {
+      if (!entry.value.isFinite) {
+        throw ArgumentError.value(
+            entry.value, entry.key, 'AR transforms must be finite.');
+      }
+    }
     final radians = value.rotationDegrees * math.pi / 180;
     final cosine = math.cos(radians);
     final sine = math.sin(radians);
@@ -101,6 +124,10 @@ class NativeFloorAnchorRequest {
   final NativeSpatialTransform transform;
 
   factory NativeFloorAnchorRequest.fromPlacement(SpatialPlacement placement) {
+    if (placement.id.trim().isEmpty) {
+      throw ArgumentError.value(
+          placement.id, 'id', 'Placement ID is required.');
+    }
     if (placement.source != 'camera_ar') {
       throw StateError(
           'Only a preflight-approved camera AR placement can request an anchor.');

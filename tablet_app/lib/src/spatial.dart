@@ -513,11 +513,15 @@ class _PlacementPlannerDialogState extends State<PlacementPlannerDialog> {
 
   String? positive(String? value) {
     final parsed = double.tryParse(value?.trim() ?? '');
-    return parsed == null || parsed <= 0 ? 'Enter a value above 0' : null;
+    return parsed == null || !parsed.isFinite || parsed <= 0
+        ? 'Enter a finite value above 0'
+        : null;
   }
 
-  String? numeric(String? value) =>
-      double.tryParse(value?.trim() ?? '') == null ? 'Enter a number' : null;
+  String? numeric(String? value) {
+    final parsed = double.tryParse(value?.trim() ?? '');
+    return parsed == null || !parsed.isFinite ? 'Enter a finite number' : null;
+  }
 
   void save() {
     if (!formKey.currentState!.validate()) return;

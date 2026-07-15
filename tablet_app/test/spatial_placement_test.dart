@@ -186,4 +186,53 @@ void main() {
     );
     expect(placement.toFloorAnchorTransform, throwsArgumentError);
   });
+
+  test('native transform rejects non-finite and non-positive geometry', () {
+    final valid = SpatialPlacement(
+      id: 'finite',
+      name: 'Finite',
+      createdAt: DateTime.utc(2026, 7, 15),
+      source: 'camera_ar',
+      plane: 'floor',
+      widthMm: 100,
+      heightMm: 100,
+      depthMm: 100,
+      offsetXMm: 0,
+      offsetYMm: 0,
+      offsetZMm: 0,
+      rotationDegrees: 0,
+    );
+    expect(
+        valid.copyWith(widthMm: 0).toFloorAnchorTransform, throwsArgumentError);
+    expect(valid.copyWith(heightMm: double.nan).toFloorAnchorTransform,
+        throwsArgumentError);
+    expect(valid.copyWith(depthMm: double.infinity).toFloorAnchorTransform,
+        throwsArgumentError);
+    expect(
+        valid
+            .copyWith(offsetXMm: double.negativeInfinity)
+            .toFloorAnchorTransform,
+        throwsArgumentError);
+    expect(valid.copyWith(rotationDegrees: double.nan).toFloorAnchorTransform,
+        throwsArgumentError);
+  });
+
+  test('native anchor request requires a non-empty placement identity', () {
+    final placement = SpatialPlacement(
+      id: '   ',
+      name: 'Missing ID',
+      createdAt: DateTime.utc(2026, 7, 15),
+      source: 'camera_ar',
+      plane: 'floor',
+      widthMm: 100,
+      heightMm: 100,
+      depthMm: 100,
+      offsetXMm: 0,
+      offsetYMm: 0,
+      offsetZMm: 0,
+      rotationDegrees: 0,
+    );
+    expect(() => NativeFloorAnchorRequest.fromPlacement(placement),
+        throwsArgumentError);
+  });
 }
