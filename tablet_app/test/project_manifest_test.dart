@@ -27,6 +27,7 @@ void main() {
     expect(parsed.project.id, project.id);
     expect(parsed.project.name, project.name);
     expect(parsed.exportedAt, DateTime.utc(2026, 7, 15, 2));
+    expect(manifest.toJson()['integrity'], isNotNull);
   });
 
   test('accepts a legacy root-level project export', () {
@@ -50,6 +51,21 @@ void main() {
     );
     expect(
       () => ProjectManifest.parse('{"schemaVersion": 1}'),
+      throwsFormatException,
+    );
+  });
+
+  test('rejects a versioned manifest whose project data was altered', () {
+    final json = ProjectManifest(
+      project: project,
+      exportedAt: DateTime.utc(2026, 7, 15, 2),
+    ).toJson();
+    final alteredProject = Map<String, Object?>.from(json['project']! as Map)
+      ..['name'] = 'Altered project';
+    final altered = {...json, 'project': alteredProject};
+
+    expect(
+      () => ProjectManifest.parse(jsonEncode(altered)),
       throwsFormatException,
     );
   });
