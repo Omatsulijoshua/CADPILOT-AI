@@ -19,9 +19,11 @@ function createPrisma() {
         findFirst: jest.fn(),
         create: jest.fn(),
         findUnique: jest.fn(),
+        updateMany: jest.fn(),
       },
       syncMutation: {
         findUnique: jest.fn(),
+        updateMany: jest.fn(),
       },
       $transaction: jest.fn(
         (operation: (tx: typeof transactionClient) => unknown) =>
@@ -127,6 +129,28 @@ describe('ProjectsService sync', () => {
     await expect(
       service.sync('owner-1', 'project-1', 'mutation-1', 0, { name: 'Part' }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+describe('ProjectsService archive', () => {
+  test('archives only an active project owned by the caller', async () => {
+    const { prisma } = createPrisma();
+    prisma.project.updateMany.mockResolvedValue({ count: 1 });
+    const service = new ProjectsService(prisma as never);
+
+    await expect(service.archive('owner-1', 'project-1')).resolves.toEqual({ success: true });
+    expect(prisma.project.updateMany).toHaveBeenCalledWith({
+      where: { id: 'project-1', ownerId: 'owner-1', status: 'ACTIVE' },
+      data: { status: 'ARCHIVED' },
+    });
+  });
+
+  test('does not reveal missing, inactive, or foreign projects', async () => {
+    const { prisma } = createPrisma();
+    prisma.project.updateMany.mockResolvedValue({ count: 0 });
+    const service = new ProjectsService(prisma as never);
+
+    await expect(service.archive('owner-1', 'foreign-project')).rejects
+      .toBeInstanceOf(NotFoundException);
   });
 });
 describe('ProjectsService get', () => {

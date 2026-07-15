@@ -19,6 +19,14 @@ export class ProjectsService {
     if (!project) throw new NotFoundException('Project not found');
     return project;
   }
+  async archive(ownerId: string, projectId: string) {
+    const result = await this.prisma.project.updateMany({
+      where: { id: projectId, ownerId, status: 'ACTIVE' },
+      data: { status: 'ARCHIVED' },
+    });
+    if (result.count !== 1) throw new NotFoundException('Project not found');
+    return { success: true };
+  }
   create(ownerId: string, name: string) {
     return this.prisma.project.create({
       data: {

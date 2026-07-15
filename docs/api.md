@@ -4,6 +4,12 @@ Phase 1 routes: `POST /v1/auth/register`, `/login`, `/refresh`, `/logout`; `GET 
 
 Milestones: Phase 1 foundation; Phase 2 sketching; Phase 3 basic 3D; Phase 4 AI commands; Phase 5 sketch-to-CAD; Phase 6 advanced modeling; Phases 6A–6E AR/depth/scan-to-CAD/inspection; Phase 7 cloud and billing; Phase 8 admin; Phase 9 hardening. Each phase is gated by the acceptance criteria in the brief.
 
+## Archive a cloud project
+
+`DELETE /v1/projects/:id` archives an active project owned by the authenticated caller.
+It is non-destructive: the row and audit-able history remain in PostgreSQL, while active
+list and read routes no longer expose it. Missing, foreign, and already inactive IDs
+return `404` to avoid disclosing project existence.
 ## Project synchronization contract
 
 `POST /v1/projects/:id/sync` accepts an authenticated, idempotent project mutation:
