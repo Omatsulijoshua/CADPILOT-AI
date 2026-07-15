@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import 'ai_commands.dart';
 import 'cloud_api.dart';
 import 'controllers.dart';
 import 'models.dart';
+import 'project_file_export.dart';
 import 'modeling_canvas.dart';
 import 'sketch_canvas.dart';
 import 'spatial.dart';
@@ -743,6 +745,7 @@ class ProjectGrid extends ConsumerStatefulWidget {
 class _ProjectGridState extends ConsumerState<ProjectGrid> {
   String? deletingId;
   String? duplicatingId;
+  String? exportingId;
 
   Future<void> duplicate(CadProject project) async {
     if (deletingId != null || duplicatingId != null) return;
@@ -756,6 +759,34 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
       }
     } finally {
       if (mounted) setState(() => duplicatingId = null);
+    }
+  }
+
+  Future<void> exportProject(CadProject project) async {
+    if (deletingId != null || duplicatingId != null || exportingId != null) {
+      return;
+    }
+    setState(() => exportingId = project.id);
+    try {
+      final fileName =
+          '${project.name.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}.cadpilot.json';
+      final message = await exportProjectFile(
+        content: const JsonEncoder.withIndent('  ').convert(project.toJson()),
+        fileName: fileName,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Could not export this project manifest.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => exportingId = null);
     }
   }
 
@@ -854,7 +885,8 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
                                   IconButton(
                                     tooltip: 'Duplicate project',
                                     onPressed: deletingId == null &&
-                                            duplicatingId == null
+                                            duplicatingId == null &&
+                                            exportingId == null
                                         ? () => duplicate(project)
                                         : null,
                                     icon: duplicatingId == project.id
@@ -866,9 +898,26 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
                                         : const Icon(Icons.copy_outlined),
                                   ),
                                   IconButton(
+                                    tooltip: 'Export project manifest',
+                                    onPressed: deletingId == null &&
+                                            duplicatingId == null &&
+                                            exportingId == null
+                                        ? () => exportProject(project)
+                                        : null,
+                                    icon: exportingId == project.id
+                                        ? const SizedBox.square(
+                                            dimension: 18,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2),
+                                          )
+                                        : const Icon(
+                                            Icons.file_download_outlined),
+                                  ),
+                                  IconButton(
                                     tooltip: 'Delete local project',
                                     onPressed: deletingId == null &&
-                                            duplicatingId == null
+                                            duplicatingId == null &&
+                                            exportingId == null
                                         ? () => delete(project)
                                         : null,
                                     icon: deletingId == project.id
