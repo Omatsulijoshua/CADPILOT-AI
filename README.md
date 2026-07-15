@@ -528,6 +528,7 @@ Check `DATABASE_URL`, container health, ports, and migrations.
 | [PostgreSQL integration CI](docs/postgresql-integration-ci.md) | Disposable database lifecycle, real API persistence flow, isolation model, and safe local invocation |
 | [Backend rate limiting](docs/backend-rate-limiting.md) | IP-based limits for authentication and AI endpoints, distributed-deployment considerations, and integration coverage |
 | [Backend runtime configuration](docs/backend-runtime-configuration.md) | Production startup validation for JWT secrets and ports, with safe development defaults |
+| [Backend CORS allowlist](docs/backend-cors-allowlist.md) | Production browser-origin allowlist, deployment setup, and HTTP-level verification |
 | [Flutter continuous integration](docs/flutter-ci.md) | Locked SDK/dependencies, analysis, 158 tests, Wasm and standard web releases, Android debug compilation, and trust boundary |
 | [Phase 6B depth/point-cloud contract](docs/phase-6b-depth-point-cloud-contract.md) | Capability gating, normalized coordinates, sensor poses, registration, bounded cleanup, advisory measurements, processing statistics, safety limits, and reconstruction roadmap |
 | [NestJS 11 security migration](docs/nestjs-11-security-migration.md) | Express 5 compatibility, Node 20 floor, HTTP regression tests, request-size protection, and zero-audit verification |

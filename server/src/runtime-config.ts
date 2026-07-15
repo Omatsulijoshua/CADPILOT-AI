@@ -3,6 +3,7 @@ const PLACEHOLDER_MARKERS = ['replace-with-', 'change-me', 'development-only'];
 
 export interface RuntimeConfig {
   port: number;
+  corsAllowedOrigins: string[];
 }
 
 function requiredProductionSecret(environment: NodeJS.ProcessEnv, name: string): void {
@@ -12,6 +13,26 @@ function requiredProductionSecret(environment: NodeJS.ProcessEnv, name: string):
   }
 }
 
+function productionCorsOrigins(environment: NodeJS.ProcessEnv): string[] {
+  const values = environment.CORS_ALLOWED_ORIGINS?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+  if (values.length === 0) {
+    throw new Error('CORS_ALLOWED_ORIGINS must list at least one HTTPS browser origin in production');
+  }
+
+  return [...new Set(values)].map((value) => {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new Error('CORS_ALLOWED_ORIGINS must contain valid HTTPS origins');
+    }
+    if (url.protocol !== 'https:' || url.origin !== value) {
+      throw new Error('CORS_ALLOWED_ORIGINS must contain valid HTTPS origins without paths');
+    }
+    return value;
+  });
+}
+
 export function validateRuntimeConfig(environment: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const rawPort = environment.PORT ?? '3000';
   const port = Number(rawPort);
@@ -19,7 +40,8 @@ export function validateRuntimeConfig(environment: NodeJS.ProcessEnv = process.e
     throw new Error('PORT must be an integer from 1 through 65535');
   }
 
-  if (environment.NODE_ENV === 'production') {
+  const isProduction = environment.NODE_ENV === 'production';
+  if (isProduction) {
     requiredProductionSecret(environment, 'JWT_ACCESS_SECRET');
     requiredProductionSecret(environment, 'JWT_REFRESH_SECRET');
     if (environment.JWT_ACCESS_SECRET === environment.JWT_REFRESH_SECRET) {
@@ -27,7 +49,7 @@ export function validateRuntimeConfig(environment: NodeJS.ProcessEnv = process.e
     }
   }
 
-  return { port };
+  return { port, corsAllowedOrigins: isProduction ? productionCorsOrigins(environment) : [] };
 }
 
 export { DEVELOPMENT_ACCESS_SECRET };
