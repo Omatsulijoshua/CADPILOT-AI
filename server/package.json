@@ -9,10 +9,10 @@
     "test": "jest --runInBand"
   },
   "dependencies": {
-    "@nestjs/common": "^10.3.8",
-    "@nestjs/core": "^10.3.8",
-    "@nestjs/jwt": "^10.2.0",
-    "@nestjs/platform-express": "^10.3.8",
+    "@nestjs/common": "^11.1.28",
+    "@nestjs/core": "^11.1.28",
+    "@nestjs/jwt": "^11.0.2",
+    "@nestjs/platform-express": "^11.1.28",
     "@prisma/client": "^5.15.0",
     "argon2": "^0.40.3",
     "class-transformer": "^0.5.1",
@@ -22,8 +22,8 @@
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
-    "@nestjs/cli": "^10.3.2",
-    "@nestjs/testing": "^10.3.8",
+    "@nestjs/cli": "^11.0.14",
+    "@nestjs/testing": "^11.1.28",
     "@types/express": "^5.0.6",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.14.2",
@@ -47,5 +47,8 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "testEnvironment": "node"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

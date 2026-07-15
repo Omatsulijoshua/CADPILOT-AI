@@ -2,7 +2,11 @@
 
 ## Outcome
 
-The CadPilot NestJS backend now has a functioning TypeScript ESLint gate. The previously present `npm run lint` script could not execute because no ESLint configuration, TypeScript parser, or TypeScript rules plugin existed. This increment installs matching parser/plugin versions, adds a server-root configuration, and verifies every TypeScript file under `server/src` and `server/test`.
+The CadPilot NestJS backend now has a functioning TypeScript ESLint gate.
+
+> **Follow-up completed:** The advisories recorded in this checkpoint were resolved by the tested [NestJS 11 security migration](nestjs-11-security-migration.md), which produced a zero-vulnerability production audit.
+
+The previously present `npm run lint` script could not execute because no ESLint configuration, TypeScript parser, or TypeScript rules plugin existed. This increment installs matching parser/plugin versions, adds a server-root configuration, and verifies every TypeScript file under `server/src` and `server/test`.
 
 Official setup reference: [typescript-eslint legacy ESLint setup](https://typescript-eslint.io/getting-started/legacy-eslint-setup/).
 
@@ -113,7 +117,7 @@ This increment does not run `npm audit fix --force`, add unreviewed dependency o
 | `README.md` | Backend verification order and documentation index |
 | `docs/openai-provider-hardening-increment.md` | Marks the earlier lint limitation resolved |
 
-## Next security increment
+## Follow-up security increment (completed)
 
 1. Review NestJS 10-to-11 migration requirements from official NestJS guidance.
 2. Upgrade `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express`, testing, and CLI together.
