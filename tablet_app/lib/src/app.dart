@@ -709,14 +709,53 @@ class _CloudMessage extends StatelessWidget {
       );
 }
 
-class ProjectGrid extends ConsumerWidget {
+class ProjectGrid extends ConsumerStatefulWidget {
   const ProjectGrid({required this.onOpen, super.key});
   final ValueChanged<CadProject> onOpen;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => ref
-      .watch(projectsProvider)
-      .when(
+  ConsumerState<ProjectGrid> createState() => _ProjectGridState();
+}
+
+class _ProjectGridState extends ConsumerState<ProjectGrid> {
+  String? deletingId;
+
+  Future<void> delete(CadProject project) async {
+    if (deletingId != null) return;
+    final cloudCopyExists = project.lastSyncedRevision != null;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete local project?'),
+        content: Text(
+          cloudCopyExists
+              ? 'Delete "${project.name}" from this device? Its cloud backup will remain available to download later.'
+              : 'Delete "${project.name}" from this device? It has no cloud backup and cannot be recovered.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonalIcon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Delete local project'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => deletingId = project.id);
+    try {
+      await ref.read(projectsProvider.notifier).delete(project.id);
+    } finally {
+      if (mounted) setState(() => deletingId = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ref.watch(projectsProvider).when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) =>
             Center(child: Text('Could not load projects: $error')),
@@ -736,7 +775,7 @@ class ProjectGrid extends ConsumerWidget {
               final project = projects[index];
               return Card(
                   child: InkWell(
-                      onTap: () => onOpen(project),
+                      onTap: () => widget.onOpen(project),
                       borderRadius: BorderRadius.circular(12),
                       child: Padding(
                         padding: const EdgeInsets.all(18),
@@ -754,11 +793,30 @@ class ProjectGrid extends ConsumerWidget {
                                               size: 44,
                                               color: Color(0xff29d3b2))))),
                               const SizedBox(height: 12),
-                              Text(project.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w700)),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(project.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w700)),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Delete local project',
+                                    onPressed: deletingId == null
+                                        ? () => delete(project)
+                                        : null,
+                                    icon: deletingId == project.id
+                                        ? const SizedBox.square(
+                                            dimension: 18,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2),
+                                          )
+                                        : const Icon(Icons.delete_outline),
+                                  ),
+                                ],
+                              ),
                               Text(
                                   'Revision ${project.revision} - ${project.syncState == SyncState.synced ? 'Synced' : 'Saved locally'}',
                                   style: Theme.of(context).textTheme.bodySmall),
