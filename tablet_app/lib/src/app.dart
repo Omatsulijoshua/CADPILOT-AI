@@ -565,7 +565,7 @@ class _CloudProjectsPanelState extends ConsumerState<CloudProjectsPanel> {
             return _CloudMessage(
               icon: Icons.cloud_queue,
               title: 'No cloud backups yet',
-              message:
+              message: message ??
                   'Open a local project and choose Back up now to add it here.',
               actionLabel: 'Refresh',
               onAction: refresh,
@@ -583,7 +583,9 @@ class _CloudProjectsPanelState extends ConsumerState<CloudProjectsPanel> {
                   const Spacer(),
                   IconButton(
                     tooltip: 'Refresh cloud projects',
-                    onPressed: importingId == null ? refresh : null,
+                    onPressed: importingId == null && archivingId == null
+                        ? refresh
+                        : null,
                     icon: const Icon(Icons.refresh),
                   ),
                 ],
