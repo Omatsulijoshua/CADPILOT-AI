@@ -46,3 +46,4 @@ app.*.map.json
 
 # Vercel local project and prebuilt output
 .vercel/
+.env*
