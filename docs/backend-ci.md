@@ -42,7 +42,7 @@ The unit and HTTP compatibility suites override `PrismaService` where required. 
 
 The workflow uses Node.js 20, matching `server/package.json` and the backend Docker image. `npm ci` is mandatory instead of `npm install`, so CI fails if `package.json` and `package-lock.json` disagree. An explicit `prisma generate` step then produces the typed client instead of relying on package-manager lifecycle-script behavior. npm caching is keyed from `server/package-lock.json`; the cache accelerates downloads without replacing the clean lockfile install.
 
-The workflow currently uses the official `actions/checkout@v6` and `actions/setup-node@v6` actions. Review major action upgrades and Node runtime changes before merging them.
+The workflow pins official `actions/checkout` v6.0.2 and `actions/setup-node` v6.4.0 to their immutable release commits. Review and re-resolve action upgrades and Node runtime changes before merging them.
 
 ## Local equivalent
 
@@ -68,11 +68,9 @@ In GitHub repository settings, add a branch protection rule for `main` and requi
 
 The next CI layers should be introduced as separately observable jobs:
 
-1. Flutter analyze and unit/widget tests.
-2. Flutter web release compilation.
-3. Android debug compilation.
-4. PostgreSQL-backed integration tests using an ephemeral service container.
-5. Dependency review and software-bill-of-materials generation.
-6. Signed release and deployment workflows with protected environments.
+1. PostgreSQL-backed integration tests using an ephemeral service container.
+2. Endpoint-level rate-limit and abuse tests.
+3. Dependency review and software-bill-of-materials generation.
+4. Signed backend deployment workflows with protected environments.
 
 Keeping these as distinct jobs will expose which platform failed and allow safe parallel execution without weakening the backend gate.
