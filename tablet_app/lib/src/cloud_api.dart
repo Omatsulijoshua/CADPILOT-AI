@@ -216,6 +216,21 @@ class CloudApi {
     );
   }
 
+  Future<void> archiveProject(String projectId, String token) async {
+    final response = await client.delete(
+      Uri.parse('$baseUrl/projects/$projectId'),
+      headers: {'authorization': 'Bearer $token'},
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CloudApiException(
+        response.statusCode == 404
+            ? 'No active cloud project was found to archive.'
+            : 'Could not archive the cloud project.',
+        response.statusCode,
+      );
+    }
+  }
+
   Future<List<CloudProjectSummary>> listProjects(String token) async {
     final response = await client.get(
       Uri.parse('$baseUrl/projects'),

@@ -241,6 +241,36 @@ void main() {
       throwsA(isA<CloudApiException>()),
     );
   });
+  test('archives an owned cloud project with bearer authentication', () async {
+    final client = MockClient((request) async {
+      expect(request.method, 'DELETE');
+      expect(request.url.path,
+          '/v1/projects/11111111-1111-4111-8111-111111111111');
+      expect(request.headers['authorization'], 'Bearer access');
+      return http.Response('{"success":true}', 200);
+    });
+
+    await expectLater(
+      CloudApi(client: client, baseUrl: 'https://api.test/v1').archiveProject(
+        '11111111-1111-4111-8111-111111111111',
+        'access',
+      ),
+      completes,
+    );
+  });
+
+  test('surfaces a safe missing-project archive error', () async {
+    final client = MockClient((_) async => http.Response('{}', 404));
+    await expectLater(
+      CloudApi(client: client, baseUrl: 'https://api.test/v1')
+          .archiveProject('missing-project', 'access'),
+      throwsA(isA<CloudApiException>().having(
+        (error) => error.statusCode,
+        'statusCode',
+        404,
+      )),
+    );
+  });
   test('cloud project list validates summaries and authentication', () async {
     final client = MockClient((request) async {
       expect(request.method, 'GET');
