@@ -2,10 +2,12 @@ import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { configureHttpApp } from './http-config';
+import { validateRuntimeConfig } from './runtime-config';
 
 async function bootstrap() {
+  const config = validateRuntimeConfig();
   const app = await NestFactory.create(AppModule, { bodyParser: false });
   configureHttpApp(app);
-  await app.listen(Number(process.env.PORT ?? 3000));
+  await app.listen(config.port);
 }
 void bootstrap();
