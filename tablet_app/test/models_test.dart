@@ -2,6 +2,7 @@ import 'package:cadpilot_tablet/src/ai_commands.dart';
 import 'package:cadpilot_tablet/src/model_3d.dart';
 import 'package:cadpilot_tablet/src/models.dart';
 import 'package:cadpilot_tablet/src/sketch_models.dart';
+import 'package:cadpilot_tablet/src/spatial_capture.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -46,5 +47,46 @@ void main() {
     expect(decoded.sketch.entities.single.end, const Offset(105, 10));
     expect(decoded.model.operations.single.id, 'extrude-1');
     expect(decoded.aiHistory.single.status, AiCommandStatus.applied);
+  });
+  test('project serialization persists AR screenshot records', () {
+    final now = DateTime.utc(2026, 7, 15);
+    final project = CadProject(
+      id: 'p-capture',
+      name: 'Placed cabinet',
+      note: '',
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+      syncState: SyncState.pending,
+      arScreenshots: [
+        ArScreenshot(
+          path: '/captures/cabinet.png',
+          widthPixels: 1920,
+          heightPixels: 1080,
+          capturedAt: now,
+          sessionId: 'session-4',
+          anchorId: 'anchor-9',
+        ),
+      ],
+    );
+    final decoded = CadProject.fromJson(project.toJson());
+    expect(decoded.arScreenshots, hasLength(1));
+    expect(decoded.arScreenshots.single.path, '/captures/cabinet.png');
+    expect(decoded.arScreenshots.single.sessionId, 'session-4');
+    expect(decoded.arScreenshots.single.capturedAt, now);
+  });
+
+  test('legacy projects load with an empty AR screenshot collection', () {
+    final now = DateTime.utc(2026, 7, 15);
+    final legacy = <String, Object?>{
+      'id': 'legacy',
+      'name': 'Legacy project',
+      'note': '',
+      'createdAt': now.toIso8601String(),
+      'updatedAt': now.toIso8601String(),
+      'revision': 1,
+      'syncState': 'localOnly',
+    };
+    expect(CadProject.fromJson(legacy).arScreenshots, isEmpty);
   });
 }

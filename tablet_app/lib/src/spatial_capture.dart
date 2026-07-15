@@ -20,6 +20,18 @@ class ArScreenshot {
   final String sessionId;
   final String anchorId;
 
+  Map<String, Object?> toJson() => {
+        'path': path,
+        'widthPixels': widthPixels,
+        'heightPixels': heightPixels,
+        'capturedAt': capturedAt.toUtc().toIso8601String(),
+        'sessionId': sessionId,
+        'anchorId': anchorId,
+      };
+
+  factory ArScreenshot.fromJson(Map<String, Object?> value) =>
+      ArScreenshot.fromMap(value);
+
   factory ArScreenshot.fromMap(Map<Object?, Object?> value) {
     final path = value['path'] as String?;
     final width = value['widthPixels'] as int?;

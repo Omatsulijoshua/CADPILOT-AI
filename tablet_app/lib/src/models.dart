@@ -1,6 +1,7 @@
 import 'ai_commands.dart';
 import 'model_3d.dart';
 import 'sketch_models.dart';
+import 'spatial_capture.dart';
 import 'spatial_models.dart';
 
 enum SessionKind { signedIn, guest }
@@ -33,6 +34,7 @@ class CadProject {
     this.model = const ModelDocument(),
     this.aiHistory = const [],
     this.spatialPlacements = const [],
+    this.arScreenshots = const [],
   });
   final String id;
   final String name;
@@ -45,6 +47,7 @@ class CadProject {
   final ModelDocument model;
   final List<AiCommandRecord> aiHistory;
   final List<SpatialPlacement> spatialPlacements;
+  final List<ArScreenshot> arScreenshots;
 
   CadProject copyWith(
           {String? name,
@@ -53,7 +56,8 @@ class CadProject {
           SketchDocument? sketch,
           ModelDocument? model,
           List<AiCommandRecord>? aiHistory,
-          List<SpatialPlacement>? spatialPlacements}) =>
+          List<SpatialPlacement>? spatialPlacements,
+          List<ArScreenshot>? arScreenshots}) =>
       CadProject(
         id: id,
         name: name ?? this.name,
@@ -66,6 +70,7 @@ class CadProject {
         model: model ?? this.model,
         aiHistory: aiHistory ?? this.aiHistory,
         spatialPlacements: spatialPlacements ?? this.spatialPlacements,
+        arScreenshots: arScreenshots ?? this.arScreenshots,
       );
 
   Map<String, Object?> toJson() => {
@@ -81,6 +86,7 @@ class CadProject {
         'aiHistory': aiHistory.map((item) => item.toJson()).toList(),
         'spatialPlacements':
             spatialPlacements.map((item) => item.toJson()).toList(),
+        'arScreenshots': arScreenshots.map((item) => item.toJson()).toList(),
       };
 
   factory CadProject.fromJson(Map<String, Object?> json) => CadProject(
@@ -103,5 +109,8 @@ class CadProject {
                 .map((item) =>
                     SpatialPlacement.fromJson(item! as Map<String, Object?>))
                 .toList(),
+        arScreenshots: (json['arScreenshots'] as List<Object?>? ?? const [])
+            .map((item) => ArScreenshot.fromJson(item! as Map<String, Object?>))
+            .toList(),
       );
 }
