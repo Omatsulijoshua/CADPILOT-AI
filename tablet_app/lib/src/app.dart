@@ -298,7 +298,57 @@ class _DashboardState extends ConsumerState<Dashboard> {
     try {
       final content = await importProjectFile();
       if (content == null || !mounted) return;
-      final source = ProjectManifest.parse(content).project;
+      final manifest = ProjectManifest.parse(content);
+      final source = manifest.project;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Import project manifest?'),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(source.name,
+                    style: Theme.of(context).textTheme.titleMedium),
+                if (source.note.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(source.note,
+                      maxLines: 3, overflow: TextOverflow.ellipsis),
+                ],
+                const SizedBox(height: 16),
+                Text(
+                  '${source.sketch.entities.length} sketch entities · '
+                  '${source.model.operations.length} model operations · '
+                  '${source.spatialPlacements.length} spatial placements',
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Format v${manifest.schemaVersion} · Exported ${manifest.exportedAt.toLocal()}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'CadPilot will create an independent local copy. This does not overwrite or upload any existing project.',
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.file_download_done_outlined),
+              label: const Text('Import copy'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
       final imported =
           await ref.read(projectsProvider.notifier).importPortable(source);
       if (!mounted) return;
