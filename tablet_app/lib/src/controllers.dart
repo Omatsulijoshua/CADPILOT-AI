@@ -25,7 +25,38 @@ class SessionController extends AsyncNotifier<Session?> {
   LocalStore get _store => ref.read(localStoreProvider);
 
   @override
-  Future<Session?> build() => _store.readSession();
+  Future<Session?> build() async {
+    final storedSession = await _store.readSession();
+    if (storedSession == null || storedSession.kind == SessionKind.guest) {
+      return storedSession;
+    }
+    final tokens = ref.read(tokenStoreProvider);
+    try {
+      final refreshToken = await tokens.readRefreshToken();
+      if (refreshToken == null) {
+        await tokens.clear();
+        await _store.writeSession(null);
+        return null;
+      }
+      final credentials =
+          await ref.read(cloudApiProvider).refreshSession(refreshToken);
+      await tokens.write(
+        accessToken: credentials.accessToken,
+        refreshToken: credentials.refreshToken,
+      );
+      await _store.writeSession(credentials.session);
+      return credentials.session;
+    } on CloudApiException catch (error) {
+      if (error.statusCode == 400 || error.statusCode == 401) {
+        await tokens.clear();
+        await _store.writeSession(null);
+        return null;
+      }
+      return storedSession;
+    } catch (_) {
+      return storedSession;
+    }
+  }
 
   Future<void> register(
     String displayName,
@@ -72,9 +103,19 @@ class SessionController extends AsyncNotifier<Session?> {
   }
 
   Future<void> signOut() async {
-    await ref.read(tokenStoreProvider).clear();
-    await _store.writeSession(null);
-    state = const AsyncData(null);
+    final tokens = ref.read(tokenStoreProvider);
+    try {
+      final refreshToken = await tokens.readRefreshToken();
+      if (refreshToken != null) {
+        await ref.read(cloudApiProvider).logout(refreshToken);
+      }
+    } catch (_) {
+      // Local sign-out must succeed even when revocation cannot reach the API.
+    } finally {
+      await tokens.clear();
+      await _store.writeSession(null);
+      state = const AsyncData(null);
+    }
   }
 }
 

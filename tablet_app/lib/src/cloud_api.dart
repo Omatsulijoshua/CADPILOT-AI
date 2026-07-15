@@ -119,6 +119,37 @@ class CloudApi {
     return _credentials(response);
   }
 
+  Future<CloudCredentials> refreshSession(String refreshToken) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/auth/refresh'),
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode({'refreshToken': refreshToken}),
+    );
+    if (response.statusCode != 201) {
+      throw CloudApiException(
+        response.statusCode == 400 || response.statusCode == 401
+            ? 'Your cloud session has expired. Sign in again.'
+            : 'Could not refresh the cloud session.',
+        response.statusCode,
+      );
+    }
+    return _credentials(response);
+  }
+
+  Future<void> logout(String refreshToken) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/auth/logout'),
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode({'refreshToken': refreshToken}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CloudApiException(
+        'Could not revoke the cloud session.',
+        response.statusCode,
+      );
+    }
+  }
+
   CloudCredentials _credentials(http.Response response) {
     try {
       final body = jsonDecode(response.body) as Map<String, Object?>;

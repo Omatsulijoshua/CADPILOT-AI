@@ -354,4 +354,56 @@ void main() {
       throwsA(isA<CloudApiException>()),
     );
   });
+
+  test('refresh rotates credentials through the refresh endpoint', () async {
+    final client = MockClient((request) async {
+      expect(request.method, 'POST');
+      expect(request.url.path, '/v1/auth/refresh');
+      expect(jsonDecode(request.body), {'refreshToken': 'old-refresh'});
+      return http.Response(
+        jsonEncode({
+          'user': {
+            'email': 'designer@example.com',
+            'displayName': 'Designer',
+          },
+          'accessToken': 'new-access',
+          'refreshToken': 'new-refresh',
+        }),
+        201,
+      );
+    });
+    final credentials = await CloudApi(
+      client: client,
+      baseUrl: 'https://api.test/v1',
+    ).refreshSession('old-refresh');
+
+    expect(credentials.accessToken, 'new-access');
+    expect(credentials.refreshToken, 'new-refresh');
+    expect(credentials.session.email, 'designer@example.com');
+  });
+
+  test('refresh preserves the unauthorized status for session cleanup', () {
+    final client = MockClient((_) async => http.Response('{}', 401));
+    expect(
+      () => CloudApi(client: client, baseUrl: 'https://api.test/v1')
+          .refreshSession('expired-refresh'),
+      throwsA(isA<CloudApiException>().having(
+        (error) => error.statusCode,
+        'statusCode',
+        401,
+      )),
+    );
+  });
+
+  test('logout revokes the supplied refresh token', () async {
+    final client = MockClient((request) async {
+      expect(request.method, 'POST');
+      expect(request.url.path, '/v1/auth/logout');
+      expect(jsonDecode(request.body), {'refreshToken': 'active-refresh'});
+      return http.Response('', 201);
+    });
+
+    await CloudApi(client: client, baseUrl: 'https://api.test/v1')
+        .logout('active-refresh');
+  });
 }
