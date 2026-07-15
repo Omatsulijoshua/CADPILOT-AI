@@ -230,98 +230,101 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                     child: Center(child: CircularProgressIndicator()));
               }
               final value = snapshot.data!;
-              return Column(mainAxisSize: MainAxisSize.min, children: [
-                ListTile(
-                  leading: Icon(value.lidarSupported
-                      ? Icons.sensors
-                      : value.arSupported
-                          ? Icons.view_in_ar
-                          : Icons.straighten),
-                  title: Text(value.methodLabel),
-                  subtitle: Text(value.lidarSupported
-                      ? 'Hardware LiDAR capability confirmed.'
-                      : value.arSupported
-                          ? 'LiDAR is not reported; camera tracking is labeled separately.'
-                          : 'AR is unavailable. CAD and manual measurements remain available.'),
-                ),
-                const Divider(),
-                Wrap(spacing: 12, runSpacing: 8, children: [
-                  _status('Camera', value.cameraSupported),
-                  _status('AR tracking', value.arSupported),
-                  _status('LiDAR', value.lidarSupported),
-                  _status('Scene depth', value.sceneDepthSupported),
-                  _status(
-                      'Mesh reconstruction', value.meshReconstructionSupported),
-                  _status('Plane detection', value.planeDetectionSupported),
-                ]),
-                const SizedBox(height: 20),
-                Row(children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => _planPlacement(context, value),
-                      icon: Icon(value.arSupported
-                          ? Icons.view_in_ar
-                          : Icons.straighten),
-                      label: Text(value.arSupported
-                          ? 'Plan AR placement'
-                          : 'Add manual placement'),
+              return SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  ListTile(
+                    leading: Icon(value.lidarSupported
+                        ? Icons.sensors
+                        : value.arSupported
+                            ? Icons.view_in_ar
+                            : Icons.straighten),
+                    title: Text(value.methodLabel),
+                    subtitle: Text(value.lidarSupported
+                        ? 'Hardware LiDAR capability confirmed.'
+                        : value.arSupported
+                            ? 'LiDAR is not reported; camera tracking is labeled separately.'
+                            : 'AR is unavailable. CAD and manual measurements remain available.'),
+                  ),
+                  const Divider(),
+                  Wrap(spacing: 12, runSpacing: 8, children: [
+                    _status('Camera', value.cameraSupported),
+                    _status('AR tracking', value.arSupported),
+                    _status('LiDAR', value.lidarSupported),
+                    _status('Scene depth', value.sceneDepthSupported),
+                    _status('Mesh reconstruction',
+                        value.meshReconstructionSupported),
+                    _status('Plane detection', value.planeDetectionSupported),
+                  ]),
+                  const SizedBox(height: 20),
+                  Row(children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => _planPlacement(context, value),
+                        icon: Icon(value.arSupported
+                            ? Icons.view_in_ar
+                            : Icons.straighten),
+                        label: Text(value.arSupported
+                            ? 'Plan AR placement'
+                            : 'Add manual placement'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: value.cameraSupported
-                          ? () => _requestCameraAccess(context)
-                          : null,
-                      icon: const Icon(Icons.camera_alt_outlined),
-                      label: const Text('Check camera access'),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: value.cameraSupported
+                            ? () => _requestCameraAccess(context)
+                            : null,
+                        icon: const Icon(Icons.camera_alt_outlined),
+                        label: const Text('Check camera access'),
+                      ),
                     ),
-                  ),
+                  ]),
+                  if (placements.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Saved placements (${placements.length})',
+                          style: Theme.of(context).textTheme.titleSmall),
+                    ),
+                    ...placements.map((placement) => ListTile(
+                          dense: true,
+                          leading: Icon(placement.anchor == null
+                              ? Icons.location_searching
+                              : Icons.location_on),
+                          title: Text(placement.name),
+                          subtitle: Text(
+                              '${placement.plane} plane - 1:1 scale - ${placement.widthMm} x ${placement.heightMm} x ${placement.depthMm} mm\n${_anchorLabel(placement)}'),
+                          trailing: Wrap(children: [
+                            IconButton(
+                                tooltip: 'Edit placement',
+                                onPressed: placement.isLocked
+                                    ? null
+                                    : () => _editPlacement(context, placement),
+                                icon: const Icon(Icons.edit_outlined)),
+                            IconButton(
+                                tooltip: placement.isLocked
+                                    ? 'Unlock placement'
+                                    : 'Lock placement',
+                                onPressed: () => _toggleLock(placement),
+                                icon: Icon(placement.isLocked
+                                    ? Icons.lock_outline
+                                    : Icons.lock_open_outlined)),
+                            IconButton(
+                                tooltip: 'Duplicate placement',
+                                onPressed: () => _duplicatePlacement(placement),
+                                icon: const Icon(Icons.copy_outlined)),
+                            IconButton(
+                                tooltip: 'Delete placement',
+                                onPressed: placement.isLocked
+                                    ? null
+                                    : () =>
+                                        _deletePlacement(context, placement),
+                                icon: const Icon(Icons.delete_outline)),
+                          ]),
+                        )),
+                  ],
                 ]),
-                if (placements.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Saved placements (${placements.length})',
-                        style: Theme.of(context).textTheme.titleSmall),
-                  ),
-                  ...placements.map((placement) => ListTile(
-                        dense: true,
-                        leading: Icon(placement.anchor == null
-                            ? Icons.location_searching
-                            : Icons.location_on),
-                        title: Text(placement.name),
-                        subtitle: Text(
-                            '${placement.plane} plane - 1:1 scale - ${placement.widthMm} x ${placement.heightMm} x ${placement.depthMm} mm\n${_anchorLabel(placement)}'),
-                        trailing: Wrap(children: [
-                          IconButton(
-                              tooltip: 'Edit placement',
-                              onPressed: placement.isLocked
-                                  ? null
-                                  : () => _editPlacement(context, placement),
-                              icon: const Icon(Icons.edit_outlined)),
-                          IconButton(
-                              tooltip: placement.isLocked
-                                  ? 'Unlock placement'
-                                  : 'Lock placement',
-                              onPressed: () => _toggleLock(placement),
-                              icon: Icon(placement.isLocked
-                                  ? Icons.lock_outline
-                                  : Icons.lock_open_outlined)),
-                          IconButton(
-                              tooltip: 'Duplicate placement',
-                              onPressed: () => _duplicatePlacement(placement),
-                              icon: const Icon(Icons.copy_outlined)),
-                          IconButton(
-                              tooltip: 'Delete placement',
-                              onPressed: placement.isLocked
-                                  ? null
-                                  : () => _deletePlacement(context, placement),
-                              icon: const Icon(Icons.delete_outline)),
-                        ]),
-                      )),
-                ],
-              ]);
+              );
             },
           ),
         ),
