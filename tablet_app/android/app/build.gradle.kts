@@ -19,7 +19,10 @@ android {
         applicationId = "com.omatsulijoshua.cadpilot"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // ARCore Depth requires Android 7.0 (API 24) or newer. CadPilot's
+        // spatial tools fail closed on unsupported hardware, but the host
+        // itself must not advertise a lower API level than ARCore supports.
+        minSdk = maxOf(flutter.minSdkVersion, 24)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

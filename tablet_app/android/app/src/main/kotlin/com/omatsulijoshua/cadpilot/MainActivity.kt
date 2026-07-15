@@ -4,9 +4,13 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.Image
 import java.io.ByteArrayOutputStream
+import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
 import com.google.ar.core.ArCoreApk
+import com.google.ar.core.Config
+import com.google.ar.core.Session
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -23,6 +27,15 @@ class MainActivity : FlutterActivity() {
     private var pendingProjectImportResult: MethodChannel.Result? = null
     private var pendingProjectExportResult: MethodChannel.Result? = null
     private var pendingProjectExportContent: String? = null
+    private var depthSession: Session? = null
+    private var depthSessionRunning = false
+
+    companion object {
+        // Platform channels are not a bulk point-cloud transport. Keep a
+        // single native frame bounded until a texture/shared-buffer path is
+        // introduced for high-density reconstruction.
+        private const val maxDepthPointsPerFrame = 12000
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -40,11 +53,7 @@ class MainActivity : FlutterActivity() {
                         "CadPilot native AR rendering is not available in this build.",
                         call.arguments
                     )
-                    "captureDepthFrame" -> result.error(
-                        "depth_capture_unavailable",
-                        "CadPilot native depth capture is not available on this device/build.",
-                        call.arguments
-                    )
+                    "captureDepthFrame" -> captureDepthFrame(call.arguments, result)
                     "stopArSession" -> result.success(false)
                     else -> result.notImplemented()
                 }
@@ -65,22 +74,123 @@ class MainActivity : FlutterActivity() {
         val gyro = manager.hasSystemFeature(PackageManager.FEATURE_SENSOR_GYROSCOPE)
         ArCoreApk.getInstance().checkAvailabilityAsync(this) { availability ->
             val ar = camera && gyro && availability.isSupported
+            val depthCapture = ar && cameraPermission() == "granted" && supportsDepth()
             val capabilities = mapOf(
                 "platform" to "android",
                 "cameraSupported" to camera,
                 "arSupported" to ar,
                 "arRuntimeInstalled" to (availability == ArCoreApk.Availability.SUPPORTED_INSTALLED),
                 "lidarSupported" to false,
-                "sceneDepthSupported" to false,
+                "sceneDepthSupported" to depthCapture,
                 "meshReconstructionSupported" to false,
                 "planeDetectionSupported" to ar,
                 "motionTrackingSupported" to gyro,
-                "captureMethod" to if (ar) "camera_ar" else "manual",
+                "captureMethod" to if (depthCapture) "depth_camera" else if (ar) "camera_ar" else "manual",
                 "nativeArRendererAvailable" to false,
-                "nativeDepthCaptureAvailable" to false
+                "nativeDepthCaptureAvailable" to depthCapture
             )
             runOnUiThread { result.success(capabilities) }
         }
+    }
+
+    private fun supportsDepth(): Boolean = try {
+        val session = ensureDepthSession() ?: return false
+        session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun ensureDepthSession(): Session? {
+        depthSession?.let { return it }
+        if (cameraPermission() != "granted") return null
+        return try {
+            Session(this).also { session ->
+                val config = Config(session)
+                if (!session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
+                    session.close()
+                    return null
+                }
+                config.depthMode = Config.DepthMode.AUTOMATIC
+                session.configure(config)
+                depthSession = session
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun captureDepthFrame(arguments: Any?, result: MethodChannel.Result) {
+        val values = arguments as? Map<*, *> ?: run {
+            result.error("invalid_arguments", "Depth capture requires a session ID and bounds.", null)
+            return
+        }
+        val sessionId = values["sessionId"] as? String
+        val coordinateSystem = values["coordinateSystem"] as? String
+        if (sessionId.isNullOrBlank() || coordinateSystem != "right_handed_y_up_meters") {
+            result.error("invalid_arguments", "Depth capture arguments are invalid.", null)
+            return
+        }
+        val session = ensureDepthSession() ?: run {
+            result.error("depth_capture_unavailable", "ARCore Depth is unavailable or camera access is not granted.", null)
+            return
+        }
+        try {
+            if (!depthSessionRunning) {
+                session.resume()
+                depthSessionRunning = true
+            }
+            val frame = session.update()
+            frame.acquireDepthImage16Bits().use { image ->
+                val requested = (values["maxPoints"] as? Number)?.toInt() ?: maxDepthPointsPerFrame
+                val points = depthPoints(image, frame, requested.coerceIn(3, maxDepthPointsPerFrame))
+                if (points.size < 3) {
+                    result.error("depth_capture_unavailable", "ARCore did not return enough valid depth samples.", null)
+                    return
+                }
+                val pose = frame.camera.pose
+                result.success(mapOf(
+                    "sessionId" to sessionId.trim(),
+                    "frameId" to "android-${System.nanoTime()}",
+                    "capturedAt" to java.time.Instant.now().toString(),
+                    "coordinateSystem" to "right_handed_y_up_meters",
+                    "sensorPose" to mapOf(
+                        "translation" to mapOf("x" to pose.tx().toDouble(), "y" to pose.ty().toDouble(), "z" to pose.tz().toDouble()),
+                        "rotation" to mapOf("x" to pose.qx().toDouble(), "y" to pose.qy().toDouble(), "z" to pose.qz().toDouble(), "w" to pose.qw().toDouble())
+                    ),
+                    "points" to points
+                ))
+            }
+        } catch (error: Exception) {
+            result.error("depth_capture_unavailable", "ARCore depth capture failed for this frame.", error.javaClass.simpleName)
+        }
+    }
+
+    private fun depthPoints(image: Image, frame: com.google.ar.core.Frame, limit: Int): List<Map<String, Double>> {
+        val intrinsics = frame.camera.imageIntrinsics
+        val focal = intrinsics.focalLength
+        val principal = intrinsics.principalPoint
+        if (focal[0] <= 0f || focal[1] <= 0f) return emptyList()
+        val plane = image.planes.firstOrNull() ?: return emptyList()
+        val buffer = plane.buffer.order(ByteOrder.nativeOrder())
+        val stride = kotlin.math.max(1, kotlin.math.ceil(kotlin.math.sqrt((image.width * image.height).toDouble() / limit)).toInt())
+        val points = ArrayList<Map<String, Double>>(limit)
+        for (row in 0 until image.height step stride) {
+            for (column in 0 until image.width step stride) {
+                val offset = row * plane.rowStride + column * plane.pixelStride
+                if (offset + 2 > buffer.limit()) continue
+                val depthMillimeters = buffer.getShort(offset).toInt() and 0x1FFF
+                if (depthMillimeters <= 0) continue
+                val depthMeters = depthMillimeters / 1000.0
+                points.add(mapOf(
+                    "x" to ((column - principal[0]) * depthMeters / focal[0]).toDouble(),
+                    "y" to (-(row - principal[1]) * depthMeters / focal[1]).toDouble(),
+                    "z" to -depthMeters,
+                    "confidence" to 1.0
+                ))
+                if (points.size >= limit) return points
+            }
+        }
+        return points
     }
 
     private fun requestArRuntimeInstall(result: MethodChannel.Result) {
@@ -260,5 +370,20 @@ class MainActivity : FlutterActivity() {
         }
         pendingCameraResult?.success(status)
         pendingCameraResult = null
+    }
+
+    override fun onDestroy() {
+        depthSession?.close()
+        depthSession = null
+        depthSessionRunning = false
+        super.onDestroy()
+    }
+
+    override fun onPause() {
+        if (depthSessionRunning) {
+            depthSession?.pause()
+            depthSessionRunning = false
+        }
+        super.onPause()
     }
 }

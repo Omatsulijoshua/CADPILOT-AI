@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'spatial_models.dart';
+import 'spatial_depth_capture.dart';
+import 'spatial_scan_pipeline.dart';
 
 class SpatialCapabilities {
   const SpatialCapabilities({
@@ -247,12 +249,16 @@ class SpatialCapabilityPanel extends StatefulWidget {
   const SpatialCapabilityPanel({
     required this.projectName,
     this.service = const SpatialCapabilityService(),
+    this.depthCaptureService = const SpatialDepthCaptureService(),
+    this.scanPipeline = const SpatialScanPipeline(),
     this.placements = const [],
     this.onPlacementsChanged,
     super.key,
   });
   final String projectName;
   final SpatialCapabilityService service;
+  final SpatialDepthCaptureService depthCaptureService;
+  final SpatialScanPipeline scanPipeline;
   final List<SpatialPlacement> placements;
   final ValueChanged<List<SpatialPlacement>>? onPlacementsChanged;
 
@@ -263,6 +269,8 @@ class SpatialCapabilityPanel extends StatefulWidget {
 class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
   late Future<SpatialCapabilities> capabilities = widget.service.detect();
   late List<SpatialPlacement> placements;
+  bool scanInProgress = false;
+  SpatialScanResult? latestScan;
 
   @override
   void initState() {
@@ -340,6 +348,34 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                       ),
                     ),
                   ]),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: value.depthCaptureReady && !scanInProgress
+                          ? () => _captureAdvisoryScan(context, value)
+                          : null,
+                      icon: scanInProgress
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.document_scanner_outlined),
+                      label: Text(scanInProgress
+                          ? 'Capturing advisory scan...'
+                          : 'Capture advisory depth scan'),
+                    ),
+                  ),
+                  if (value.depthCaptureReady)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Captures three bounded depth frames. Results are advisory scan bounds, not certified measurements.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  if (latestScan != null) _scanSummary(latestScan!),
                   if (value.arSupported && !value.arRuntimeInstalled) ...[
                     const SizedBox(height: 12),
                     SizedBox(
@@ -433,8 +469,78 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
         ],
       ),
     );
-    if (!mounted) return;
+    if (!mounted || !context.mounted) return;
     setState(() => capabilities = widget.service.detect());
+  }
+
+  Future<void> _captureAdvisoryScan(
+      BuildContext context, SpatialCapabilities capabilities) async {
+    setState(() => scanInProgress = true);
+    SpatialScanResult result;
+    try {
+      result = await widget.scanPipeline.captureAndProcess(
+        sessionId: 'scan-${DateTime.now().microsecondsSinceEpoch}',
+        capabilities: capabilities,
+        captureService: widget.depthCaptureService,
+        requestedFrames: 3,
+      );
+    } on FormatException catch (error) {
+      result = SpatialScanResult(
+        status: SpatialScanStatus.insufficientData,
+        frames: const [],
+        message: error.message,
+      );
+    } on StateError catch (error) {
+      result = SpatialScanResult(
+        status: SpatialScanStatus.unavailable,
+        frames: const [],
+        message: error.message,
+      );
+    } finally {
+      if (mounted) setState(() => scanInProgress = false);
+    }
+    if (!mounted || !context.mounted) return;
+    setState(() => latestScan = result);
+    if (!result.completed) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Advisory scan captured'),
+        content: _scanSummary(result),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  Widget _scanSummary(SpatialScanResult result) {
+    final measurements = result.measurements;
+    if (measurements == null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: ListTile(
+          leading: const Icon(Icons.info_outline),
+          title: const Text('Depth scan not completed'),
+          subtitle:
+              Text(result.message ?? 'No usable depth data was returned.'),
+        ),
+      );
+    }
+    String fixed(double value) => value.toStringAsFixed(1);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: ListTile(
+        leading: const Icon(Icons.straighten),
+        title: Text(
+            '${fixed(measurements.widthMm)} x ${fixed(measurements.heightMm)} x ${fixed(measurements.depthMm)} mm'),
+        subtitle: Text(
+          '${measurements.pointCount} cleaned points from ${result.frames.length} frame(s). ${measurements.accuracyLabel}',
+        ),
+      ),
+    );
   }
 
   Future<void> _requestCameraAccess(BuildContext context) async {

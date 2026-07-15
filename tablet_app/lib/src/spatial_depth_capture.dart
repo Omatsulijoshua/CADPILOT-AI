@@ -207,9 +207,12 @@ class SpatialPointCloudFrame {
 class SpatialDepthCaptureService {
   const SpatialDepthCaptureService({
     MethodChannel channel = const MethodChannel('cadpilot/spatial'),
-  }) : _channel = channel;
+    bool isWeb = kIsWeb,
+  })  : _channel = channel,
+        _isWeb = isWeb;
 
   final MethodChannel _channel;
+  final bool _isWeb;
 
   Future<SpatialPointCloudFrame?> capture({
     required String sessionId,
@@ -223,7 +226,7 @@ class SpatialDepthCaptureService {
         'CadPilot native depth capture must be available before point-cloud capture.',
       );
     }
-    if (kIsWeb) return null;
+    if (_isWeb) return null;
     try {
       final value = await _channel.invokeMapMethod<Object?, Object?>(
         'captureDepthFrame',
