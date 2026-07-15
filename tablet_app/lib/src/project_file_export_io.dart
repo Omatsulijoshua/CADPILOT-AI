@@ -1,13 +1,13 @@
-import 'dart:io';
+import 'package:flutter/services.dart';
 
-import 'package:path_provider/path_provider.dart';
+const _filesChannel = MethodChannel('cadpilot/files');
 
 Future<String> exportProjectFile({
   required String content,
   required String fileName,
-}) async {
-  final directory = await getApplicationDocumentsDirectory();
-  final file = File('${directory.path}/$fileName');
-  await file.writeAsString(content, flush: true);
-  return 'Project manifest saved to ${file.path}';
-}
+}) async =>
+    await _filesChannel.invokeMethod<String>('saveProjectManifest', {
+      'content': content,
+      'fileName': fileName,
+    }) ??
+    'Project manifest saved.';

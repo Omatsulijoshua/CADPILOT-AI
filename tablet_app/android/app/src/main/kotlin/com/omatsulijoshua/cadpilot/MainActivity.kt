@@ -17,9 +17,12 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val cameraRequestCode = 7401
     private val projectImportRequestCode = 7402
+    private val projectExportRequestCode = 7403
     private val maxProjectManifestBytes = 2 * 1024 * 1024
     private var pendingCameraResult: MethodChannel.Result? = null
     private var pendingProjectImportResult: MethodChannel.Result? = null
+    private var pendingProjectExportResult: MethodChannel.Result? = null
+    private var pendingProjectExportContent: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -50,6 +53,7 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "pickProjectManifest" -> pickProjectManifest(result)
+                    "saveProjectManifest" -> saveProjectManifest(call.arguments, result)
                     else -> result.notImplemented()
                 }
             }
@@ -142,8 +146,39 @@ class MainActivity : FlutterActivity() {
         startActivityForResult(intent, projectImportRequestCode)
     }
 
+    private fun saveProjectManifest(arguments: Any?, result: MethodChannel.Result) {
+        if (pendingProjectExportResult != null) {
+            result.error("request_in_progress", "A project manifest save dialog is already active.", null)
+            return
+        }
+        val values = arguments as? Map<*, *>
+        val content = values?.get("content") as? String
+        val fileName = values?.get("fileName") as? String
+        if (content == null || fileName.isNullOrBlank()) {
+            result.error("invalid_arguments", "A project manifest and file name are required.", null)
+            return
+        }
+        if (content.toByteArray(StandardCharsets.UTF_8).size > maxProjectManifestBytes) {
+            result.error("project_manifest_too_large", "Project manifest is larger than 2 MiB.", null)
+            return
+        }
+
+        pendingProjectExportResult = result
+        pendingProjectExportContent = content
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/json"
+            putExtra(Intent.EXTRA_TITLE, fileName)
+        }
+        startActivityForResult(intent, projectExportRequestCode)
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == projectExportRequestCode) {
+            completeProjectExport(resultCode, data)
+            return
+        }
         if (requestCode != projectImportRequestCode) return
 
         val pendingResult = pendingProjectImportResult ?: return
@@ -173,6 +208,34 @@ class MainActivity : FlutterActivity() {
             pendingResult.error(
                 "project_manifest_read_failed",
                 "Could not read the selected project manifest.",
+                error.message
+            )
+        }
+    }
+
+    private fun completeProjectExport(resultCode: Int, data: Intent?) {
+        val pendingResult = pendingProjectExportResult ?: return
+        val content = pendingProjectExportContent
+        pendingProjectExportResult = null
+        pendingProjectExportContent = null
+        val uri = data?.data
+        if (resultCode != Activity.RESULT_OK || uri == null) {
+            pendingResult.error("project_manifest_save_cancelled", "Project manifest save was cancelled.", null)
+            return
+        }
+        if (content == null) {
+            pendingResult.error("project_manifest_save_failed", "Project manifest content was unavailable.", null)
+            return
+        }
+        try {
+            contentResolver.openOutputStream(uri)?.bufferedWriter(StandardCharsets.UTF_8).use { writer ->
+                writer?.write(content)
+            } ?: throw IllegalArgumentException("Could not write the selected project manifest.")
+            pendingResult.success("Project manifest saved to the selected location.")
+        } catch (error: Exception) {
+            pendingResult.error(
+                "project_manifest_save_failed",
+                "Could not save the selected project manifest.",
                 error.message
             )
         }
