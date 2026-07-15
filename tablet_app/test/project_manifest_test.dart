@@ -27,6 +27,7 @@ void main() {
     expect(parsed.project.id, project.id);
     expect(parsed.project.name, project.name);
     expect(parsed.exportedAt, DateTime.utc(2026, 7, 15, 2));
+    expect(parsed.integrity, ProjectManifestIntegrity.verified);
     expect(manifest.toJson()['integrity'], isNotNull);
   });
 
@@ -35,6 +36,7 @@ void main() {
 
     expect(parsed.project.id, project.id);
     expect(parsed.project.name, project.name);
+    expect(parsed.integrity, ProjectManifestIntegrity.legacy);
   });
 
   test('rejects unsupported or malformed portable manifests', () {

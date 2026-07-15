@@ -330,6 +330,16 @@ class _DashboardState extends ConsumerState<Dashboard> {
                   'Format v${manifest.schemaVersion} · Exported ${manifest.exportedAt.toLocal()}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  manifest.integrity.label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: manifest.integrity ==
+                                ProjectManifestIntegrity.verified
+                            ? Colors.greenAccent
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
                 const SizedBox(height: 12),
                 const Text(
                   'CadPilot will create an independent local copy. This does not overwrite or upload any existing project.',

@@ -7,6 +7,14 @@ import 'models.dart';
 const projectManifestSchemaVersion = 1;
 const maxProjectManifestBytes = 2 * 1024 * 1024;
 
+enum ProjectManifestIntegrity {
+  verified('Integrity verified'),
+  legacy('Legacy file - no integrity check');
+
+  const ProjectManifestIntegrity(this.label);
+  final String label;
+}
+
 /// A portable, versioned wrapper around a CadPilot project.
 ///
 /// Version 1 is deliberately small and self-contained. Raw project JSON from
@@ -16,11 +24,13 @@ class ProjectManifest {
     required this.project,
     required this.exportedAt,
     this.schemaVersion = projectManifestSchemaVersion,
+    this.integrity = ProjectManifestIntegrity.verified,
   });
 
   final CadProject project;
   final DateTime exportedAt;
   final int schemaVersion;
+  final ProjectManifestIntegrity integrity;
 
   Map<String, Object?> toJson() {
     final projectJson = project.toJson();
@@ -56,6 +66,7 @@ class ProjectManifest {
       return ProjectManifest(
         project: CadProject.fromJson(json),
         exportedAt: DateTime.now().toUtc(),
+        integrity: ProjectManifestIntegrity.legacy,
       );
     }
 
@@ -82,19 +93,21 @@ class ProjectManifest {
       throw const FormatException(
           'Project manifest is missing its export time.');
     }
-    _verifyIntegrity(json['integrity'], Map<String, Object?>.from(project));
+    final integrity =
+        _verifyIntegrity(json['integrity'], Map<String, Object?>.from(project));
     return ProjectManifest(
       project: CadProject.fromJson(Map<String, Object?>.from(project)),
       exportedAt: DateTime.parse(exportedAt).toUtc(),
       schemaVersion: version,
+      integrity: integrity,
     );
   }
 
-  static void _verifyIntegrity(
+  static ProjectManifestIntegrity _verifyIntegrity(
       Object? integrity, Map<String, Object?> project) {
     // Integrity metadata was introduced after the first versioned exports.
     // It remains optional for backward compatibility, but must be valid if present.
-    if (integrity == null) return;
+    if (integrity == null) return ProjectManifestIntegrity.legacy;
     if (integrity is! Map ||
         integrity['algorithm'] != 'sha256' ||
         integrity['digest'] is! String) {
@@ -104,6 +117,7 @@ class ProjectManifest {
     if (integrity['digest'] != _digest(project)) {
       throw const FormatException('Project manifest integrity check failed.');
     }
+    return ProjectManifestIntegrity.verified;
   }
 
   static String _digest(Map<String, Object?> project) =>
