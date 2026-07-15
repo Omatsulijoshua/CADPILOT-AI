@@ -17,6 +17,7 @@ void main() {
       'planeDetectionSupported': true,
       'motionTrackingSupported': true,
       'captureMethod': 'camera_ar',
+      'arRuntimeInstalled': true,
       'nativeArRendererAvailable': true,
     });
     expect(capabilities.methodLabel, 'Camera AR tracking');
@@ -82,6 +83,7 @@ void main() {
       'planeDetectionSupported': true,
       'motionTrackingSupported': true,
       'captureMethod': 'camera_ar',
+      'arRuntimeInstalled': true,
       'nativeArRendererAvailable': true,
     });
     final ready = ArPlacementPreflight(
@@ -110,6 +112,7 @@ void main() {
       'planeDetectionSupported': true,
       'motionTrackingSupported': true,
       'captureMethod': 'camera_ar',
+      'arRuntimeInstalled': true,
       'nativeArRendererAvailable': false,
     });
     final preflight = ArPlacementPreflight(
@@ -120,6 +123,26 @@ void main() {
     expect(preflight.placementSource, 'manual');
     expect(preflight.blockers,
         contains('CadPilot native AR rendering is unavailable'));
+  });
+  test('supported device without an installed AR runtime is blocked', () {
+    final capabilities = SpatialCapabilities.fromMap(const {
+      'platform': 'android',
+      'cameraSupported': true,
+      'arSupported': true,
+      'planeDetectionSupported': true,
+      'motionTrackingSupported': true,
+      'captureMethod': 'camera_ar',
+      'arRuntimeInstalled': false,
+      'nativeArRendererAvailable': true,
+    });
+    final preflight = ArPlacementPreflight(
+      capabilities: capabilities,
+      cameraPermission: CameraPermissionState.granted,
+    );
+    expect(preflight.ready, isFalse);
+    expect(preflight.placementSource, 'manual');
+    expect(preflight.blockers,
+        contains('AR runtime is not installed or needs an update'));
   });
   test('preflight does not request camera access on unsupported devices',
       () async {
@@ -150,6 +173,7 @@ void main() {
       'planeDetectionSupported': true,
       'motionTrackingSupported': true,
       'captureMethod': 'camera_ar',
+      'arRuntimeInstalled': true,
       'nativeArRendererAvailable': true,
     });
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

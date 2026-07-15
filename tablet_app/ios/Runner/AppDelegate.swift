@@ -72,6 +72,7 @@ import ARKit
     return [
       "platform": "ios", "cameraSupported": true, "arSupported": arSupported,
       "lidarSupported": lidarSupported, "sceneDepthSupported": sceneDepthSupported,
+      "arRuntimeInstalled": arSupported,
       "meshReconstructionSupported": meshSupported, "planeDetectionSupported": arSupported,
       "motionTrackingSupported": arSupported,
       "captureMethod": lidarSupported ? "lidar" : (arSupported ? "camera_ar" : "manual"),
@@ -81,6 +82,7 @@ import ARKit
     return [
       "platform": "ios", "cameraSupported": true, "arSupported": false,
       "lidarSupported": false, "sceneDepthSupported": false,
+      "arRuntimeInstalled": false,
       "meshReconstructionSupported": false, "planeDetectionSupported": false,
       "motionTrackingSupported": false, "captureMethod": "manual",
       "nativeArRendererAvailable": false

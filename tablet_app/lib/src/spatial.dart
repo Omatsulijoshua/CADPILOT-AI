@@ -16,6 +16,7 @@ class SpatialCapabilities {
     required this.motionTrackingSupported,
     required this.captureMethod,
     this.nativeArRendererAvailable = false,
+    this.arRuntimeInstalled = false,
   });
 
   final String platform;
@@ -28,6 +29,7 @@ class SpatialCapabilities {
   final bool motionTrackingSupported;
   final String captureMethod;
   final bool nativeArRendererAvailable;
+  final bool arRuntimeInstalled;
 
   factory SpatialCapabilities.fromMap(Map<Object?, Object?> value) =>
       SpatialCapabilities(
@@ -45,6 +47,7 @@ class SpatialCapabilities {
         captureMethod: value['captureMethod'] as String? ?? 'manual',
         nativeArRendererAvailable:
             value['nativeArRendererAvailable'] as bool? ?? false,
+        arRuntimeInstalled: value['arRuntimeInstalled'] as bool? ?? false,
       );
 
   static const unsupported = SpatialCapabilities(
@@ -106,6 +109,7 @@ class ArPlacementPreflight {
   bool get ready =>
       capabilities.arSupported &&
       capabilities.planeDetectionSupported &&
+      capabilities.arRuntimeInstalled &&
       capabilities.nativeArRendererAvailable &&
       cameraPermission == CameraPermissionState.granted;
 
@@ -115,6 +119,8 @@ class ArPlacementPreflight {
         if (!capabilities.arSupported) 'AR tracking is unavailable',
         if (capabilities.arSupported && !capabilities.planeDetectionSupported)
           'Plane detection is unavailable',
+        if (capabilities.arSupported && !capabilities.arRuntimeInstalled)
+          'AR runtime is not installed or needs an update',
         if (capabilities.arSupported && !capabilities.nativeArRendererAvailable)
           'CadPilot native AR rendering is unavailable',
         if (capabilities.arSupported &&
@@ -256,6 +262,7 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                   Wrap(spacing: 12, runSpacing: 8, children: [
                     _status('Camera', value.cameraSupported),
                     _status('AR tracking', value.arSupported),
+                    _status('AR runtime', value.arRuntimeInstalled),
                     _status('CadPilot AR renderer',
                         value.nativeArRendererAvailable),
                     _status('LiDAR', value.lidarSupported),

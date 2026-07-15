@@ -44,6 +44,7 @@ class MainActivity : FlutterActivity() {
                 "platform" to "android",
                 "cameraSupported" to camera,
                 "arSupported" to ar,
+                "arRuntimeInstalled" to (availability == ArCoreApk.Availability.SUPPORTED_INSTALLED),
                 "lidarSupported" to false,
                 "sceneDepthSupported" to false,
                 "meshReconstructionSupported" to false,
