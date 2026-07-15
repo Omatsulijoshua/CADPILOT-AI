@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
 import { AddressInfo } from 'node:net';
 import { AppModule } from './app.module';
+import { AuthService } from './auth.service';
 import { configureHttpApp } from './http-config';
 import { PrismaService } from './prisma.service';
 
@@ -13,6 +14,7 @@ const postgresDescribe = process.env.RUN_POSTGRES_INTEGRATION === 'true'
 postgresDescribe('PostgreSQL-backed project API', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+  let auth: AuthService;
   let baseUrl: string;
   const email = `integration-${randomUUID()}@cadpilot.test`;
 
@@ -25,6 +27,7 @@ postgresDescribe('PostgreSQL-backed project API', () => {
     const address = app.getHttpServer().address() as AddressInfo;
     baseUrl = `http://127.0.0.1:${address.port}`;
     prisma = app.get(PrismaService);
+    auth = app.get(AuthService);
   });
 
   afterAll(async () => {
@@ -54,6 +57,22 @@ postgresDescribe('PostgreSQL-backed project API', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ status: 'ready' });
+  });
+  it('rotates and revokes persisted refresh tokens', async () => {
+    const issued = await auth.register(
+      `refresh-${randomUUID()}@cadpilot.test`,
+      'integration-password',
+      'Refresh Integration',
+    );
+    const rotated = await auth.refresh(issued.refreshToken);
+
+    await expect(auth.refresh(issued.refreshToken)).rejects.toThrow(
+      'Refresh token is invalid or expired',
+    );
+    await expect(auth.logout(rotated.refreshToken)).resolves.toEqual({ success: true });
+    await expect(auth.refresh(rotated.refreshToken)).rejects.toThrow(
+      'Refresh token is invalid or expired',
+    );
   });
   it('keeps one persisted user from reading or mutating another user’s project', async () => {
     const ownerEmail = `owner-${randomUUID()}@cadpilot.test`;
