@@ -1,4 +1,5 @@
 import 'package:cadpilot_tablet/src/project_file_export.dart';
+import 'package:cadpilot_tablet/src/project_file_errors.dart';
 import 'package:cadpilot_tablet/src/project_file_import.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,6 +39,18 @@ void main() {
         fileName: 'workshop.cadpilot.json',
       ),
       'Project manifest saved to the selected location.',
+    );
+  });
+
+  test('reports a cancelled native save without treating it as a failure',
+      () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      throw PlatformException(code: 'project_manifest_save_cancelled');
+    });
+
+    await expectLater(
+      exportProjectFile(content: '{}', fileName: 'project.cadpilot.json'),
+      throwsA(isA<ProjectFileOperationCancelled>()),
     );
   });
 }

@@ -10,7 +10,9 @@ import 'cloud_api.dart';
 import 'controllers.dart';
 import 'models.dart';
 import 'project_file_export.dart';
+import 'project_file_errors.dart';
 import 'project_file_import.dart';
+import 'project_file_name.dart';
 import 'project_manifest.dart';
 import 'modeling_canvas.dart';
 import 'sketch_canvas.dart';
@@ -866,8 +868,7 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
     }
     setState(() => exportingId = project.id);
     try {
-      final fileName =
-          '${project.name.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}.cadpilot.json';
+      final fileName = portableProjectFileName(project.name);
       final message = await exportProjectFile(
         content: const JsonEncoder.withIndent('  ').convert(
           ProjectManifest(project: project, exportedAt: DateTime.now())
@@ -878,6 +879,12 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(message)));
+      }
+    } on ProjectFileOperationCancelled {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Project manifest export cancelled.')),
+        );
       }
     } catch (_) {
       if (mounted) {
