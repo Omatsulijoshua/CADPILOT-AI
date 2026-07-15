@@ -3,6 +3,7 @@
 <p align="center"><img src="tablet_app/web/icons/Icon-512.png" alt="CadPilot logo" width="160"></p>
 <p align="center"><strong>Tablet-first CAD, intelligent design assistance, spatial scanning, and augmented reality.</strong></p>
 <p align="center"><a href="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/backend-ci.yml"><img src="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/backend-ci.yml/badge.svg" alt="Backend CI"></a> <a href="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/flutter-ci.yml"><img src="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/flutter-ci.yml/badge.svg" alt="Flutter CI"></a></p>
+<p align="center"><a href="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/native-engine-ci.yml"><img src="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/native-engine-ci.yml/badge.svg" alt="Native CAD Engine CI"></a></p>
 <p align="center"><a href="https://cadpilot.vercel.app"><strong>Live App</strong></a> | <a href="docs/architecture.md">Architecture</a> | <a href="docs/api.md">API</a> | <a href="docs/cad-file-format.md">File Format</a> | <a href="docs/security.md">Security</a></p>
 
 ---
@@ -20,6 +21,7 @@ CadPilot is an actively developed local-first CAD platform built with Flutter, D
 - [Feature status](#feature-status)
 - [Architecture](#architecture)
 - [CAD pipeline](#cad-pipeline)
+- [Native CAD ABI](#native-cad-abi)
 - [Intelligent commands](#intelligent-commands)
 - [Spatial scanning and AR](#spatial-scanning-and-ar)
 - [Persistence and sync](#persistence-and-sync)
@@ -140,6 +142,13 @@ flowchart LR
 - Format versions make migration deliberate and recoverable.
 
 The native boundary stays narrow: Flutter exchanges stable serialized operations and results instead of native implementation details.
+
+## Native CAD ABI
+
+The C++ engine boundary exposes an explicit ABI version, session lifecycle, and
+typed result contract. Its smoke test is built by CMake and enforced by the
+Native CAD Engine CI workflow, so ABI drift is caught before it reaches a
+Flutter/native integration build. See [native engine CI](docs/native-engine-ci.md).
 
 ## Intelligent commands
 

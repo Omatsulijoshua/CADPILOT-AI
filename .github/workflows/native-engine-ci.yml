@@ -1,0 +1,33 @@
+name: Native CAD Engine CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-engine-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  abi:
+    name: Build and test CAD ABI
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Configure CMake
+        run: cmake -S cad_engine -B cad_engine/build -DBUILD_TESTING=ON
+
+      - name: Build native engine
+        run: cmake --build cad_engine/build --config Release
+
+      - name: Run ABI smoke test
+        run: ctest --test-dir cad_engine/build --build-config Release --output-on-failure
