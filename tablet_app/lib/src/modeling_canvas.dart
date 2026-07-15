@@ -1,10 +1,9 @@
-import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'model_3d.dart';
 import 'sketch_models.dart';
+import 'stl_file_export.dart';
 
 class ModelingCanvas extends StatefulWidget {
   const ModelingCanvas(
@@ -585,12 +584,15 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
       final mesh = mesher.tessellate(current);
       final content = const StlExporter(mesher: mesher).export(current,
           name: widget.projectName.replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_'));
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File(
-          '${directory.path}/${widget.projectName.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}.stl');
-      await file.writeAsString(content, flush: true);
+      final fileName =
+          '${widget.projectName.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}.stl';
+      final exportMessage = await exportStlFile(
+        content: content,
+        fileName: fileName,
+      );
       message(
-          'STL saved to ${file.path} (mesh tolerance ${mesh.tolerance.toStringAsFixed(2)} mm)');
+        '$exportMessage (mesh tolerance ${mesh.tolerance.toStringAsFixed(2)} mm)',
+      );
     } on StateError catch (error) {
       message(error.message);
     }
