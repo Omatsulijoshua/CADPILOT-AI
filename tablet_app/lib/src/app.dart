@@ -948,6 +948,47 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
     }
   }
 
+  Future<void> renameProject(CadProject project) async {
+    var draftName = project.name;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Rename project'),
+          content: TextFormField(
+            initialValue: project.name,
+            autofocus: true,
+            maxLength: 80,
+            decoration: const InputDecoration(labelText: 'Project name'),
+            onChanged: (value) => setDialogState(() => draftName = value),
+            onFieldSubmitted: (value) => Navigator.pop(context, value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, draftName),
+              child: const Text('Save name'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final trimmed = name?.trim();
+    if (trimmed == null ||
+        trimmed.isEmpty ||
+        trimmed == project.name ||
+        !mounted) {
+      return;
+    }
+    await ref
+        .read(projectsProvider.notifier)
+        .save(project.copyWith(name: trimmed));
+    if (mounted) setState(() => status = 'Project renamed locally');
+  }
+
   Future<void> runAiCommand(CadProject project) async {
     final token = await ref.read(tokenStoreProvider).readAccessToken();
     if (!mounted) return;
@@ -1029,6 +1070,11 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
         leading: const BackButton(),
         title: Text(project.name),
         actions: [
+          IconButton(
+            tooltip: 'Rename project',
+            onPressed: () => renameProject(project),
+            icon: const Icon(Icons.drive_file_rename_outline),
+          ),
           Tooltip(
             message: status,
             child: const Padding(
