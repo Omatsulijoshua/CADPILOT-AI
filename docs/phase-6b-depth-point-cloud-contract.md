@@ -85,6 +85,24 @@ The radius-to-voxel ratio prevents an unbounded number of downsampled candidates
 
 This stage does not invent geometry, average surfaces, or persist scans. Default thresholds need calibration against labeled physical-device data before they can be treated as measurement-grade.
 
+## Advisory measurement extraction
+
+`SpatialMeasurementExtractor` derives bounded, axis-aligned observations from a processed cloud without claiming surface reconstruction.
+
+```mermaid
+flowchart LR
+    Cloud["Processed point cloud"] --> Validate["Revalidate count, finite XYZ, confidence"]
+    Validate --> Bounds["Min/max bounds + centroid"]
+    Bounds --> Units["Convert meter extents to millimeters"]
+    Units --> Summary["Dimensions, diagonal, mean confidence"]
+    Summary --> Planar["Planar-axis check at 2x voxel resolution"]
+    Planar --> Advisory["Advisory measurement result + provenance"]
+```
+
+The result includes width on X, height on Y, depth on Z, diagonal length, centroid, mean confidence, point count, source frame IDs, session ID, processing resolution, and the thinnest planar axis when its extent is no more than twice the voxel size. Extraction requires at least three points, rejects point-like and line-like bounds, revalidates finite coordinates and confidence, and retains the 500,000-point safety ceiling.
+
+These are **axis-aligned scan bounds**, not oriented dimensions, watertight volume, surface area, toleranced inspection data, or certified measurements. The API always carries the label `Advisory scan bounds; not a certified measurement.` Physical-device calibration and an oriented/segmented geometry model are required before dimensions can drive manufacturing decisions.
+
 ## Capability gate
 
 Capture is callable only when the capability snapshot reports `sceneDepthSupported` and identifies the method as `lidar` or `depth_camera`. Web and missing plugins return no frame. Platform errors also return no frame. Malformed frames throw `FormatException` so programming/data-contract errors remain distinguishable from unavailable hardware.
@@ -104,8 +122,8 @@ Android currently reports `sceneDepthSupported: false` and handles `captureDepth
 
 ## Verification
 
-- Fourteen focused depth-frame, registration, and cleanup tests pass.
-- The complete Flutter suite contains 153 passing tests.
+- Nineteen focused depth-frame, registration, cleanup, and measurement tests pass.
+- The complete Flutter suite contains 158 passing tests.
 - Flutter analysis passes with no issues.
 - Android debug compilation verifies the Kotlin method-channel boundary against ARCore 1.54.0.
 - Standard and WebAssembly web release builds remain compatible because web capture fails closed.
@@ -116,7 +134,7 @@ Android currently reports `sceneDepthSupported: false` and handles `captureDepth
 2. Implement physical-device depth image acquisition and coordinate conversion.
 3. Add pose-quality and tracking-state metadata from native capture.
 4. Calibrate cleanup defaults against labeled physical-device scans.
-5. Build bounded surface reconstruction and measurement extraction.
+5. Build bounded surface reconstruction without treating scan bounds as a mesh.
 6. Add an iOS ARKit/LiDAR adapter using the same normalized frame contract.
 
 Each step must retain separate capability claims. Depth frames, registered point clouds, meshes, and editable CAD geometry are different completion levels.

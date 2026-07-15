@@ -16,7 +16,7 @@ flowchart LR
     Checkout --> SDK["Flutter 3.44.4 stable"]
     SDK --> Lock["Enforced pubspec.lock install"]
     Lock --> Analyze["flutter analyze"]
-    Analyze --> Tests["153 unit and widget tests"]
+    Analyze --> Tests["158 unit and widget tests"]
     Tests --> Wasm["WebAssembly release build"]
     Wasm --> Web["Release web build"]
     Web --> Result{"All gates pass?"}
