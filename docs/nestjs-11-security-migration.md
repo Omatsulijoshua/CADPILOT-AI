@@ -108,8 +108,8 @@ npm audit --omit=dev
 Verified results:
 
 - TypeScript ESLint passes with zero findings.
-- All 17 backend tests pass across four suites.
-- Three real-HTTP NestJS 11/Express 5 compatibility tests pass.
+- All 18 backend tests pass across four suites.
+- Four real-HTTP NestJS 11/Express 5 compatibility tests pass, including an oversized-body rejection.
 - NestJS TypeScript build succeeds.
 - Prisma schema validation succeeds.
 - Production dependency audit reports 0 vulnerabilities.
@@ -140,10 +140,25 @@ If deployment-specific behavior fails:
 4. Check Express 5 route syntax and query-parser assumptions first.
 5. Treat a rollback to NestJS 10 as a temporary security exception because it reintroduces the recorded advisories.
 
+## Request-size protection
+
+CadPilot now disables Nest's implicit body parser and installs shared Express 5 JSON and URL-encoded parsers with an explicit **2 MiB** ceiling. The production bootstrap and the real-HTTP test app both call `configureHttpApp`, preventing configuration drift. Requests exceeding the ceiling are rejected with HTTP `413` before controller validation, authentication-service work, database access, or AI-provider calls.
+
+```mermaid
+flowchart LR
+    Client["Client request"] --> Parser{"Body at most 2 MiB?"}
+    Parser -- "No" --> Reject["413 Payload Too Large"]
+    Parser -- "Yes" --> Validate["ValidationPipe"]
+    Validate --> Guard["Authentication and authorization"]
+    Guard --> Controller["Controller and service"]
+```
+
+The limit is intentionally centralized in `server/src/http-config.ts`. Raising it should be treated as a reviewed capacity and security decision, followed by updating the HTTP regression test.
+
 ## Remaining backend hardening
 
 - Add hosted CI that enforces lint, tests, build, Prisma validation, and audit.
-- Add request-body size limits and HTTP regression coverage for oversized payloads.
+- Add endpoint-specific rate limits and abuse telemetry before opening the API publicly.
 - Upgrade Prisma 5 through its separately documented major-version path.
 - Review npm install-script allowlisting for deployment reproducibility.
 - Add live PostgreSQL integration coverage in an isolated test database.

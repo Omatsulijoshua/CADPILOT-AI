@@ -304,7 +304,7 @@ Use `http://10.0.2.2:3000` from the standard Android emulator. Never put server 
 
 ## Running the project
 
-Backend (**17 passing tests**, NestJS 11/Express 5, and zero production audit findings at this checkpoint):
+Backend (**18 passing tests**, NestJS 11/Express 5, and zero production audit findings at this checkpoint):
 
 ```powershell
 cd server
@@ -341,7 +341,7 @@ flutter build web
 flutter build apk
 ```
 
-Backend (**17 passing tests**, NestJS 11/Express 5, and zero production audit findings at this checkpoint):
+Backend (**18 passing tests**, NestJS 11/Express 5, and zero production audit findings at this checkpoint):
 
 ```powershell
 cd server
@@ -522,7 +522,7 @@ Check `DATABASE_URL`, container health, ports, and migrations.
 | [Secure storage v10 migration](docs/secure-storage-v10-migration.md) | Cipher modernization, automatic token migration, Web/Wasm compatibility |
 | [OpenAI provider hardening](docs/openai-provider-hardening-increment.md) | Responses API timeout, validation, privacy, metering, and safe failures |
 | [Backend TypeScript lint gate](docs/backend-typescript-lint-gate.md) | ESLint activation, verification workflow, and dependency-audit baseline |
-| [NestJS 11 security migration](docs/nestjs-11-security-migration.md) | Express 5 compatibility, Node 20 floor, HTTP regression tests, zero-audit verification |
+| [NestJS 11 security migration](docs/nestjs-11-security-migration.md) | Express 5 compatibility, Node 20 floor, HTTP regression tests, request-size protection, and zero-audit verification |
 | [Phase notes](docs/) | Decisions and verification evidence |
 | [Flutter notes](tablet_app/README.md) | Client-specific guidance |
 
