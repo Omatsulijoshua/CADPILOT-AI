@@ -17,6 +17,7 @@ void main() {
       'planeDetectionSupported': true,
       'motionTrackingSupported': true,
       'captureMethod': 'camera_ar',
+      'nativeArRendererAvailable': true,
     });
     expect(capabilities.methodLabel, 'Camera AR tracking');
     expect(capabilities.lidarSupported, isFalse);
@@ -81,6 +82,7 @@ void main() {
       'planeDetectionSupported': true,
       'motionTrackingSupported': true,
       'captureMethod': 'camera_ar',
+      'nativeArRendererAvailable': true,
     });
     final ready = ArPlacementPreflight(
       capabilities: capabilities,
@@ -99,6 +101,26 @@ void main() {
     expect(blocked.blockers.single, contains('system settings'));
   });
 
+  test('device AR support without a CadPilot renderer falls back to manual',
+      () {
+    final capabilities = SpatialCapabilities.fromMap(const {
+      'platform': 'android',
+      'cameraSupported': true,
+      'arSupported': true,
+      'planeDetectionSupported': true,
+      'motionTrackingSupported': true,
+      'captureMethod': 'camera_ar',
+      'nativeArRendererAvailable': false,
+    });
+    final preflight = ArPlacementPreflight(
+      capabilities: capabilities,
+      cameraPermission: CameraPermissionState.granted,
+    );
+    expect(preflight.ready, isFalse);
+    expect(preflight.placementSource, 'manual');
+    expect(preflight.blockers,
+        contains('CadPilot native AR rendering is unavailable'));
+  });
   test('preflight does not request camera access on unsupported devices',
       () async {
     const channel = MethodChannel('cadpilot/spatial-preflight-unsupported');
@@ -128,6 +150,7 @@ void main() {
       'planeDetectionSupported': true,
       'motionTrackingSupported': true,
       'captureMethod': 'camera_ar',
+      'nativeArRendererAvailable': true,
     });
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {

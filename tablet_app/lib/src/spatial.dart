@@ -15,6 +15,7 @@ class SpatialCapabilities {
     required this.planeDetectionSupported,
     required this.motionTrackingSupported,
     required this.captureMethod,
+    this.nativeArRendererAvailable = false,
   });
 
   final String platform;
@@ -26,6 +27,7 @@ class SpatialCapabilities {
   final bool planeDetectionSupported;
   final bool motionTrackingSupported;
   final String captureMethod;
+  final bool nativeArRendererAvailable;
 
   factory SpatialCapabilities.fromMap(Map<Object?, Object?> value) =>
       SpatialCapabilities(
@@ -41,6 +43,8 @@ class SpatialCapabilities {
         motionTrackingSupported:
             value['motionTrackingSupported'] as bool? ?? false,
         captureMethod: value['captureMethod'] as String? ?? 'manual',
+        nativeArRendererAvailable:
+            value['nativeArRendererAvailable'] as bool? ?? false,
       );
 
   static const unsupported = SpatialCapabilities(
@@ -102,6 +106,7 @@ class ArPlacementPreflight {
   bool get ready =>
       capabilities.arSupported &&
       capabilities.planeDetectionSupported &&
+      capabilities.nativeArRendererAvailable &&
       cameraPermission == CameraPermissionState.granted;
 
   String get placementSource => ready ? 'camera_ar' : 'manual';
@@ -110,6 +115,8 @@ class ArPlacementPreflight {
         if (!capabilities.arSupported) 'AR tracking is unavailable',
         if (capabilities.arSupported && !capabilities.planeDetectionSupported)
           'Plane detection is unavailable',
+        if (capabilities.arSupported && !capabilities.nativeArRendererAvailable)
+          'CadPilot native AR rendering is unavailable',
         if (capabilities.arSupported &&
             cameraPermission != CameraPermissionState.granted)
           cameraPermission.label,
@@ -249,6 +256,8 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                   Wrap(spacing: 12, runSpacing: 8, children: [
                     _status('Camera', value.cameraSupported),
                     _status('AR tracking', value.arSupported),
+                    _status('CadPilot AR renderer',
+                        value.nativeArRendererAvailable),
                     _status('LiDAR', value.lidarSupported),
                     _status('Scene depth', value.sceneDepthSupported),
                     _status('Mesh reconstruction',

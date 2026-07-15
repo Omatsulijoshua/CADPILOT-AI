@@ -53,7 +53,8 @@ class MainActivity : FlutterActivity() {
             "meshReconstructionSupported" to false,
             "planeDetectionSupported" to ar,
             "motionTrackingSupported" to gyro,
-            "captureMethod" to if (ar) "camera_ar" else "manual"
+            "captureMethod" to if (ar) "camera_ar" else "manual",
+            "nativeArRendererAvailable" to false
         )
     }
 

@@ -18,6 +18,7 @@ void main() {
       planeDetectionSupported: true,
       motionTrackingSupported: true,
       captureMethod: 'camera_ar',
+      nativeArRendererAvailable: true,
     ),
     cameraPermission: CameraPermissionState.granted,
   );
