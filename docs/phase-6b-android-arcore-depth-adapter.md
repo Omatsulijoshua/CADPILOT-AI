@@ -49,3 +49,8 @@ point/frame counts, confidence, resolution, capture time, and session ID. Raw
 depth images and point clouds are deliberately not stored in the project JSON;
 they require a dedicated encrypted spatial-data store and user-controlled
 retention policy before shipping.
+
+Cloud sync applies the same rule server-side: up to 500 validated scan-summary
+records are accepted inside the existing project manifest, while raw points,
+point clouds, depth images, oversized manifests, and malformed numeric metadata
+are rejected before reaching project or revision storage.

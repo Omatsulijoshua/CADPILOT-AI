@@ -1,8 +1,16 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 
 @Injectable()
 export class ProjectsService {
+  private static readonly maxManifestBytes = 2 * 1024 * 1024;
+  private static readonly maxSpatialScanRecords = 500;
+
   constructor(private readonly prisma: PrismaService) {}
 
   list(ownerId: string) {
@@ -45,6 +53,7 @@ export class ProjectsService {
     baseRevision: number,
     payload: object,
   ) {
+    this.validateManifest(payload);
     const existingMutation = await this.prisma.syncMutation.findUnique({
       where: { mutationId },
       include: { project: { select: { ownerId: true } } },
@@ -131,5 +140,64 @@ export class ProjectsService {
     return typeof value === 'string' && value.trim().length > 0
       ? value.trim()
       : 'Untitled design';
+  }
+
+  private validateManifest(payload: object): void {
+    let encoded: string;
+    try {
+      encoded = JSON.stringify(payload);
+    } catch {
+      throw new BadRequestException('Project manifest must be JSON serializable');
+    }
+    if (Buffer.byteLength(encoded, 'utf8') > ProjectsService.maxManifestBytes) {
+      throw new BadRequestException('Project manifest exceeds the 2 MiB limit');
+    }
+
+    const scans = (payload as Record<string, unknown>).spatialScans;
+    if (scans === undefined) return;
+    if (!Array.isArray(scans) || scans.length > ProjectsService.maxSpatialScanRecords) {
+      throw new BadRequestException('Spatial scan records must be a bounded array');
+    }
+    for (const scan of scans) this.validateSpatialScanRecord(scan);
+  }
+
+  private validateSpatialScanRecord(value: unknown): void {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new BadRequestException('Spatial scan record must be an object');
+    }
+    const scan = value as Record<string, unknown>;
+    if ('points' in scan || 'pointCloud' in scan || 'rawDepth' in scan || 'depthImage' in scan) {
+      throw new BadRequestException('Raw spatial capture data cannot be synced in a project manifest');
+    }
+    for (const field of ['id', 'sessionId', 'capturedAt']) {
+      if (typeof scan[field] !== 'string' || scan[field].trim().length === 0) {
+        throw new BadRequestException(`Spatial scan ${field} is required`);
+      }
+    }
+    for (const field of [
+      'frameCount',
+      'pointCount',
+      'widthMm',
+      'heightMm',
+      'depthMm',
+      'meanConfidence',
+      'resolutionMm',
+    ]) {
+      if (typeof scan[field] !== 'number' || !Number.isFinite(scan[field])) {
+        throw new BadRequestException(`Spatial scan ${field} must be finite`);
+      }
+    }
+    if (
+      (scan.frameCount as number) < 1 ||
+      (scan.pointCount as number) < 3 ||
+      (scan.widthMm as number) < 0 ||
+      (scan.heightMm as number) < 0 ||
+      (scan.depthMm as number) < 0 ||
+      (scan.meanConfidence as number) < 0 ||
+      (scan.meanConfidence as number) > 1 ||
+      (scan.resolutionMm as number) <= 0
+    ) {
+      throw new BadRequestException('Spatial scan record has invalid bounds');
+    }
   }
 }

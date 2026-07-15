@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 
 function createPrisma() {
@@ -145,6 +145,38 @@ describe('ProjectsService sync', () => {
     await expect(
       service.sync('owner-1', 'project-1', 'mutation-1', 0, { name: 'Part' }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  test('accepts bounded advisory scan metadata in a synced manifest', async () => {
+    const { prisma, transactionClient } = createPrisma();
+    prisma.syncMutation.findUnique.mockResolvedValue(null);
+    prisma.project.findUnique.mockResolvedValue(null);
+    transactionClient.project.create.mockResolvedValue({ revision: 1 });
+    transactionClient.syncMutation.create.mockImplementation(
+      async ({ data }: { data: object }) => data,
+    );
+    const service = new ProjectsService(prisma as never);
+
+    await expect(service.sync('owner-1', 'project-scan', 'mutation-scan', 0, {
+      name: 'Measured cabinet',
+      spatialScans: [{
+        id: 'scan-1', sessionId: 'session-1', capturedAt: '2026-07-15T00:00:00.000Z',
+        frameCount: 3, pointCount: 500, widthMm: 500, heightMm: 800,
+        depthMm: 300, meanConfidence: 0.8, resolutionMm: 10,
+      }],
+    })).resolves.toEqual(expect.objectContaining({ status: 'APPLIED' }));
+  });
+
+  test('rejects raw point clouds in a project scan record', async () => {
+    const { prisma } = createPrisma();
+    const service = new ProjectsService(prisma as never);
+    await expect(service.sync('owner-1', 'project-scan', 'mutation-raw', 0, {
+      name: 'Unsafe scan',
+      spatialScans: [{ id: 'scan-1', sessionId: 'session-1', capturedAt: 'now',
+        frameCount: 1, pointCount: 3, widthMm: 1, heightMm: 1, depthMm: 1,
+        meanConfidence: 1, resolutionMm: 1, points: [] }],
+    })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.syncMutation.findUnique).not.toHaveBeenCalled();
   });
 });
 describe('ProjectsService archive', () => {
