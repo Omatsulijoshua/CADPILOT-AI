@@ -24,4 +24,4 @@ CadPilot uses a local-first Flutter client, a replaceable native C++ CAD engine 
 | Spatial accuracy/privacy | Capability gates, calibration metadata, local/geometry-only scans, advisory labels. |
 | Credential theft | Short access tokens, rotated hashed refresh tokens, platform secure storage. |
 
-LiDAR and AR remain Phases 6A–6E after stable CAD. Their data ownership is anticipated but no unfinished spatial UI is presented as complete.
+LiDAR and AR remain Phases 6A–6E after stable CAD. The normalized depth-frame ownership boundary is now defined, but no unfinished native capture or spatial UI is presented as complete.

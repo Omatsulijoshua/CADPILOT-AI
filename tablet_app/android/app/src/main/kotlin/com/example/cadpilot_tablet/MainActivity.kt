@@ -30,6 +30,11 @@ class MainActivity : FlutterActivity() {
                         "CadPilot native AR rendering is not available in this build.",
                         call.arguments
                     )
+                    "captureDepthFrame" -> result.error(
+                        "depth_capture_unavailable",
+                        "CadPilot native depth capture is not available on this device/build.",
+                        call.arguments
+                    )
                     "stopArSession" -> result.success(false)
                     else -> result.notImplemented()
                 }
