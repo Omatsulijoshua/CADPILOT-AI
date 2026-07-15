@@ -1,6 +1,6 @@
 # Flutter continuous integration
 
-CadPilot's Flutter client is validated automatically by `.github/workflows/flutter-ci.yml`. The workflow covers the portable application layer and produces release-mode web and unsigned Android debug compilation checks without deploying or accessing production secrets.
+CadPilot's Flutter client is validated automatically by `.github/workflows/flutter-ci.yml`. The workflow covers the portable application layer and produces release-mode web plus unsigned Android and iOS debug compilation checks without deploying or accessing production secrets.
 
 ## Trigger and trust boundary
 
@@ -15,6 +15,7 @@ flowchart LR
     Event["Push, pull request, or manual run"] --> Checkout["Read-only checkout"]
     Checkout --> WebSdk["Flutter 3.44.4 stable"]
     Checkout --> AndroidSdk["Flutter 3.44.4 stable"]
+    Checkout --> IosSdk["Flutter 3.44.4 stable on macOS"]
     WebSdk --> Lock["Enforced pubspec.lock install"]
     Lock --> Analyze["flutter analyze"]
     Analyze --> Tests["Unit and widget test suite"]
@@ -22,8 +23,11 @@ flowchart LR
     Wasm --> Web["Release web build"]
     AndroidSdk --> AndroidLock["Enforced pubspec.lock install"]
     AndroidLock --> Apk["Android debug APK"]
-    Web --> Result{"Both jobs pass?"}
+    IosSdk --> IosLock["Enforced pubspec.lock install"]
+    IosLock --> Ios["Unsigned iOS debug build"]
+    Web --> Result{"All jobs pass?"}
     Apk --> Result
+    Ios --> Result
     Result -- "Yes" --> Green["Green check"]
     Result -- "No" --> Logs["Failed check with logs"]
 ```
@@ -45,8 +49,9 @@ The job pins Flutter **3.44.4 stable**, matching the SDK revision recorded in `t
 | Wasm release | `flutter build web --wasm --release --no-pub` | Dependencies or code incompatible with Flutter WebAssembly release compilation |
 | Web release | `flutter build web --release --no-pub` | Release compiler, asset, manifest, or web integration failures |
 | Android debug | `flutter build apk --debug --no-pub` | Android Gradle, Kotlin, manifest, ARCore, plugin, or debug package failures |
+| iOS debug | `flutter build ios --debug --no-codesign --no-pub` | Swift, Info.plist, CocoaPods, Flutter plugin, or iOS debug build failures |
 
-The Android job is independent from the web quality job, so native Android failures are reported separately. It only compiles an unsigned debug APK; it does not upload an artifact, sign a release, or publish to Google Play.
+The Android and iOS jobs are independent from the web quality job, so native failures are reported separately. They compile unsigned debug applications only; they do not upload artifacts, sign releases, or publish to app stores.
 
 The WebAssembly release build does not replace the standard web release build. It provides concrete compiler compatibility evidence while Vercel continues to serve the conventional Flutter web output. The standard build runs last so `build/web` retains the deployable JavaScript output locally.
 
@@ -67,18 +72,19 @@ flutter test --no-pub
 flutter build web --wasm --release --no-pub
 flutter build web --release --no-pub
 flutter build apk --debug --no-pub
+flutter build ios --debug --no-codesign --no-pub # macOS only
 ```
 
 ## Branch protection recommendation
 
-Require both the GitHub checks named **Analyze, test, and build web** and **Build Android debug APK** before merging into `main`, alongside the backend check. Repository settings should also require pull requests and prevent force pushes. Those owner-controlled settings are deliberately separate from this read-only workflow.
+Require the GitHub checks named **Analyze, test, and build web**, **Build Android debug APK**, and **Build iOS debug application** before merging into `main`, alongside the backend check. Repository settings should also require pull requests and prevent force pushes. Those owner-controlled settings are deliberately separate from this read-only workflow.
 
 ## Future platform gates
 
 The next additions should remain separate jobs so failures are easy to isolate:
 
 1. Native Android method-channel instrumentation tests with an emulator.
-2. iOS compilation and native AR bridge tests on macOS.
+2. iOS native AR bridge tests on a physical device or simulator.
 3. Browser smoke tests against the compiled web artifact.
 4. Signed release workflows guarded by GitHub environments and explicit approval.
 
