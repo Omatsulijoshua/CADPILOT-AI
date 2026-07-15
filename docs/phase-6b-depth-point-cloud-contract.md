@@ -57,7 +57,33 @@ flowchart LR
     Translate --> Cloud["Registered world-space point cloud"]
 ```
 
-Registration is deterministic and intentionally does not perform deduplication, smoothing, outlier rejection, meshing, or persistence. Those transformations need separate accuracy tolerances and tests.
+Registration is deterministic and intentionally performs only coordinate transformation. Cleanup is a separate, explicitly configured stage; meshing and persistence still require their own accuracy tolerances and tests.
+
+## Deterministic point-cloud cleanup
+
+`SpatialPointCloudProcessor` separates cleanup policy from registration and returns a typed result plus stage-by-stage statistics.
+
+```mermaid
+flowchart LR
+    Input["Registered points"] --> Confidence["Minimum confidence filter"]
+    Confidence --> Voxel["Best-confidence point per voxel"]
+    Voxel --> Hash["Radius spatial hash"]
+    Hash --> Neighbors{"Enough nearby points?"}
+    Neighbors -- "No" --> Outlier["Remove isolated sample"]
+    Neighbors -- "Yes" --> Output["Processed point cloud"]
+    Output --> Stats["Removal statistics + provenance"]
+```
+
+Processing settings are validated before point work:
+
+- confidence threshold must be from 0 through 1;
+- voxel size must be from 1 millimeter through 1 meter;
+- isolation radius must be between one and four voxel widths;
+- required neighbor count must be from 0 through 26.
+
+The radius-to-voxel ratio prevents an unbounded number of downsampled candidates from accumulating in each spatial-hash neighborhood. Voxel keys use mathematical floor operations, so negative and positive coordinates remain in distinct deterministic cells. The highest-confidence sample wins a voxel; equal-confidence ties preserve input order. A zero-neighbor setting intentionally disables isolation filtering.
+
+This stage does not invent geometry, average surfaces, or persist scans. Default thresholds need calibration against labeled physical-device data before they can be treated as measurement-grade.
 
 ## Capability gate
 
@@ -78,8 +104,8 @@ Android currently reports `sceneDepthSupported: false` and handles `captureDepth
 
 ## Verification
 
-- Nine focused depth-frame and registration tests pass.
-- The complete Flutter suite contains 148 passing tests.
+- Fourteen focused depth-frame, registration, and cleanup tests pass.
+- The complete Flutter suite contains 153 passing tests.
 - Flutter analysis passes with no issues.
 - Android debug compilation verifies the Kotlin method-channel boundary against ARCore 1.54.0.
 - Standard and WebAssembly web release builds remain compatible because web capture fails closed.
@@ -89,9 +115,8 @@ Android currently reports `sceneDepthSupported: false` and handles `captureDepth
 1. Add a native ARCore Depth capability probe tied to a configured ARCore session.
 2. Implement physical-device depth image acquisition and coordinate conversion.
 3. Add pose-quality and tracking-state metadata from native capture.
-4. Filter low-confidence and statistical outlier points.
-5. Downsample deterministically before project persistence.
-6. Build bounded surface reconstruction and measurement extraction.
-7. Add an iOS ARKit/LiDAR adapter using the same normalized frame contract.
+4. Calibrate cleanup defaults against labeled physical-device scans.
+5. Build bounded surface reconstruction and measurement extraction.
+6. Add an iOS ARKit/LiDAR adapter using the same normalized frame contract.
 
 Each step must retain separate capability claims. Depth frames, registered point clouds, meshes, and editable CAD geometry are different completion levels.

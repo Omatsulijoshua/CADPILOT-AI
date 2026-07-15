@@ -78,7 +78,7 @@ Open the browser build at **[cadpilot.vercel.app](https://cadpilot.vercel.app)**
 | Spatial controller | Implemented | Capability, permission, readiness, lifecycle, recovery |
 | ARCore availability | Implemented | Official asynchronous Android detection |
 | Native AR renderer | In progress | Planes, anchors, occlusion, rendering, placement UX remain |
-| Depth-frame boundary | Implemented foundation | Capability-gated native request, normalized coordinates, pose validation, and deterministic multi-frame registration |
+| Depth-frame boundary | Implemented foundation | Capability-gated native request, normalized coordinates, pose validation, multi-frame registration, confidence filtering, voxel downsampling, and isolated-point rejection |
 | LiDAR reconstruction | Planned | Native capture, registration, processing, meshing, cleanup, export remain |
 | Collaboration | Planned | Presence and robust multi-user conflicts remain |
 | Production AI | Implemented foundation | OpenAI Responses API, strict command schema, bounded timeout, safe failures, review-before-apply, and token metering; production evals, quotas, and billing remain |
@@ -332,7 +332,7 @@ Use compatible physical hardware for ARCore. On macOS/iOS, run `open ios/Runner.
 
 ## Testing
 
-At the latest verified point, the Flutter suite contains **148 passing tests**. Run it locally because the count evolves.
+At the latest verified point, the Flutter suite contains **153 passing tests**. Run it locally because the count evolves.
 
 ```powershell
 cd tablet_app
@@ -525,8 +525,8 @@ Check `DATABASE_URL`, container health, ports, and migrations.
 | [OpenAI provider hardening](docs/openai-provider-hardening-increment.md) | Responses API timeout, validation, privacy, metering, and safe failures |
 | [Backend TypeScript lint gate](docs/backend-typescript-lint-gate.md) | ESLint activation, verification workflow, and dependency-audit baseline |
 | [Backend continuous integration](docs/backend-ci.md) | GitHub Actions triggers, least-privilege model, quality gates, local parity, and branch protection |
-| [Flutter continuous integration](docs/flutter-ci.md) | Locked SDK/dependencies, analysis, 148 tests, Wasm release compilation, standard web release build, and trust boundary |
-| [Phase 6B depth/point-cloud contract](docs/phase-6b-depth-point-cloud-contract.md) | Capability gating, normalized coordinates, sensor poses, deterministic registration, safety limits, and reconstruction roadmap |
+| [Flutter continuous integration](docs/flutter-ci.md) | Locked SDK/dependencies, analysis, 153 tests, Wasm release compilation, standard web release build, and trust boundary |
+| [Phase 6B depth/point-cloud contract](docs/phase-6b-depth-point-cloud-contract.md) | Capability gating, normalized coordinates, sensor poses, registration, bounded cleanup, processing statistics, safety limits, and reconstruction roadmap |
 | [NestJS 11 security migration](docs/nestjs-11-security-migration.md) | Express 5 compatibility, Node 20 floor, HTTP regression tests, request-size protection, and zero-audit verification |
 | [Phase notes](docs/) | Decisions and verification evidence |
 | [Flutter notes](tablet_app/README.md) | Client-specific guidance |
