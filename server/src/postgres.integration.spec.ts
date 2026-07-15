@@ -49,6 +49,12 @@ postgresDescribe('PostgreSQL-backed project API', () => {
     await app.close();
   });
 
+  it('reports ready only while the real PostgreSQL service is reachable', async () => {
+    const response = await fetch(`${baseUrl}/v1/health/ready`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ status: 'ready' });
+  });
   it('persists registration, project creation, and an idempotent sync', async () => {
     const registration = await fetch(`${baseUrl}/v1/auth/register`, {
       method: 'POST',

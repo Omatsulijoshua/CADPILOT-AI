@@ -31,7 +31,7 @@ Prisma Client generation is explicit before schema push, which keeps the job det
 
 ## Exercised API flow
 
-The integration test starts a real Nest HTTP application, connects the actual `PrismaService`, and verifies that one user can:
+The integration test starts a real Nest HTTP application, connects the actual `PrismaService`, verifies `/v1/health/ready` against the disposable PostgreSQL service, and then verifies that one user can:
 
 1. register and receive an access token;
 2. create a project;
