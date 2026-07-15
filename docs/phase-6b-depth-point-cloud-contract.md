@@ -83,7 +83,7 @@ Processing settings are validated before point work:
 
 The radius-to-voxel ratio prevents an unbounded number of downsampled candidates from accumulating in each spatial-hash neighborhood. Voxel keys use mathematical floor operations, so negative and positive coordinates remain in distinct deterministic cells. The highest-confidence sample wins a voxel; equal-confidence ties preserve input order. A zero-neighbor setting intentionally disables isolation filtering.
 
-This stage does not invent geometry, average surfaces, or persist scans. Default thresholds need calibration against labeled physical-device data before they can be treated as measurement-grade.
+This stage does not invent geometry or average surfaces. Default thresholds need calibration against labeled physical-device data before they can be treated as measurement-grade.
 
 ## Advisory measurement extraction
 
@@ -123,14 +123,18 @@ flowchart LR
     Enough -->|"yes"| Measurements["Advisory bounds"]
 ```
 
-This is a Dart orchestration and safety boundary, not a claim of active device depth
-capture. Android's native adapter remains unavailable until its ARCore depth session is
-implemented and verified on compatible physical hardware.
+This is a Dart orchestration and safety boundary, not a claim that capture is
+device-verified. Android and iOS hosts implement bounded native acquisition,
+but both require compatible physical-hardware calibration and lifecycle testing.
 ## Capability gate
 
 Capture is callable only when the capability snapshot reports depth hardware support, identifies the method as `lidar` or `depth_camera`, and explicitly reports `nativeDepthCaptureAvailable`. Web and missing plugins return no frame. Platform errors also return no frame. Malformed frames throw `FormatException` so programming/data-contract errors remain distinguishable from unavailable hardware.
 
-Android reports `sceneDepthSupported: false`; iOS may report ARKit depth hardware support, but both hosts report `nativeDepthCaptureAvailable: false` and handle `captureDepthFrame` with the explicit `depth_capture_unavailable` platform error. This preserves truthful product behavior until an ARCore Depth session, camera texture, render/update loop, and depth-image conversion are implemented and verified on physical hardware.
+Android reports `depth_camera` only after camera access and ARCore automatic-depth
+support; iOS reports `lidar` only after camera access and ARKit scene-depth plus
+scene-reconstruction support. Both hosts return explicit unavailability errors
+when a frame cannot be acquired. The adapters are bounded capture paths, not
+camera renderers, reconstruction engines, or calibrated measurement systems.
 
 ## Safety properties
 
@@ -153,11 +157,11 @@ Android reports `sceneDepthSupported: false`; iOS may report ARKit depth hardwar
 
 ## Next Phase 6B work
 
-1. Add a native ARCore Depth capability probe tied to a configured ARCore session.
-2. Implement physical-device depth image acquisition and coordinate conversion.
-3. Add pose-quality and tracking-state metadata from native capture.
-4. Calibrate cleanup defaults against labeled physical-device scans.
-5. Build bounded surface reconstruction without treating scan bounds as a mesh.
-6. Add an iOS ARKit/LiDAR adapter using the same normalized frame contract.
+1. Validate Android and iPad session lifecycle, pose convention, and intrinsics
+   alignment on compatible physical hardware.
+2. Add pose-quality and tracking-state metadata from native capture.
+3. Calibrate cleanup defaults against labeled physical-device scans.
+4. Build bounded surface reconstruction without treating scan bounds as a mesh.
+5. Add encrypted raw-spatial-data retention only after consent and deletion flows.
 
 Each step must retain separate capability claims. Depth frames, registered point clouds, meshes, and editable CAD geometry are different completion levels.
