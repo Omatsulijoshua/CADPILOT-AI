@@ -18,7 +18,7 @@ void main() {
         createdAt: now,
         updatedAt: now.subtract(const Duration(days: 1)),
         revision: 1,
-        syncState: SyncState.localOnly,
+        syncState: SyncState.pending,
       ),
       CadProject(
         id: 'cabinet',
@@ -27,7 +27,7 @@ void main() {
         createdAt: now,
         updatedAt: now,
         revision: 1,
-        syncState: SyncState.localOnly,
+        syncState: SyncState.pending,
       ),
     ]);
 
@@ -43,6 +43,18 @@ void main() {
     expect(find.text('Kitchen cabinet'), findsOneWidget);
     expect(find.text('Mounting bracket'), findsNothing);
     expect(find.byTooltip('Back up project'), findsOneWidget);
+    expect(find.text('Back up 2 pending'), findsOneWidget);
+
+    await tester.tap(find.text('Back up 2 pending'));
+    await tester.pumpAndSettle();
+    expect(find.text('Back up pending projects?'), findsOneWidget);
+    expect(
+      find.textContaining(
+          'Projects with cloud conflicts will be left unchanged'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
 
     await tester.pumpWidget(
       ProviderScope(
