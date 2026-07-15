@@ -55,6 +55,59 @@ postgresDescribe('PostgreSQL-backed project API', () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ status: 'ready' });
   });
+  it('keeps one persisted user from reading or mutating another user’s project', async () => {
+    const ownerEmail = `owner-${randomUUID()}@cadpilot.test`;
+    const intruderEmail = `intruder-${randomUUID()}@cadpilot.test`;
+    const register = async (email: string) => {
+      const response = await fetch(`${baseUrl}/v1/auth/register`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password: 'integration-password',
+          displayName: 'Integration Designer',
+        }),
+      });
+      expect(response.status).toBe(201);
+      return response.json() as Promise<{ accessToken: string }>;
+    };
+
+    const owner = await register(ownerEmail);
+    const intruder = await register(intruderEmail);
+    const ownerHeaders = {
+      authorization: `Bearer ${owner.accessToken}`,
+      'content-type': 'application/json',
+    };
+    const intruderHeaders = {
+      authorization: `Bearer ${intruder.accessToken}`,
+      'content-type': 'application/json',
+    };
+    const create = await fetch(`${baseUrl}/v1/projects`, {
+      method: 'POST',
+      headers: ownerHeaders,
+      body: JSON.stringify({ name: 'Owner-only project' }),
+    });
+    expect(create.status).toBe(201);
+    const project = await create.json() as { id: string };
+
+    const list = await fetch(`${baseUrl}/v1/projects`, { headers: intruderHeaders });
+    expect(list.status).toBe(200);
+    await expect(list.json()).resolves.toEqual([]);
+
+    const get = await fetch(`${baseUrl}/v1/projects/${project.id}`, { headers: intruderHeaders });
+    expect(get.status).toBe(404);
+
+    const sync = await fetch(`${baseUrl}/v1/projects/${project.id}/sync`, {
+      method: 'POST',
+      headers: intruderHeaders,
+      body: JSON.stringify({
+        mutationId: randomUUID(),
+        baseRevision: 1,
+        payload: { name: 'Unauthorized mutation', formatVersion: 1 },
+      }),
+    });
+    expect(sync.status).toBe(404);
+  });
   it('persists registration, project creation, and an idempotent sync', async () => {
     const registration = await fetch(`${baseUrl}/v1/auth/register`, {
       method: 'POST',
