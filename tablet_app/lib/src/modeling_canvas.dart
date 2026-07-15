@@ -573,16 +573,72 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
     widget.onChanged(history.document);
   }
 
+  Future<int?> exportQuality() async {
+    var targetCells = 56;
+    return showDialog<int>(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('STL export quality'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                selected: targetCells == 32,
+                leading: Icon(targetCells == 32
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off),
+                title: const Text('Draft'),
+                subtitle: const Text('Fast export for previewing'),
+                onTap: () => setDialogState(() => targetCells = 32),
+              ),
+              ListTile(
+                selected: targetCells == 56,
+                leading: Icon(targetCells == 56
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off),
+                title: const Text('Standard'),
+                subtitle: const Text('Balanced detail and file size'),
+                onTap: () => setDialogState(() => targetCells = 56),
+              ),
+              ListTile(
+                selected: targetCells == 96,
+                leading: Icon(targetCells == 96
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off),
+                title: const Text('Fine'),
+                subtitle: const Text('Higher detail for manufacturing'),
+                onTap: () => setDialogState(() => targetCells = 96),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, targetCells),
+              child: const Text('Export STL'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> exportStl() async {
     final current = solid;
     if (current == null) {
       message('Nothing to export yet.');
       return;
     }
+    final targetCells = await exportQuality();
+    if (targetCells == null || !mounted) return;
     try {
-      const mesher = SolidMesher();
+      final mesher = SolidMesher(targetCells: targetCells);
       final mesh = mesher.tessellate(current);
-      final content = const StlExporter(mesher: mesher).export(current,
+      final content = StlExporter(mesher: mesher).export(current,
           name: widget.projectName.replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_'));
       final fileName =
           '${widget.projectName.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}.stl';

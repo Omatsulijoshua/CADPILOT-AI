@@ -80,6 +80,23 @@ void main() {
     expect(mesh.tolerance, lessThanOrEqualTo(100 / 48));
   });
 
+  test('fine mesh quality reduces tolerance for cut solids', () {
+    final cut = ModelOperation(
+        id: 'op-quality',
+        kind: ModelOperationKind.circularCut,
+        profileId: 'hole',
+        depth: 8,
+        createdAt: DateTime.utc(2026));
+    final solid = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [rectangle, circle]),
+        ModelDocument(operations: [extrude, cut]))!;
+    final draft = const SolidMesher(targetCells: 32).tessellate(solid);
+    final fine = const SolidMesher(targetCells: 96).tessellate(solid);
+
+    expect(fine.tolerance, lessThan(draft.tolerance));
+    expect(fine.triangles.length, greaterThan(draft.triangles.length));
+    expect(fine.isClosedManifold, isTrue);
+  });
   test('cut-solid STL contains the tessellated hole', () {
     final cut = ModelOperation(
         id: 'op-2',
