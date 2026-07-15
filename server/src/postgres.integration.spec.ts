@@ -188,5 +188,13 @@ postgresDescribe('PostgreSQL-backed project API', () => {
         revision: 2,
       }),
     ]);
+    const archive = await fetch(`${baseUrl}/v1/projects/${project.id}`, {
+      method: 'DELETE',
+      headers,
+    });
+    expect(archive.status).toBe(200);
+    await expect(archive.json()).resolves.toEqual({ success: true });
+    expect((await fetch(`${baseUrl}/v1/projects/${project.id}`, { headers })).status).toBe(404);
+    await expect((await fetch(`${baseUrl}/v1/projects`, { headers })).json()).resolves.toEqual([]);
   });
 });
