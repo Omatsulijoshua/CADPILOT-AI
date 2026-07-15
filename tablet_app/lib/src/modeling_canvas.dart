@@ -706,57 +706,60 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                   Positioned(
                       top: 16,
                       left: 16,
-                      child: Row(children: [
-                        FilledButton.icon(
-                            onPressed: extrude,
-                            icon: const Icon(Icons.unfold_more),
-                            label: const Text('Extrude')),
-                        const SizedBox(width: 8),
-                        FilledButton.tonalIcon(
-                            onPressed: revolve,
-                            icon: const Icon(Icons.rotate_right),
-                            label: const Text('Revolve')),
-                        const SizedBox(width: 8),
-                        FilledButton.tonalIcon(
-                            onPressed: cut,
-                            icon: const Icon(Icons.remove_circle_outline),
-                            label: const Text('Through cut')),
-                        const SizedBox(width: 8),
-                        FilledButton.tonalIcon(
-                            onPressed: booleanSubtract,
-                            icon: const Icon(Icons.indeterminate_check_box),
-                            label: const Text('Boolean cut')),
-                        const SizedBox(width: 8),
-                        FilledButton.tonalIcon(
-                            onPressed: shell,
-                            icon: const Icon(Icons.crop_square),
-                            label: const Text('Shell')),
-                        const SizedBox(width: 8),
-                        FilledButton.tonalIcon(
-                            onPressed: fillet,
-                            icon: const Icon(Icons.rounded_corner),
-                            label: const Text('Fillet')),
-                        const SizedBox(width: 8),
-                        FilledButton.tonalIcon(
-                            onPressed: chamfer,
-                            icon: const Icon(Icons.architecture),
-                            label: const Text('Chamfer')),
-                        const SizedBox(width: 8),
-                        IconButton.filledTonal(
-                            tooltip: 'Undo 3D operation',
-                            onPressed: history.canUndo ? undo : null,
-                            icon: const Icon(Icons.undo)),
-                        const SizedBox(width: 6),
-                        IconButton.filledTonal(
-                            tooltip: 'Redo 3D operation',
-                            onPressed: history.canRedo ? redo : null,
-                            icon: const Icon(Icons.redo)),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                            onPressed: exportStl,
-                            icon: const Icon(Icons.download),
-                            label: const Text('Export STL'))
-                      ])),
+                      right: 16,
+                      child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(children: [
+                            FilledButton.icon(
+                                onPressed: extrude,
+                                icon: const Icon(Icons.unfold_more),
+                                label: const Text('Extrude')),
+                            const SizedBox(width: 8),
+                            FilledButton.tonalIcon(
+                                onPressed: revolve,
+                                icon: const Icon(Icons.rotate_right),
+                                label: const Text('Revolve')),
+                            const SizedBox(width: 8),
+                            FilledButton.tonalIcon(
+                                onPressed: cut,
+                                icon: const Icon(Icons.remove_circle_outline),
+                                label: const Text('Through cut')),
+                            const SizedBox(width: 8),
+                            FilledButton.tonalIcon(
+                                onPressed: booleanSubtract,
+                                icon: const Icon(Icons.indeterminate_check_box),
+                                label: const Text('Boolean cut')),
+                            const SizedBox(width: 8),
+                            FilledButton.tonalIcon(
+                                onPressed: shell,
+                                icon: const Icon(Icons.crop_square),
+                                label: const Text('Shell')),
+                            const SizedBox(width: 8),
+                            FilledButton.tonalIcon(
+                                onPressed: fillet,
+                                icon: const Icon(Icons.rounded_corner),
+                                label: const Text('Fillet')),
+                            const SizedBox(width: 8),
+                            FilledButton.tonalIcon(
+                                onPressed: chamfer,
+                                icon: const Icon(Icons.architecture),
+                                label: const Text('Chamfer')),
+                            const SizedBox(width: 8),
+                            IconButton.filledTonal(
+                                tooltip: 'Undo 3D operation',
+                                onPressed: history.canUndo ? undo : null,
+                                icon: const Icon(Icons.undo)),
+                            const SizedBox(width: 6),
+                            IconButton.filledTonal(
+                                tooltip: 'Redo 3D operation',
+                                onPressed: history.canRedo ? redo : null,
+                                icon: const Icon(Icons.redo)),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                                onPressed: exportStl,
+                                icon: const Icon(Icons.download),
+                                label: const Text('Export STL'))
+                          ]))),
                   Positioned(
                       left: 18,
                       bottom: 16,
@@ -787,6 +790,7 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                           DropdownButtonFormField<CadMaterial>(
                             key: ValueKey(model.material),
                             initialValue: model.material,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                                 isDense: true, prefixIcon: Icon(Icons.layers)),
                             items: CadMaterial.values
