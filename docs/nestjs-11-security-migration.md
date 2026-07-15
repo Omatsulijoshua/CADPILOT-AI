@@ -157,7 +157,7 @@ The limit is intentionally centralized in `server/src/http-config.ts`. Raising i
 
 ## Remaining backend hardening
 
-- Add hosted CI that enforces lint, tests, build, Prisma validation, and audit.
+- Extend hosted CI with PostgreSQL integration coverage and Flutter platform jobs.
 - Add endpoint-specific rate limits and abuse telemetry before opening the API publicly.
 - Upgrade Prisma 5 through its separately documented major-version path.
 - Review npm install-script allowlisting for deployment reproducibility.

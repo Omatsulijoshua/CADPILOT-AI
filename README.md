@@ -2,6 +2,7 @@
 
 <p align="center"><img src="tablet_app/web/icons/Icon-512.png" alt="CadPilot logo" width="160"></p>
 <p align="center"><strong>Tablet-first CAD, intelligent design assistance, spatial scanning, and augmented reality.</strong></p>
+<p align="center"><a href="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/backend-ci.yml"><img src="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/backend-ci.yml/badge.svg" alt="Backend CI"></a></p>
 <p align="center"><a href="https://cadpilot.vercel.app"><strong>Live App</strong></a> | <a href="docs/architecture.md">Architecture</a> | <a href="docs/api.md">API</a> | <a href="docs/cad-file-format.md">File Format</a> | <a href="docs/security.md">Security</a></p>
 
 ---
@@ -522,6 +523,7 @@ Check `DATABASE_URL`, container health, ports, and migrations.
 | [Secure storage v10 migration](docs/secure-storage-v10-migration.md) | Cipher modernization, automatic token migration, Web/Wasm compatibility |
 | [OpenAI provider hardening](docs/openai-provider-hardening-increment.md) | Responses API timeout, validation, privacy, metering, and safe failures |
 | [Backend TypeScript lint gate](docs/backend-typescript-lint-gate.md) | ESLint activation, verification workflow, and dependency-audit baseline |
+| [Backend continuous integration](docs/backend-ci.md) | GitHub Actions triggers, least-privilege model, quality gates, local parity, and branch protection |
 | [NestJS 11 security migration](docs/nestjs-11-security-migration.md) | Express 5 compatibility, Node 20 floor, HTTP regression tests, request-size protection, and zero-audit verification |
 | [Phase notes](docs/) | Decisions and verification evidence |
 | [Flutter notes](tablet_app/README.md) | Client-specific guidance |
