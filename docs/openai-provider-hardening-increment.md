@@ -149,7 +149,7 @@ Verified results at this checkpoint:
 - NestJS TypeScript build succeeds.
 - The complete Flutter suite remains at 139 passing tests from the preceding client checkpoint.
 
-The existing `npm run lint` script is not yet a functioning gate because the repository does not contain an ESLint configuration or TypeScript ESLint parser. That pre-existing tooling gap is documented rather than reported as a lint pass.
+The `npm run lint` gate is now active through the follow-up [backend TypeScript lint increment](backend-typescript-lint-gate.md).
 
 ## Remaining production work
 
@@ -159,4 +159,4 @@ The existing `npm run lint` script is not yet a functioning gate because the rep
 - Define retry policy for rate limits without duplicating billable requests.
 - Add moderation/policy rules appropriate to uploaded project context.
 - Add an operational circuit breaker and provider health metrics.
-- Repair the TypeScript ESLint configuration and enforce it in CI.
+- Delivered locally in `backend-typescript-lint-gate.md`; add the verified lint command to hosted CI when CI configuration is introduced.

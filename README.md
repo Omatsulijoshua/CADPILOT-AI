@@ -345,6 +345,7 @@ Backend:
 
 ```powershell
 cd server
+npm run lint
 npm test
 npm run build
 npx prisma validate
@@ -357,7 +358,8 @@ flowchart LR
     UNIT --> WIDGET["Widget tests"]
     WIDGET --> WEB["Web build"]
     WIDGET --> ANDROID["Android build"]
-    UNIT --> SERVER["Server tests/build"]
+    UNIT --> LINT["Server TypeScript lint"]
+    LINT --> SERVER["Server tests/build"]
     UNIT --> ABI["CAD ABI checks"]
     ANDROID --> DEVICE["Physical-device test"]
 ```
@@ -518,6 +520,7 @@ Check `DATABASE_URL`, container health, ports, and migrations.
 | [Offline cloud verification](docs/offline-cloud-session-verification-increment.md) | Visible offline state, retry flow, and stale-token cloud guards |
 | [Secure storage v10 migration](docs/secure-storage-v10-migration.md) | Cipher modernization, automatic token migration, Web/Wasm compatibility |
 | [OpenAI provider hardening](docs/openai-provider-hardening-increment.md) | Responses API timeout, validation, privacy, metering, and safe failures |
+| [Backend TypeScript lint gate](docs/backend-typescript-lint-gate.md) | ESLint activation, verification workflow, and dependency-audit baseline |
 | [Phase notes](docs/) | Decisions and verification evidence |
 | [Flutter notes](tablet_app/README.md) | Client-specific guidance |
 
