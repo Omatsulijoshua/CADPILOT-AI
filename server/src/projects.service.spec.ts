@@ -16,6 +16,7 @@ function createPrisma() {
     prisma: {
       project: {
         findMany: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
         findUnique: jest.fn(),
       },
@@ -126,5 +127,33 @@ describe('ProjectsService sync', () => {
     await expect(
       service.sync('owner-1', 'project-1', 'mutation-1', 0, { name: 'Part' }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+describe('ProjectsService get', () => {
+  test('returns only an active project owned by the caller', async () => {
+    const { prisma } = createPrisma();
+    prisma.project.findFirst.mockResolvedValue({
+      id: 'project-1',
+      ownerId: 'owner-1',
+      revision: 3,
+      manifest: { id: 'project-1' },
+    });
+    const service = new ProjectsService(prisma as never);
+
+    const project = await service.get('owner-1', 'project-1');
+
+    expect(prisma.project.findFirst).toHaveBeenCalledWith({
+      where: { id: 'project-1', ownerId: 'owner-1', status: 'ACTIVE' },
+    });
+    expect(project.revision).toBe(3);
+  });
+
+  test('missing or foreign projects return not found', async () => {
+    const { prisma } = createPrisma();
+    prisma.project.findFirst.mockResolvedValue(null);
+    const service = new ProjectsService(prisma as never);
+
+    await expect(service.get('owner-1', 'foreign-project')).rejects
+      .toBeInstanceOf(NotFoundException);
   });
 });

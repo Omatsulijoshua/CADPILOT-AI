@@ -406,6 +406,52 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
     }
   }
 
+  Future<void> restoreProject(CadProject project) async {
+    if (syncing) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Restore cloud copy?'),
+        content: const Text(
+          'This replaces unsynced local edits with the latest cloud backup. '
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Restore cloud copy'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    autosave?.cancel();
+    setState(() {
+      syncing = true;
+      status = 'Downloading cloud copy...';
+    });
+    try {
+      final restored = await ref
+          .read(projectsProvider.notifier)
+          .restoreFromCloud(project.id);
+      if (!mounted) return;
+      note.text = restored.note;
+      setState(() => status = 'Cloud copy restored');
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = error is CloudApiException
+            ? error.message
+            : error.toString().replaceFirst('Bad state: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => syncing = false);
+    }
+  }
+
   Future<void> runAiCommand(CadProject project) async {
     final token = await ref.read(tokenStoreProvider).readAccessToken();
     if (!mounted) return;
@@ -607,6 +653,17 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                               Text(syncing ? 'Backing up...' : 'Back up now'),
                         ),
                       ),
+                      if (project.lastSyncedRevision != null &&
+                          project.syncState != SyncState.synced)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed:
+                                syncing ? null : () => restoreProject(project),
+                            icon: const Icon(Icons.cloud_download_outlined),
+                            label: const Text('Restore cloud copy'),
+                          ),
+                        ),
                       const Divider(),
                       const Text('AI COMMAND HISTORY'),
                       const SizedBox(height: 8),

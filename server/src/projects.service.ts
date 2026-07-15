@@ -12,6 +12,13 @@ export class ProjectsService {
     });
   }
 
+  async get(ownerId: string, projectId: string) {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId, status: 'ACTIVE' },
+    });
+    if (!project) throw new NotFoundException('Project not found');
+    return project;
+  }
   create(ownerId: string, name: string) {
     return this.prisma.project.create({
       data: {

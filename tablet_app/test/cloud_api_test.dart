@@ -176,4 +176,69 @@ void main() {
     expect(mutationIds[0], mutationIds[1]);
     expect(mutationIds[2], isNot(mutationIds[0]));
   });
+  test('cloud restore validates and marks the downloaded revision', () async {
+    final now = DateTime.utc(2026, 7, 15);
+    final remote = CadProject(
+      id: '11111111-1111-4111-8111-111111111111',
+      name: 'Cloud bracket',
+      note: 'Remote copy',
+      createdAt: now,
+      updatedAt: now,
+      revision: 9,
+      syncState: SyncState.pending,
+    );
+    final client = MockClient((request) async {
+      expect(request.method, 'GET');
+      expect(request.url.path,
+          '/v1/projects/11111111-1111-4111-8111-111111111111');
+      expect(request.headers['authorization'], 'Bearer access');
+      return http.Response(
+        jsonEncode({'revision': 4, 'manifest': remote.toJson()}),
+        200,
+      );
+    });
+    final restored = await CloudApi(
+      client: client,
+      baseUrl: 'https://api.test/v1',
+    ).pullProject(remote.id, 'access');
+    expect(restored.note, 'Remote copy');
+    expect(restored.revision, 9);
+    expect(restored.lastSyncedRevision, 4);
+    expect(restored.syncState, SyncState.synced);
+  });
+
+  test('cloud restore reports a missing backup safely', () async {
+    final client = MockClient((_) async => http.Response('{}', 404));
+    expect(
+      () => CloudApi(client: client, baseUrl: 'https://api.test/v1')
+          .pullProject('missing-project', 'access'),
+      throwsA(isA<CloudApiException>().having(
+        (error) => error.statusCode,
+        'statusCode',
+        404,
+      )),
+    );
+  });
+
+  test('cloud restore rejects a mismatched project identity', () async {
+    final now = DateTime.utc(2026, 7, 15);
+    final remote = CadProject(
+      id: 'different-project',
+      name: 'Wrong project',
+      note: '',
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+      syncState: SyncState.synced,
+    );
+    final client = MockClient((_) async => http.Response(
+          jsonEncode({'revision': 2, 'manifest': remote.toJson()}),
+          200,
+        ));
+    expect(
+      () => CloudApi(client: client, baseUrl: 'https://api.test/v1')
+          .pullProject('expected-project', 'access'),
+      throwsA(isA<CloudApiException>()),
+    );
+  });
 }

@@ -24,3 +24,6 @@ Milestones: Phase 1 foundation; Phase 2 sketching; Phase 3 basic 3D; Phase 4 AI 
 - Project and mutation lookups are ownership-scoped and do not disclose another user's records.
 
 Local edits remain pending until the client validates and persists the returned applied revision.
+### Download one cloud project
+
+`GET /v1/projects/:id` returns the active project row for the authenticated owner, including the positive server `revision` and versioned `manifest`. Missing, inactive, and foreign project IDs return 404. Clients must validate that `manifest.id` matches the requested ID before replacing local data.

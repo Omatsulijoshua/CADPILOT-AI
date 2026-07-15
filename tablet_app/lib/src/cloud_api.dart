@@ -99,6 +99,45 @@ class CloudApi {
     );
   }
 
+  Future<CadProject> pullProject(String projectId, String token) async {
+    if (projectId.trim().isEmpty) {
+      throw ArgumentError.value(projectId, 'projectId', 'must not be empty');
+    }
+    final response = await client.get(
+      Uri.parse('$baseUrl/projects/$projectId'),
+      headers: {'authorization': 'Bearer $token'},
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CloudApiException(
+        response.statusCode == 404
+            ? 'No cloud backup was found for this project.'
+            : 'Could not download the cloud project.',
+        response.statusCode,
+      );
+    }
+    try {
+      final body = jsonDecode(response.body) as Map<String, Object?>;
+      final revision = body['revision'] as int?;
+      final manifest = body['manifest'];
+      if (revision == null || revision < 1 || manifest is! Map) {
+        throw const FormatException('Invalid cloud project envelope.');
+      }
+      final project = CadProject.fromJson(
+        Map<String, Object?>.from(manifest),
+      );
+      if (project.id != projectId) {
+        throw const FormatException('Cloud project identity mismatch.');
+      }
+      return project.markSynced(revision);
+    } on CloudApiException {
+      rethrow;
+    } catch (_) {
+      throw const CloudApiException(
+        'Cloud project data is invalid and was not restored.',
+      );
+    }
+  }
+
   Future<ProjectSyncResult> pushProject(
     CadProject project,
     String token, {
