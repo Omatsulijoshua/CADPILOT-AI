@@ -326,7 +326,7 @@ Use compatible physical hardware for ARCore. On macOS/iOS, run `open ios/Runner.
 
 ## Testing
 
-At the latest verified point, the Flutter suite contains **111 passing tests**. Run it locally because the count evolves.
+At the latest verified point, the Flutter suite contains **115 passing tests**. Run it locally because the count evolves.
 
 ```powershell
 cd tablet_app

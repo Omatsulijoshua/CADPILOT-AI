@@ -3,6 +3,7 @@ package com.example.cadpilot_tablet
 import android.Manifest
 import android.content.pm.PackageManager
 import com.google.ar.core.ArCoreApk
+import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -21,6 +22,7 @@ class MainActivity : FlutterActivity() {
                     "getCapabilities" -> spatialCapabilities(result)
                     "getCameraPermission" -> result.success(cameraPermission())
                     "requestCameraPermission" -> requestCameraPermission(result)
+                    "requestArRuntimeInstall" -> requestArRuntimeInstall(result)
                     "startArSession",
                     "createFloorAnchor",
                     "captureArScreenshot" -> result.error(
@@ -57,6 +59,26 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun requestArRuntimeInstall(result: MethodChannel.Result) {
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) {
+            result.success("unavailable")
+            return
+        }
+        try {
+            when (ArCoreApk.getInstance().requestInstall(this, true)) {
+                ArCoreApk.InstallStatus.INSTALLED -> result.success("installed")
+                ArCoreApk.InstallStatus.INSTALL_REQUESTED -> result.success("install_requested")
+            }
+        } catch (_: UnavailableUserDeclinedInstallationException) {
+            result.success("declined")
+        } catch (error: Exception) {
+            result.error(
+                "ar_runtime_install_unavailable",
+                "The AR runtime cannot be installed on this device.",
+                error.javaClass.simpleName
+            )
+        }
+    }
     private fun cameraPermission(): String = when {
         ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED -> "granted"

@@ -97,6 +97,20 @@ enum CameraPermissionState {
       };
 }
 
+enum ArRuntimeInstallResult {
+  installed,
+  installRequested,
+  declined,
+  unavailable;
+
+  static ArRuntimeInstallResult fromNative(String? value) => switch (value) {
+        'installed' => installed,
+        'install_requested' => installRequested,
+        'declined' => declined,
+        _ => unavailable,
+      };
+}
+
 class ArPlacementPreflight {
   const ArPlacementPreflight({
     required this.capabilities,
@@ -134,6 +148,18 @@ class SpatialCapabilityService {
     MethodChannel channel = const MethodChannel('cadpilot/spatial'),
   }) : _channel = channel;
   final MethodChannel _channel;
+  Future<ArRuntimeInstallResult> requestArRuntimeInstall() async {
+    if (kIsWeb) return ArRuntimeInstallResult.unavailable;
+    try {
+      final value =
+          await _channel.invokeMethod<String>('requestArRuntimeInstall');
+      return ArRuntimeInstallResult.fromNative(value);
+    } on PlatformException {
+      return ArRuntimeInstallResult.unavailable;
+    } on MissingPluginException {
+      return ArRuntimeInstallResult.unavailable;
+    }
+  }
 
   Future<SpatialAnchor?> createFloorAnchor({
     required SpatialPlacement placement,
@@ -220,7 +246,7 @@ class SpatialCapabilityPanel extends StatefulWidget {
 }
 
 class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
-  late final Future<SpatialCapabilities> capabilities = widget.service.detect();
+  late Future<SpatialCapabilities> capabilities = widget.service.detect();
   late List<SpatialPlacement> placements;
 
   @override
@@ -295,6 +321,17 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                       ),
                     ),
                   ]),
+                  if (value.arSupported && !value.arRuntimeInstalled) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _requestArRuntime(context),
+                        icon: const Icon(Icons.system_update_alt),
+                        label: const Text('Install or update AR runtime'),
+                      ),
+                    ),
+                  ],
                   if (placements.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Align(
@@ -350,6 +387,36 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
               child: const Text('Close'))
         ],
       );
+
+  Future<void> _requestArRuntime(BuildContext context) async {
+    final result = await widget.service.requestArRuntimeInstall();
+    if (!context.mounted) return;
+    final message = switch (result) {
+      ArRuntimeInstallResult.installed =>
+        'The AR runtime is installed. CadPilot will check readiness again.',
+      ArRuntimeInstallResult.installRequested =>
+        'Complete the AR runtime installation, then return to CadPilot.',
+      ArRuntimeInstallResult.declined =>
+        'AR runtime installation was declined. Manual placement remains available.',
+      ArRuntimeInstallResult.unavailable =>
+        'The AR runtime cannot be installed on this device. Manual placement remains available.',
+    };
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('AR runtime'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    setState(() => capabilities = widget.service.detect());
+  }
 
   Future<void> _requestCameraAccess(BuildContext context) async {
     final state = await widget.service.cameraPermission(request: true);
