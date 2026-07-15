@@ -2,6 +2,7 @@ package com.example.cadpilot_tablet
 
 import android.Manifest
 import android.content.pm.PackageManager
+import com.google.ar.core.ArCoreApk
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -37,13 +38,8 @@ class MainActivity : FlutterActivity() {
         val manager = packageManager
         val camera = manager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
         val gyro = manager.hasSystemFeature(PackageManager.FEATURE_SENSOR_GYROSCOPE)
-        val arCoreInstalled = try {
-            manager.getPackageInfo("com.google.ar.core", 0)
-            true
-        } catch (_: PackageManager.NameNotFoundException) {
-            false
-        }
-        val ar = camera && gyro && arCoreInstalled
+        val arCoreAvailability = ArCoreApk.getInstance().checkAvailability(this)
+        val ar = camera && gyro && arCoreAvailability.isSupported
         return mapOf(
             "platform" to "android",
             "cameraSupported" to camera,
