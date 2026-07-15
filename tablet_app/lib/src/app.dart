@@ -443,6 +443,7 @@ class CloudProjectsPanel extends ConsumerStatefulWidget {
 class _CloudProjectsPanelState extends ConsumerState<CloudProjectsPanel> {
   late Future<List<CloudProjectSummary>> projects;
   String? importingId;
+  String? archivingId;
   String? message;
 
   @override
@@ -491,6 +492,53 @@ class _CloudProjectsPanelState extends ConsumerState<CloudProjectsPanel> {
       }
     } finally {
       if (mounted) setState(() => importingId = null);
+    }
+  }
+
+  Future<void> archive(CloudProjectSummary summary) async {
+    if (importingId != null || archivingId != null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Archive cloud backup?'),
+        content: Text(
+          'Archive "${summary.name}" from your cloud backups? The local project on this device will not be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonalIcon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.archive_outlined),
+            label: const Text('Archive backup'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      archivingId = summary.id;
+      message = null;
+    });
+    try {
+      await ref.read(projectsProvider.notifier).archiveCloudCopy(summary.id);
+      if (mounted) {
+        setState(() {
+          message =
+              'Cloud backup archived. Your local project remains available.';
+          projects = load();
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => message = error is CloudApiException
+            ? error.message
+            : error.toString().replaceFirst('Bad state: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => archivingId = null);
     }
   }
 
@@ -555,7 +603,10 @@ class _CloudProjectsPanelState extends ConsumerState<CloudProjectsPanel> {
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
                     final project = values[index];
-                    final busy = importingId == project.id;
+                    final downloading = importingId == project.id;
+                    final archiving = archivingId == project.id;
+                    final processing =
+                        importingId != null || archivingId != null;
                     return Card(
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(
@@ -569,20 +620,39 @@ class _CloudProjectsPanelState extends ConsumerState<CloudProjectsPanel> {
                         subtitle: Text(
                           'Cloud revision ${project.revision} · Updated ${_date(project.updatedAt)}',
                         ),
-                        trailing: FilledButton.tonalIcon(
-                          onPressed: importingId == null
-                              ? () => import(project)
-                              : null,
-                          icon: busy
-                              ? const SizedBox.square(
-                                  dimension: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.cloud_download_outlined),
-                          label:
-                              Text(busy ? 'Downloading...' : 'Download & open'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Archive cloud backup',
+                              onPressed:
+                                  processing ? null : () => archive(project),
+                              icon: archiving
+                                  ? const SizedBox.square(
+                                      dimension: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.archive_outlined),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton.tonalIcon(
+                              onPressed:
+                                  processing ? null : () => import(project),
+                              icon: downloading
+                                  ? const SizedBox.square(
+                                      dimension: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.cloud_download_outlined),
+                              label: Text(
+                                downloading
+                                    ? 'Downloading...'
+                                    : 'Download & open',
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     );
