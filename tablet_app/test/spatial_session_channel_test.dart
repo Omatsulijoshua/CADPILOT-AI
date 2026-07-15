@@ -1,8 +1,10 @@
 import 'package:cadpilot_tablet/src/spatial_session.dart';
 import 'package:cadpilot_tablet/src/spatial_session_channel.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   test('native AR envelopes decode and advance only the active session', () {
     final coordinator = ArSessionCoordinator(sessionId: 'session-a');
     expect(
@@ -86,6 +88,56 @@ void main() {
         'sequence': 0,
         'event': 'mystery',
       }),
+      throwsFormatException,
+    );
+  });
+
+  test('method channel bridge reports accepted and stale native callbacks',
+      () async {
+    final states = <ArSessionState>[];
+    final bridge = ArSessionMethodChannelBridge(
+      coordinator: ArSessionCoordinator(sessionId: 'active'),
+      onStateChanged: states.add,
+      channel: const MethodChannel('cadpilot/spatial-bridge-test'),
+    );
+    bridge.start();
+    expect(bridge.isListening, isTrue);
+
+    final accepted = await bridge.handle(const MethodCall('arSessionEvent', {
+      'sessionId': 'active',
+      'sequence': 0,
+      'event': 'start',
+    })) as Map<Object?, Object?>;
+    expect(accepted['accepted'], isTrue);
+    expect(accepted['sequence'], 0);
+    expect(states.single.phase, ArSessionPhase.initializing);
+
+    final stale = await bridge.handle(const MethodCall('arSessionEvent', {
+      'sessionId': 'expired',
+      'sequence': 40,
+      'event': 'stop',
+    })) as Map<Object?, Object?>;
+    expect(stale['accepted'], isFalse);
+    expect(states, hasLength(1));
+    expect(bridge.coordinator.state.phase, ArSessionPhase.initializing);
+
+    bridge.dispose();
+    expect(bridge.isListening, isFalse);
+  });
+
+  test(
+      'method channel bridge rejects unknown callbacks and malformed arguments',
+      () async {
+    final bridge = ArSessionMethodChannelBridge(
+      coordinator: ArSessionCoordinator(sessionId: 'active'),
+      onStateChanged: (_) {},
+    );
+    expect(
+      () => bridge.handle(const MethodCall('unexpected')),
+      throwsA(isA<MissingPluginException>()),
+    );
+    expect(
+      () => bridge.handle(const MethodCall('arSessionEvent', 'not-a-map')),
       throwsFormatException,
     );
   });

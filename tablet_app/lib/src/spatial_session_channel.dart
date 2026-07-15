@@ -1,3 +1,5 @@
+import 'package:flutter/services.dart';
+
 import 'spatial_session.dart';
 
 class ArSessionEventEnvelope {
@@ -71,5 +73,49 @@ class ArSessionCoordinator {
     state = next;
     _lastSequence = envelope.sequence;
     return true;
+  }
+}
+
+class ArSessionMethodChannelBridge {
+  ArSessionMethodChannelBridge({
+    required this.coordinator,
+    required this.onStateChanged,
+    MethodChannel channel = const MethodChannel('cadpilot/spatial'),
+  }) : _channel = channel;
+
+  final ArSessionCoordinator coordinator;
+  final void Function(ArSessionState state) onStateChanged;
+  final MethodChannel _channel;
+  bool _listening = false;
+
+  bool get isListening => _listening;
+
+  void start() {
+    if (_listening) return;
+    _channel.setMethodCallHandler(handle);
+    _listening = true;
+  }
+
+  void dispose() {
+    if (!_listening) return;
+    _channel.setMethodCallHandler(null);
+    _listening = false;
+  }
+
+  Future<Object?> handle(MethodCall call) async {
+    if (call.method != 'arSessionEvent') {
+      throw MissingPluginException(
+          'Unsupported native spatial callback: ${call.method}.');
+    }
+    final arguments = call.arguments;
+    if (arguments is! Map<Object?, Object?>) {
+      throw const FormatException(
+          'Native AR session event arguments must be a map.');
+    }
+    final accepted = coordinator.consume(
+      ArSessionEventEnvelope.fromMap(arguments),
+    );
+    if (accepted) onStateChanged(coordinator.state);
+    return {'accepted': accepted, 'sequence': coordinator.lastSequence};
   }
 }
