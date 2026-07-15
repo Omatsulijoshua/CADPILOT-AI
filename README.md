@@ -23,6 +23,7 @@ CadPilot is an actively developed local-first CAD platform built with Flutter, D
 - [Intelligent commands](#intelligent-commands)
 - [Spatial scanning and AR](#spatial-scanning-and-ar)
 - [Persistence and sync](#persistence-and-sync)
+- [Portable project transfer](#portable-project-transfer)
 - [Repository map](#repository-map)
 - [Technology stack](#technology-stack)
 - [Getting started](#getting-started)
@@ -67,7 +68,7 @@ Open the browser build at **[cadpilot.vercel.app](https://cadpilot.vercel.app)**
 |---|---|---|
 | Flutter shell | Implemented | Responsive navigation, projects, editor, settings, branded web shell |
 | Authentication | Implemented foundation | Account registration, sign-in, RSA-OAEP/AES-GCM secure token storage, refresh-token rotation, revocable logout, guest mode, and offline-tolerant session restoration with a visible reconnect-and-verify state |
-| Project management | Implemented | Create, open, persist, back up, browse cloud projects, restore, and manage projects |
+| Project management | Implemented | Create, open, persist, back up, browse cloud projects, restore, and transfer independent portable copies |
 | Durable autosave | Implemented | Lifecycle-aware local persistence |
 | Sketching | Implemented | Entities, selection, dimensions, constraints, tools, viewport |
 | Parametric history | Implemented | Ordered features, rebuild behavior, and history UI |
@@ -222,6 +223,47 @@ flowchart LR
 ```
 
 Conflicts must never silently discard project data. See [docs/cad-file-format.md](docs/cad-file-format.md).
+
+## Portable project transfer
+
+CadPilot can move a complete project between devices as a portable
+`*.cadpilot.json` file. Use **Export project manifest** on a project card, then
+use **Import manifest** from the dashboard. The browser starts a download;
+Android opens the system save or document picker. Import always creates a new,
+local-only project with a new ID. It never overwrites a local design and never
+uploads a file automatically.
+
+```mermaid
+flowchart LR
+    SOURCE["Open project card"] --> EXPORT["Export manifest"]
+    EXPORT --> ENVELOPE["Versioned JSON envelope\nschema + timestamp + project + SHA-256"]
+    ENVELOPE --> SHARE["User-controlled transfer\nfile, drive, or messaging app"]
+    SHARE --> PICK["Import manifest"]
+    PICK --> CHECK["Size, JSON, schema, and integrity validation"]
+    CHECK --> REVIEW["Review project name, contents, and export time"]
+    REVIEW --> CONFIRM{"Import copy?"}
+    CONFIRM -- "No" --> CANCEL["No changes"]
+    CONFIRM -- "Yes" --> COPY["New ID + local-only sync state"]
+    COPY --> OPEN["Open independent project copy"]
+```
+
+### Manifest contract
+
+Current exports use schema version `1` and contain the following top-level
+fields: `schemaVersion`, `format` (`cadpilot-project`), `exportedAt`, `project`,
+and `integrity`. The `integrity` field contains a SHA-256 digest of the encoded
+project data. CadPilot checks it before showing the import review; a mismatch
+means the file was changed or corrupted and is rejected.
+
+This is an integrity check, not a signature or proof of author identity. A
+person who can edit a manifest can also recalculate its digest. For trusted
+handoff, use a protected sharing channel in addition to CadPilot's file check.
+
+Import accepts earlier root-level project JSON and first-generation versioned
+manifests without integrity metadata for compatibility. New exports are capped
+at 2 MiB by the native/mobile boundary and the Flutter parser. Names are made
+safe for filenames, and Android cancellation is treated as cancellation rather
+than an export failure.
 
 ## Repository map
 

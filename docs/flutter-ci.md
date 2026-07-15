@@ -17,7 +17,7 @@ flowchart LR
     Checkout --> AndroidSdk["Flutter 3.44.4 stable"]
     WebSdk --> Lock["Enforced pubspec.lock install"]
     Lock --> Analyze["flutter analyze"]
-    Analyze --> Tests["158 unit and widget tests"]
+    Analyze --> Tests["Unit and widget test suite"]
     Tests --> Wasm["WebAssembly release build"]
     Wasm --> Web["Release web build"]
     AndroidSdk --> AndroidLock["Enforced pubspec.lock install"]
