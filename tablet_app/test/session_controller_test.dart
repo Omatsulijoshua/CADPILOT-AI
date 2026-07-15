@@ -130,6 +130,21 @@ void main() {
             .archiveCloudCopy('cloud-project'),
         completes);
   });
+  test('blocks cloud archive while verification is offline', () async {
+    final container = _container(
+        _MemoryLocalStore(signedIn),
+        _MemoryTokenStore()..accessToken = 'access',
+        CloudApi(baseUrl: 'https://api.test/v1'));
+    addTearDown(container.dispose);
+    container.read(cloudSessionStatusProvider.notifier).state =
+        CloudSessionStatus.offline;
+    await container.read(projectsProvider.future);
+    await expectLater(
+        container
+            .read(projectsProvider.notifier)
+            .archiveCloudCopy('cloud-project'),
+        throwsA(isA<StateError>()));
+  });
 }
 
 ProviderContainer _container(
