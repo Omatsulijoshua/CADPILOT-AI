@@ -43,3 +43,9 @@ The spatial workspace exposes **Capture advisory depth scan** only when this
 capability is ready. It requests three bounded frames, then displays the
 existing cleaned scan bounds and provenance. No scan is persisted as a CAD mesh
 or presented as a certified real-world measurement.
+
+Completed scans persist a compact advisory record with bounded dimensions,
+point/frame counts, confidence, resolution, capture time, and session ID. Raw
+depth images and point clouds are deliberately not stored in the project JSON;
+they require a dedicated encrypted spatial-data store and user-controlled
+retention policy before shipping.

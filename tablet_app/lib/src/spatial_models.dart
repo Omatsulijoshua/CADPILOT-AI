@@ -1,5 +1,59 @@
 import 'dart:math' as math;
 
+class SpatialScanRecord {
+  const SpatialScanRecord({
+    required this.id,
+    required this.sessionId,
+    required this.capturedAt,
+    required this.frameCount,
+    required this.pointCount,
+    required this.widthMm,
+    required this.heightMm,
+    required this.depthMm,
+    required this.meanConfidence,
+    required this.resolutionMm,
+  });
+
+  final String id;
+  final String sessionId;
+  final DateTime capturedAt;
+  final int frameCount;
+  final int pointCount;
+  final double widthMm;
+  final double heightMm;
+  final double depthMm;
+  final double meanConfidence;
+  final double resolutionMm;
+
+  Map<String, Object?> toJson() => {
+        'id': id,
+        'sessionId': sessionId,
+        'capturedAt': capturedAt.toIso8601String(),
+        'frameCount': frameCount,
+        'pointCount': pointCount,
+        'widthMm': widthMm,
+        'heightMm': heightMm,
+        'depthMm': depthMm,
+        'meanConfidence': meanConfidence,
+        'resolutionMm': resolutionMm,
+        'accuracy': 'advisory_scan_bounds',
+      };
+
+  factory SpatialScanRecord.fromJson(Map<String, Object?> json) =>
+      SpatialScanRecord(
+        id: json['id']! as String,
+        sessionId: json['sessionId']! as String,
+        capturedAt: DateTime.parse(json['capturedAt']! as String),
+        frameCount: json['frameCount']! as int,
+        pointCount: json['pointCount']! as int,
+        widthMm: (json['widthMm']! as num).toDouble(),
+        heightMm: (json['heightMm']! as num).toDouble(),
+        depthMm: (json['depthMm']! as num).toDouble(),
+        meanConfidence: (json['meanConfidence']! as num).toDouble(),
+        resolutionMm: (json['resolutionMm']! as num).toDouble(),
+      );
+}
+
 enum SpatialTrackingState { tracking, limited, paused, stopped }
 
 class SpatialAnchor {

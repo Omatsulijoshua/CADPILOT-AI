@@ -3,6 +3,7 @@ import 'package:cadpilot_tablet/src/model_3d.dart';
 import 'package:cadpilot_tablet/src/models.dart';
 import 'package:cadpilot_tablet/src/sketch_models.dart';
 import 'package:cadpilot_tablet/src/spatial_capture.dart';
+import 'package:cadpilot_tablet/src/spatial_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -74,6 +75,35 @@ void main() {
     expect(decoded.arScreenshots.single.path, '/captures/cabinet.png');
     expect(decoded.arScreenshots.single.sessionId, 'session-4');
     expect(decoded.arScreenshots.single.capturedAt, now);
+  });
+
+  test('project serialization persists advisory scan records', () {
+    final now = DateTime.utc(2026, 7, 15);
+    final project = CadProject(
+      id: 'scan-project',
+      name: 'Measured cabinet',
+      note: '',
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+      syncState: SyncState.pending,
+      spatialScans: [
+        SpatialScanRecord(
+            id: 'scan-1',
+            sessionId: 'session-1',
+            capturedAt: now,
+            frameCount: 3,
+            pointCount: 1024,
+            widthMm: 450,
+            heightMm: 700,
+            depthMm: 350,
+            meanConfidence: .8,
+            resolutionMm: 10),
+      ],
+    );
+    final decoded = CadProject.fromJson(project.toJson());
+    expect(decoded.spatialScans.single.pointCount, 1024);
+    expect(decoded.spatialScans.single.widthMm, 450);
   });
 
   test('legacy projects load with an empty AR screenshot collection', () {

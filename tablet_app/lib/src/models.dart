@@ -35,6 +35,7 @@ class CadProject {
     this.model = const ModelDocument(),
     this.aiHistory = const [],
     this.spatialPlacements = const [],
+    this.spatialScans = const [],
     this.arScreenshots = const [],
   });
   final String id;
@@ -49,6 +50,7 @@ class CadProject {
   final ModelDocument model;
   final List<AiCommandRecord> aiHistory;
   final List<SpatialPlacement> spatialPlacements;
+  final List<SpatialScanRecord> spatialScans;
   final List<ArScreenshot> arScreenshots;
 
   CadProject copyWith(
@@ -60,6 +62,7 @@ class CadProject {
           ModelDocument? model,
           List<AiCommandRecord>? aiHistory,
           List<SpatialPlacement>? spatialPlacements,
+          List<SpatialScanRecord>? spatialScans,
           List<ArScreenshot>? arScreenshots}) =>
       CadProject(
         id: id,
@@ -74,6 +77,7 @@ class CadProject {
         model: model ?? this.model,
         aiHistory: aiHistory ?? this.aiHistory,
         spatialPlacements: spatialPlacements ?? this.spatialPlacements,
+        spatialScans: spatialScans ?? this.spatialScans,
         arScreenshots: arScreenshots ?? this.arScreenshots,
       );
 
@@ -95,6 +99,7 @@ class CadProject {
       model: model,
       aiHistory: aiHistory,
       spatialPlacements: spatialPlacements,
+      spatialScans: spatialScans,
       arScreenshots: arScreenshots,
     );
   }
@@ -113,6 +118,7 @@ class CadProject {
         'aiHistory': aiHistory.map((item) => item.toJson()).toList(),
         'spatialPlacements':
             spatialPlacements.map((item) => item.toJson()).toList(),
+        'spatialScans': spatialScans.map((item) => item.toJson()).toList(),
         'arScreenshots': arScreenshots.map((item) => item.toJson()).toList(),
       };
 
@@ -139,6 +145,10 @@ class CadProject {
                 .toList(),
         arScreenshots: (json['arScreenshots'] as List<Object?>? ?? const [])
             .map((item) => ArScreenshot.fromJson(item! as Map<String, Object?>))
+            .toList(),
+        spatialScans: (json['spatialScans'] as List<Object?>? ?? const [])
+            .map((item) =>
+                SpatialScanRecord.fromJson(item! as Map<String, Object?>))
             .toList(),
       );
 }

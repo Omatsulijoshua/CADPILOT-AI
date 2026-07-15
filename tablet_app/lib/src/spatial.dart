@@ -252,7 +252,9 @@ class SpatialCapabilityPanel extends StatefulWidget {
     this.depthCaptureService = const SpatialDepthCaptureService(),
     this.scanPipeline = const SpatialScanPipeline(),
     this.placements = const [],
+    this.scans = const [],
     this.onPlacementsChanged,
+    this.onScansChanged,
     super.key,
   });
   final String projectName;
@@ -260,7 +262,9 @@ class SpatialCapabilityPanel extends StatefulWidget {
   final SpatialDepthCaptureService depthCaptureService;
   final SpatialScanPipeline scanPipeline;
   final List<SpatialPlacement> placements;
+  final List<SpatialScanRecord> scans;
   final ValueChanged<List<SpatialPlacement>>? onPlacementsChanged;
+  final ValueChanged<List<SpatialScanRecord>>? onScansChanged;
 
   @override
   State<SpatialCapabilityPanel> createState() => _SpatialCapabilityPanelState();
@@ -269,6 +273,7 @@ class SpatialCapabilityPanel extends StatefulWidget {
 class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
   late Future<SpatialCapabilities> capabilities = widget.service.detect();
   late List<SpatialPlacement> placements;
+  late List<SpatialScanRecord> scans;
   bool scanInProgress = false;
   SpatialScanResult? latestScan;
 
@@ -276,6 +281,7 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
   void initState() {
     super.initState();
     placements = [...widget.placements];
+    scans = [...widget.scans];
   }
 
   @override
@@ -376,6 +382,27 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                       ),
                     ),
                   if (latestScan != null) _scanSummary(latestScan!),
+                  if (scans.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Saved advisory scans (${scans.length})',
+                          style: Theme.of(context).textTheme.titleSmall),
+                    ),
+                    ...scans.map((scan) => ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.document_scanner_outlined),
+                          title: Text(
+                              '${scan.widthMm.toStringAsFixed(1)} x ${scan.heightMm.toStringAsFixed(1)} x ${scan.depthMm.toStringAsFixed(1)} mm'),
+                          subtitle: Text(
+                              '${scan.pointCount} points, ${scan.frameCount} frame(s) - advisory only'),
+                          trailing: IconButton(
+                            tooltip: 'Delete advisory scan',
+                            onPressed: () => _deleteScan(scan),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        )),
+                  ],
                   if (value.arSupported && !value.arRuntimeInstalled) ...[
                     const SizedBox(height: 12),
                     SizedBox(
@@ -501,6 +528,23 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
     }
     if (!mounted || !context.mounted) return;
     setState(() => latestScan = result);
+    if (result.completed && result.measurements != null) {
+      final measurements = result.measurements!;
+      final record = SpatialScanRecord(
+        id: 'scan-${DateTime.now().microsecondsSinceEpoch}',
+        sessionId: measurements.sessionId,
+        capturedAt: DateTime.now().toUtc(),
+        frameCount: result.frames.length,
+        pointCount: measurements.pointCount,
+        widthMm: measurements.widthMm,
+        heightMm: measurements.heightMm,
+        depthMm: measurements.depthMm,
+        meanConfidence: measurements.meanConfidence,
+        resolutionMm: measurements.resolutionMm,
+      );
+      setState(() => scans.add(record));
+      widget.onScansChanged?.call(List.unmodifiable(scans));
+    }
     if (!result.completed) return;
     await showDialog<void>(
       context: context,
@@ -659,6 +703,11 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
       }
     });
     widget.onPlacementsChanged?.call(List.unmodifiable(placements));
+  }
+
+  void _deleteScan(SpatialScanRecord scan) {
+    setState(() => scans.removeWhere((item) => item.id == scan.id));
+    widget.onScansChanged?.call(List.unmodifiable(scans));
   }
 
   static Widget _status(String label, bool supported) => Chip(

@@ -1463,12 +1463,21 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                   builder: (_) => SpatialCapabilityPanel(
                         projectName: project.name,
                         placements: project.spatialPlacements,
+                        scans: project.spatialScans,
                         onPlacementsChanged: (placements) async {
                           await ref.read(projectsProvider.notifier).save(
                                 project.copyWith(spatialPlacements: placements),
                               );
                           if (mounted) {
                             setState(() => status = 'Spatial placements saved');
+                          }
+                        },
+                        onScansChanged: (scans) async {
+                          await ref.read(projectsProvider.notifier).save(
+                                project.copyWith(spatialScans: scans),
+                              );
+                          if (mounted) {
+                            setState(() => status = 'Advisory scans saved');
                           }
                         },
                       )),

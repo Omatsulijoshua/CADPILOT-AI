@@ -229,6 +229,7 @@ class ProjectsController extends AsyncNotifier<List<CadProject>> {
       model: source.model,
       aiHistory: source.aiHistory,
       spatialPlacements: source.spatialPlacements,
+      spatialScans: source.spatialScans,
       arScreenshots: source.arScreenshots,
     );
     final next = [duplicate, ...state.valueOrNull ?? const <CadProject>[]];
@@ -260,6 +261,7 @@ class ProjectsController extends AsyncNotifier<List<CadProject>> {
       model: source.model,
       aiHistory: source.aiHistory,
       spatialPlacements: source.spatialPlacements,
+      spatialScans: source.spatialScans,
       arScreenshots: source.arScreenshots,
     );
     final next = [imported, ...state.valueOrNull ?? const <CadProject>[]];
