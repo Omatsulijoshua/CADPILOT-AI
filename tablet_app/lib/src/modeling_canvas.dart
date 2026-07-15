@@ -141,10 +141,6 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
       message('Create an extrusion first.');
       return;
     }
-    if (solid!.revolved) {
-      message('Through cuts on revolved solids are not available yet.');
-      return;
-    }
     if (solid!.shellThickness > 0) {
       message('Suppress or delete the shell before adding a through cut.');
       return;
@@ -155,6 +151,16 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
     if (circles.isEmpty) {
       message('Draw a circle in Sketch mode for the cut profile.');
       return;
+    }
+    if (solid!.revolved) {
+      final validation = const RevolvedBoreValidator().validate(
+        solid!,
+        circles.first,
+      );
+      if (validation != null) {
+        message(validation);
+        return;
+      }
     }
     setState(() => history.add(ModelOperation(
         id: const Uuid().v4(),

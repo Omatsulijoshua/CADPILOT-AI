@@ -709,6 +709,44 @@ void main() {
     expect(solid.cuts, isEmpty);
     expect(solid.volume, closeTo(math.pi * 100 * 100 * 50, 0.001));
   });
+  test('revolved solids support one centered through bore with a closed mesh',
+      () {
+    const centeredBore = SketchEntity(
+      id: 'centered-bore',
+      kind: SketchEntityKind.circle,
+      start: Offset(10, 120),
+      end: Offset(25, 120),
+    );
+    final revolve = ModelOperation(
+      id: 'revolve-1',
+      kind: ModelOperationKind.revolve,
+      profileId: 'rect',
+      depth: 360,
+      createdAt: DateTime.utc(2026),
+    );
+    final bore = ModelOperation(
+      id: 'bore-1',
+      kind: ModelOperationKind.circularCut,
+      profileId: 'centered-bore',
+      depth: 50,
+      createdAt: DateTime.utc(2026),
+    );
+    final solid = const ModelEvaluator().evaluate(
+      const SketchDocument(entities: [rectangle, centeredBore]),
+      ModelDocument(operations: [revolve, bore]),
+    )!;
+
+    expect(solid.cuts, hasLength(1));
+    expect(solid.volume, closeTo(math.pi * (10000 - 225) * 50, 0.001));
+    final mesh = const SolidMesher().tessellate(solid);
+    expect(mesh.triangles, hasLength(512));
+    expect(mesh.isClosedManifold, isTrue);
+    expect(mesh.estimatedVolume, closeTo(solid.volume, 0.001));
+    expect(
+      const RevolvedBoreValidator().validate(solid, centeredBore),
+      contains('Only one'),
+    );
+  });
   test('circular cut pattern persists and evaluates rotated holes', () {
     final cut = ModelOperation(
         id: 'cut-source',

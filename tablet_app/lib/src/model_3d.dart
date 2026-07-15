@@ -208,7 +208,8 @@ class EvaluatedSolid {
     if (x < 0 || y < 0 || x > width || y > height) return false;
     if (revolved) {
       return (Offset(x, y) - Offset(revolveRadius, revolveRadius)).distance <=
-          revolveRadius;
+              revolveRadius &&
+          cuts.every((cut) => (point - cut.center).distance >= cut.radius);
     }
     if (cornerRadius > 0) {
       final r = cornerRadius;
@@ -243,6 +244,31 @@ class EvaluatedSolid {
     final innerHeight = height - 2 * shellThickness;
     final cavityDepth = depth - shellThickness;
     return afterRectangles - innerWidth * innerHeight * cavityDepth;
+  }
+}
+
+class RevolvedBoreValidator {
+  const RevolvedBoreValidator();
+
+  String? validate(EvaluatedSolid solid, SketchEntity profile) {
+    if (!solid.revolved || profile.kind != SketchEntityKind.circle) {
+      return 'A revolved bore requires a circular profile.';
+    }
+    if (solid.cuts.isNotEmpty) {
+      return 'Only one centered bore is supported on a revolved solid.';
+    }
+    final center = Offset(
+      solid.origin.dx + solid.revolveRadius,
+      solid.origin.dy + solid.revolveRadius,
+    );
+    if ((profile.start - center).distance > 0.001) {
+      return 'A revolved through cut must be centered on the revolve axis.';
+    }
+    final radius = profile.primaryDimension;
+    if (!radius.isFinite || radius <= 0 || radius >= solid.revolveRadius) {
+      return 'The bore radius must be greater than 0 and smaller than the cylinder radius.';
+    }
+    return null;
   }
 }
 
@@ -613,7 +639,24 @@ class ModelEvaluator {
       if (operation.kind == ModelOperationKind.circularCut &&
           profile.kind == SketchEntityKind.circle &&
           base != null &&
-          !revolved) {
+          (!revolved ||
+              const RevolvedBoreValidator().validate(
+                    EvaluatedSolid(
+                      origin: Offset(
+                        Rect.fromPoints(base.start, base.end).left -
+                            revolveRadius,
+                        Rect.fromPoints(base.start, base.end).top,
+                      ),
+                      width: revolveRadius * 2,
+                      height: revolveRadius * 2,
+                      depth: depth ?? 0,
+                      cuts: cuts,
+                      revolved: true,
+                      revolveRadius: revolveRadius,
+                    ),
+                    profile,
+                  ) ==
+                  null)) {
         cuts.add(CircularCut(
             center: profile.start, radius: profile.primaryDimension));
         activeOperations.add(operation.id);
@@ -844,6 +887,7 @@ class SolidMesher {
   }
 
   SolidMesh _cylinder(EvaluatedSolid solid) {
+    if (solid.cuts.isNotEmpty) return _cylinderWithBore(solid);
     const segments = 64;
     final r = solid.revolveRadius, z = solid.depth;
     final bottom = <MeshPoint>[];
@@ -870,6 +914,48 @@ class SolidMesher {
         triangles: triangles,
         tolerance: tolerance,
         estimatedVolume: solid.volume);
+  }
+
+  SolidMesh _cylinderWithBore(EvaluatedSolid solid) {
+    const segments = 64;
+    final outerRadius = solid.revolveRadius;
+    final innerRadius = solid.cuts.single.radius;
+    final depth = solid.depth;
+    final outerBottom = <MeshPoint>[];
+    final outerTop = <MeshPoint>[];
+    final innerBottom = <MeshPoint>[];
+    final innerTop = <MeshPoint>[];
+    for (var index = 0; index < segments; index++) {
+      final angle = index * math.pi * 2 / segments;
+      final cos = math.cos(angle);
+      final sin = math.sin(angle);
+      outerBottom.add(MeshPoint(
+          outerRadius + cos * outerRadius, outerRadius + sin * outerRadius, 0));
+      outerTop.add(MeshPoint(outerRadius + cos * outerRadius,
+          outerRadius + sin * outerRadius, depth));
+      innerBottom.add(MeshPoint(
+          outerRadius + cos * innerRadius, outerRadius + sin * innerRadius, 0));
+      innerTop.add(MeshPoint(outerRadius + cos * innerRadius,
+          outerRadius + sin * innerRadius, depth));
+    }
+    final triangles = <MeshTriangle>[];
+    for (var index = 0; index < segments; index++) {
+      final next = (index + 1) % segments;
+      _quad(triangles, outerBottom[index], outerBottom[next], outerTop[next],
+          outerTop[index]);
+      _quad(triangles, innerBottom[next], innerBottom[index], innerTop[index],
+          innerTop[next]);
+      _quad(triangles, outerBottom[next], outerBottom[index],
+          innerBottom[index], innerBottom[next]);
+      _quad(triangles, outerTop[index], outerTop[next], innerTop[next],
+          innerTop[index]);
+    }
+    final tolerance = outerRadius * (1 - math.cos(math.pi / segments));
+    return SolidMesh(
+      triangles: triangles,
+      tolerance: tolerance,
+      estimatedVolume: solid.volume,
+    );
   }
 
   SolidMesh _openTopShell(EvaluatedSolid solid) {
