@@ -224,6 +224,37 @@ class ProjectsController extends AsyncNotifier<List<CadProject>> {
     return duplicate;
   }
 
+  Future<CadProject> importPortable(CadProject source) async {
+    final now = DateTime.now().toUtc();
+    final existingNames = (state.valueOrNull ?? const <CadProject>[])
+        .map((project) => project.name.trim().toLowerCase())
+        .toSet();
+    var importNumber = 1;
+    var name = '${source.name} imported';
+    while (existingNames.contains(name.toLowerCase())) {
+      importNumber++;
+      name = '${source.name} imported $importNumber';
+    }
+    final imported = CadProject(
+      id: const Uuid().v4(),
+      name: name,
+      note: source.note,
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+      syncState: SyncState.localOnly,
+      sketch: source.sketch,
+      model: source.model,
+      aiHistory: source.aiHistory,
+      spatialPlacements: source.spatialPlacements,
+      arScreenshots: source.arScreenshots,
+    );
+    final next = [imported, ...state.valueOrNull ?? const <CadProject>[]];
+    await _store.writeProjects(next);
+    state = AsyncData(next);
+    return imported;
+  }
+
   Future<void> save(CadProject project) async {
     final projects = [...state.valueOrNull ?? const <CadProject>[]];
     final index = projects.indexWhere((item) => item.id == project.id);

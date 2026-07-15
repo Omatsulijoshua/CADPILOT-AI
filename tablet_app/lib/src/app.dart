@@ -10,6 +10,7 @@ import 'cloud_api.dart';
 import 'controllers.dart';
 import 'models.dart';
 import 'project_file_export.dart';
+import 'project_file_import.dart';
 import 'modeling_canvas.dart';
 import 'sketch_canvas.dart';
 import 'spatial.dart';
@@ -259,6 +260,7 @@ class Dashboard extends ConsumerStatefulWidget {
 class _DashboardState extends ConsumerState<Dashboard> {
   int selectedIndex = 0;
   String projectQuery = '';
+  bool importingManifest = false;
 
   Future<void> create() async {
     final controller = TextEditingController();
@@ -287,6 +289,43 @@ class _DashboardState extends ConsumerState<Dashboard> {
     if (name == null || !mounted) return;
     final project = await ref.read(projectsProvider.notifier).create(name);
     if (mounted) await openProject(project);
+  }
+
+  Future<void> importManifest() async {
+    if (importingManifest) return;
+    setState(() => importingManifest = true);
+    try {
+      final content = await importProjectFile();
+      if (content == null || !mounted) return;
+      if (utf8.encode(content).length > 2 * 1024 * 1024) {
+        throw const FormatException('Project manifest is larger than 2 MiB.');
+      }
+      final decoded = jsonDecode(content);
+      if (decoded is! Map) {
+        throw const FormatException('Project manifest must be a JSON object.');
+      }
+      final source = CadProject.fromJson(Map<String, Object?>.from(decoded));
+      final imported =
+          await ref.read(projectsProvider.notifier).importPortable(source);
+      if (!mounted) return;
+      await openProject(imported);
+    } on FormatException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Could not import manifest: ${error.message}')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(error.toString().replaceFirst('Bad state: ', ''))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => importingManifest = false);
+    }
   }
 
   Future<void> openProject(CadProject project) => Navigator.push(
@@ -346,12 +385,27 @@ class _DashboardState extends ConsumerState<Dashboard> {
                           ],
                         ),
                       ),
-                      if (selectedIndex == 0)
+                      if (selectedIndex == 0) ...[
+                        OutlinedButton.icon(
+                          onPressed: importingManifest ? null : importManifest,
+                          icon: importingManifest
+                              ? const SizedBox.square(
+                                  dimension: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.file_upload_outlined),
+                          label: Text(importingManifest
+                              ? 'Importing...'
+                              : 'Import manifest'),
+                        ),
+                        const SizedBox(width: 8),
                         FilledButton.icon(
-                          onPressed: create,
+                          onPressed: importingManifest ? null : create,
                           icon: const Icon(Icons.add),
                           label: const Text('New project'),
                         ),
+                      ],
                       const SizedBox(width: 8),
                       IconButton(
                         tooltip: 'Sign out',

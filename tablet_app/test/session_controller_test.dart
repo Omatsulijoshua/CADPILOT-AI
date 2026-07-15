@@ -110,6 +110,38 @@ void main() {
     expect(store.session, isNull);
     expect(tokens.wasCleared, isTrue);
   });
+  test('imports a portable project as an independent local draft', () async {
+    final now = DateTime.utc(2026, 7, 15);
+    final source = CadProject(
+      id: 'portable-source',
+      name: 'Portable cabinet',
+      note: 'Exported note',
+      createdAt: now,
+      updatedAt: now,
+      revision: 8,
+      syncState: SyncState.synced,
+      lastSyncedRevision: 5,
+    );
+    final store = _MemoryLocalStore(signedIn);
+    final container = _container(
+      store,
+      _MemoryTokenStore(),
+      CloudApi(baseUrl: 'https://api.test/v1'),
+    );
+    addTearDown(container.dispose);
+    await container.read(projectsProvider.future);
+
+    final imported =
+        await container.read(projectsProvider.notifier).importPortable(source);
+
+    expect(imported.id, isNot(source.id));
+    expect(imported.name, 'Portable cabinet imported');
+    expect(imported.note, source.note);
+    expect(imported.revision, 1);
+    expect(imported.syncState, SyncState.localOnly);
+    expect(imported.lastSyncedRevision, isNull);
+    expect(store.projects.single.id, imported.id);
+  });
   test('archives the remote cloud copy with a verified token', () async {
     final tokens = _MemoryTokenStore()..accessToken = 'access';
     final api = CloudApi(
