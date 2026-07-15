@@ -11,7 +11,10 @@ abstract interface class TokenStore {
 class SecureTokenStore implements TokenStore {
   const SecureTokenStore();
   static const _storage = FlutterSecureStorage(
-      aOptions: AndroidOptions(encryptedSharedPreferences: true));
+      aOptions: AndroidOptions(
+    migrateOnAlgorithmChange: true,
+    migrateWithBackup: true,
+  ));
   @override
   Future<void> write(
           {required String accessToken, required String refreshToken}) =>

@@ -65,7 +65,7 @@ Open the browser build at **[cadpilot.vercel.app](https://cadpilot.vercel.app)**
 | Area | Status | Current behavior |
 |---|---|---|
 | Flutter shell | Implemented | Responsive navigation, projects, editor, settings, branded web shell |
-| Authentication | Implemented foundation | Account registration, sign-in, secure token storage, refresh-token rotation, revocable logout, guest mode, and offline-tolerant session restoration with a visible reconnect-and-verify state |
+| Authentication | Implemented foundation | Account registration, sign-in, RSA-OAEP/AES-GCM secure token storage, refresh-token rotation, revocable logout, guest mode, and offline-tolerant session restoration with a visible reconnect-and-verify state |
 | Project management | Implemented | Create, open, persist, back up, browse cloud projects, restore, and manage projects |
 | Durable autosave | Implemented | Lifecycle-aware local persistence |
 | Sketching | Implemented | Entities, selection, dimensions, constraints, tools, viewport |
@@ -512,6 +512,7 @@ Check `DATABASE_URL`, container health, ports, and migrations.
 | [Security](docs/security.md) | Threats, permissions, secrets, trust boundaries |
 | [Session refresh and revocation](docs/session-refresh-and-revocation-increment.md) | Client token rotation, offline recovery, invalidation, and logout behavior |
 | [Offline cloud verification](docs/offline-cloud-session-verification-increment.md) | Visible offline state, retry flow, and stale-token cloud guards |
+| [Secure storage v10 migration](docs/secure-storage-v10-migration.md) | Cipher modernization, automatic token migration, Web/Wasm compatibility |
 | [Phase notes](docs/) | Decisions and verification evidence |
 | [Flutter notes](tablet_app/README.md) | Client-specific guidance |
 
