@@ -6,6 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const channel = MethodChannel('cadpilot/spatial-depth-capture-test');
+  const identityPose = {
+    'translation': {'x': 0, 'y': 0, 'z': 0},
+    'rotation': {'x': 0, 'y': 0, 'z': 0, 'w': 1},
+  };
   const depthCapabilities = SpatialCapabilities(
     platform: 'test',
     cameraSupported: true,
@@ -33,6 +37,7 @@ void main() {
         'frameId': 'frame-9',
         'capturedAt': '2026-07-15T12:00:00.000Z',
         'coordinateSystem': spatialCoordinateSystem,
+        'sensorPose': identityPose,
         'points': [
           {'x': 0, 'y': 0, 'z': 0, 'confidence': 1},
           {'x': 1.25, 'y': 0, 'z': 0, 'confidence': 0.8},
@@ -79,6 +84,7 @@ void main() {
           'frameId': 'frame-1',
           'capturedAt': '2026-07-15T12:00:00Z',
           'coordinateSystem': spatialCoordinateSystem,
+          'sensorPose': identityPose,
           'points': [point, point, point],
         };
 
@@ -111,6 +117,7 @@ void main() {
                   'frameId': 'frame-1',
                   'capturedAt': '2026-07-15T12:00:00Z',
                   'coordinateSystem': spatialCoordinateSystem,
+                  'sensorPose': identityPose,
                   'points': List.generate(
                     3,
                     (_) => {'x': 0, 'y': 0, 'z': 0, 'confidence': 1},

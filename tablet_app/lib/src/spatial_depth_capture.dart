@@ -43,12 +43,106 @@ class SpatialPointSample {
   }
 }
 
+class SpatialVector3 {
+  const SpatialVector3(this.x, this.y, this.z);
+
+  final double x;
+  final double y;
+  final double z;
+
+  factory SpatialVector3.fromMap(Map<Object?, Object?> value) => SpatialVector3(
+        _finiteDouble(value['x'], 'pose translation x'),
+        _finiteDouble(value['y'], 'pose translation y'),
+        _finiteDouble(value['z'], 'pose translation z'),
+      );
+}
+
+class SpatialQuaternion {
+  const SpatialQuaternion(this.x, this.y, this.z, this.w);
+
+  final double x;
+  final double y;
+  final double z;
+  final double w;
+
+  factory SpatialQuaternion.fromMap(Map<Object?, Object?> value) {
+    final quaternion = SpatialQuaternion(
+      _finiteDouble(value['x'], 'pose rotation x'),
+      _finiteDouble(value['y'], 'pose rotation y'),
+      _finiteDouble(value['z'], 'pose rotation z'),
+      _finiteDouble(value['w'], 'pose rotation w'),
+    );
+    final magnitudeSquared = quaternion.x * quaternion.x +
+        quaternion.y * quaternion.y +
+        quaternion.z * quaternion.z +
+        quaternion.w * quaternion.w;
+    if ((magnitudeSquared - 1).abs() > 0.01) {
+      throw const FormatException(
+        'Spatial pose rotation must be a normalized quaternion.',
+      );
+    }
+    return quaternion;
+  }
+}
+
+class SpatialSensorPose {
+  const SpatialSensorPose({
+    required this.translation,
+    required this.rotation,
+  });
+
+  final SpatialVector3 translation;
+  final SpatialQuaternion rotation;
+
+  static const identity = SpatialSensorPose(
+    translation: SpatialVector3(0, 0, 0),
+    rotation: SpatialQuaternion(0, 0, 0, 1),
+  );
+
+  factory SpatialSensorPose.fromMap(Map<Object?, Object?> value) {
+    final translationValue = value['translation'];
+    final rotationValue = value['rotation'];
+    if (translationValue is! Map<Object?, Object?> ||
+        rotationValue is! Map<Object?, Object?>) {
+      throw const FormatException(
+        'Spatial frame pose requires translation and rotation maps.',
+      );
+    }
+    final translation = SpatialVector3.fromMap(translationValue);
+    if (translation.x.abs() > 1000 ||
+        translation.y.abs() > 1000 ||
+        translation.z.abs() > 1000) {
+      throw const FormatException(
+        'Spatial pose translation exceeds the 1000 meter safety bound.',
+      );
+    }
+    return SpatialSensorPose(
+      translation: translation,
+      rotation: SpatialQuaternion.fromMap(rotationValue),
+    );
+  }
+
+  SpatialPointSample transform(SpatialPointSample point) {
+    final q = rotation;
+    final tx = 2 * (q.y * point.z - q.z * point.y);
+    final ty = 2 * (q.z * point.x - q.x * point.z);
+    final tz = 2 * (q.x * point.y - q.y * point.x);
+    return SpatialPointSample(
+      x: point.x + q.w * tx + (q.y * tz - q.z * ty) + translation.x,
+      y: point.y + q.w * ty + (q.z * tx - q.x * tz) + translation.y,
+      z: point.z + q.w * tz + (q.x * ty - q.y * tx) + translation.z,
+      confidence: point.confidence,
+    );
+  }
+}
+
 class SpatialPointCloudFrame {
   const SpatialPointCloudFrame({
     required this.sessionId,
     required this.frameId,
     required this.capturedAt,
     required this.coordinateSystem,
+    required this.sensorPose,
     required this.points,
   });
 
@@ -56,6 +150,7 @@ class SpatialPointCloudFrame {
   final String frameId;
   final DateTime capturedAt;
   final String coordinateSystem;
+  final SpatialSensorPose sensorPose;
   final List<SpatialPointSample> points;
 
   factory SpatialPointCloudFrame.fromMap(Map<Object?, Object?> value) {
@@ -75,6 +170,12 @@ class SpatialPointCloudFrame {
         'Spatial frame uses an unsupported coordinate system.',
       );
     }
+    final sensorPoseValue = value['sensorPose'];
+    if (sensorPoseValue is! Map<Object?, Object?>) {
+      throw const FormatException(
+          'Spatial frame requires sensor pose metadata.');
+    }
+    final sensorPose = SpatialSensorPose.fromMap(sensorPoseValue);
     final rawPoints = value['points'];
     if (rawPoints is! List<Object?> || rawPoints.length < 3) {
       throw const FormatException(
@@ -97,6 +198,7 @@ class SpatialPointCloudFrame {
       frameId: frameId,
       capturedAt: capturedAt,
       coordinateSystem: spatialCoordinateSystem,
+      sensorPose: sensorPose,
       points: points,
     );
   }
@@ -149,11 +251,11 @@ class SpatialDepthCaptureService {
 
 double _finiteDouble(Object? value, String field) {
   if (value is! num) {
-    throw FormatException('Spatial point $field must be numeric.');
+    throw FormatException('Spatial value $field must be numeric.');
   }
   final result = value.toDouble();
   if (!result.isFinite) {
-    throw FormatException('Spatial point $field must be finite.');
+    throw FormatException('Spatial value $field must be finite.');
   }
   return result;
 }

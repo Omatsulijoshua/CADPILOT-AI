@@ -31,11 +31,33 @@ A native response must contain:
 - a non-empty `frameId`;
 - an ISO-8601 UTC `capturedAt` timestamp;
 - the exact right-handed, Y-up, meter coordinate-system identifier;
+- a sensor-to-world pose containing bounded translation and a normalized quaternion;
 - between 3 and 250,000 point samples;
 - finite numeric X, Y, and Z values within a conservative ±1,000 meter bound;
 - a finite confidence value from 0 through 1 for every sample.
 
 The strict coordinate-system name prevents millimeter/meter and handedness mistakes from silently distorting a CAD model. Native hosts must transform their platform coordinates into this convention before returning data.
+
+## Pose normalization and multi-frame registration
+
+Every frame now includes a sensor-to-world pose in the same right-handed, Y-up, meter system. Translation components must be finite and remain within ±1,000 meters. Rotation uses an `(x, y, z, w)` quaternion whose squared magnitude must stay within 0.01 of one; rejecting non-unit quaternions prevents scale distortion during rotation.
+
+`SpatialFrameRegistration` accepts time-ordered frames from one session, rejects duplicate frame IDs, caps the aggregate at 500,000 samples, rotates each sensor-space point, applies world translation, and preserves confidence values.
+
+```mermaid
+flowchart LR
+    Frames["Ordered typed frames"] --> Session{"One session and unique IDs?"}
+    Session -- "No" --> Reject["Reject registration"]
+    Session -- "Yes" --> Time{"Monotonic UTC times?"}
+    Time -- "No" --> Reject
+    Time -- "Yes" --> Limit{"At most 500,000 points?"}
+    Limit -- "No" --> Reject
+    Limit -- "Yes" --> Rotate["Quaternion rotation"]
+    Rotate --> Translate["World translation"]
+    Translate --> Cloud["Registered world-space point cloud"]
+```
+
+Registration is deterministic and intentionally does not perform deduplication, smoothing, outlier rejection, meshing, or persistence. Those transformations need separate accuracy tolerances and tests.
 
 ## Capability gate
 
@@ -56,8 +78,8 @@ Android currently reports `sceneDepthSupported: false` and handles `captureDepth
 
 ## Verification
 
-- Five focused point-cloud contract tests pass.
-- The complete Flutter suite contains 144 passing tests.
+- Nine focused depth-frame and registration tests pass.
+- The complete Flutter suite contains 148 passing tests.
 - Flutter analysis passes with no issues.
 - Android debug compilation verifies the Kotlin method-channel boundary against ARCore 1.54.0.
 - Standard and WebAssembly web release builds remain compatible because web capture fails closed.
@@ -66,7 +88,7 @@ Android currently reports `sceneDepthSupported: false` and handles `captureDepth
 
 1. Add a native ARCore Depth capability probe tied to a configured ARCore session.
 2. Implement physical-device depth image acquisition and coordinate conversion.
-3. Add multi-frame registration with pose metadata.
+3. Add pose-quality and tracking-state metadata from native capture.
 4. Filter low-confidence and statistical outlier points.
 5. Downsample deterministically before project persistence.
 6. Build bounded surface reconstruction and measurement extraction.
