@@ -1,4 +1,4 @@
-﻿import Flutter
+import Flutter
 import UIKit
 import AVFoundation
 #if canImport(ARKit)
@@ -33,6 +33,14 @@ import ARKit
         AVCaptureDevice.requestAccess(for: .video) { granted in
           DispatchQueue.main.async { result(granted ? "granted" : self.cameraPermission()) }
         }
+      case "startArSession", "createFloorAnchor", "captureArScreenshot":
+        result(FlutterError(
+          code: "ar_renderer_unavailable",
+          message: "CadPilot native AR rendering is not available in this build.",
+          details: call.arguments
+        ))
+      case "stopArSession":
+        result(false)
       default:
         result(FlutterMethodNotImplemented)
       }

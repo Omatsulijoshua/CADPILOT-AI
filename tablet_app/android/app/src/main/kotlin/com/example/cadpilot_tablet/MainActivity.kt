@@ -1,4 +1,4 @@
-﻿package com.example.cadpilot_tablet
+package com.example.cadpilot_tablet
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -20,6 +20,14 @@ class MainActivity : FlutterActivity() {
                     "getCapabilities" -> result.success(spatialCapabilities())
                     "getCameraPermission" -> result.success(cameraPermission())
                     "requestCameraPermission" -> requestCameraPermission(result)
+                    "startArSession",
+                    "createFloorAnchor",
+                    "captureArScreenshot" -> result.error(
+                        "ar_renderer_unavailable",
+                        "CadPilot native AR rendering is not available in this build.",
+                        call.arguments
+                    )
+                    "stopArSession" -> result.success(false)
                     else -> result.notImplemented()
                 }
             }

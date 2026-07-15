@@ -93,4 +93,17 @@ void main() {
         await service.start(sessionId: 'session-7', preflight: ready), isFalse);
     expect(await service.stop(sessionId: 'session-7'), isFalse);
   });
+  test('explicit native renderer errors fail closed', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      throw PlatformException(
+        code: 'ar_renderer_unavailable',
+        message: 'CadPilot native AR rendering is not available in this build.',
+      );
+    });
+    const service = ArSessionControlService(channel: channel);
+    expect(
+        await service.start(sessionId: 'session-7', preflight: ready), isFalse);
+    expect(await service.stop(sessionId: 'session-7'), isFalse);
+  });
 }
