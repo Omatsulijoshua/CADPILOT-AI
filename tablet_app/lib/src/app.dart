@@ -256,6 +256,7 @@ class Dashboard extends ConsumerStatefulWidget {
 
 class _DashboardState extends ConsumerState<Dashboard> {
   int selectedIndex = 0;
+  String projectQuery = '';
 
   Future<void> create() async {
     final controller = TextEditingController();
@@ -366,10 +367,31 @@ class _DashboardState extends ConsumerState<Dashboard> {
                           .retryCloudVerification,
                     ),
                   ],
+                  if (selectedIndex == 0) ...[
+                    const SizedBox(height: 24),
+                    TextField(
+                      key: const Key('project-search'),
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search),
+                        labelText: 'Search projects',
+                        hintText: 'Filter by project name',
+                        suffixIcon: projectQuery.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Clear project search',
+                                onPressed: () =>
+                                    setState(() => projectQuery = ''),
+                                icon: const Icon(Icons.clear),
+                              ),
+                      ),
+                      onChanged: (value) =>
+                          setState(() => projectQuery = value),
+                    ),
+                  ],
                   const SizedBox(height: 30),
                   Expanded(
                     child: selectedIndex == 0
-                        ? ProjectGrid(onOpen: openProject)
+                        ? ProjectGrid(onOpen: openProject, query: projectQuery)
                         : CloudProjectsPanel(
                             session: widget.session,
                             onOpen: openProject,
@@ -710,8 +732,9 @@ class _CloudMessage extends StatelessWidget {
 }
 
 class ProjectGrid extends ConsumerStatefulWidget {
-  const ProjectGrid({required this.onOpen, super.key});
+  const ProjectGrid({required this.onOpen, this.query = '', super.key});
   final ValueChanged<CadProject> onOpen;
+  final String query;
 
   @override
   ConsumerState<ProjectGrid> createState() => _ProjectGridState();
@@ -760,9 +783,19 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
         error: (error, _) =>
             Center(child: Text('Could not load projects: $error')),
         data: (projects) {
-          if (projects.isEmpty) {
-            return const Center(
-                child: Text('No projects yet. Create one to begin.'));
+          final normalizedQuery = widget.query.trim().toLowerCase();
+          final visibleProjects = projects
+              .where((project) =>
+                  normalizedQuery.isEmpty ||
+                  project.name.toLowerCase().contains(normalizedQuery))
+              .toList()
+            ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+          if (visibleProjects.isEmpty) {
+            return Center(
+              child: Text(normalizedQuery.isEmpty
+                  ? 'No projects yet. Create one to begin.'
+                  : 'No projects match your search.'),
+            );
           }
           return GridView.builder(
             gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -770,9 +803,9 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
                 childAspectRatio: 1.35,
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16),
-            itemCount: projects.length,
+            itemCount: visibleProjects.length,
             itemBuilder: (context, index) {
-              final project = projects[index];
+              final project = visibleProjects[index];
               return Card(
                   child: InkWell(
                       onTap: () => widget.onOpen(project),

@@ -7,6 +7,53 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('filters projects by name and shows an empty search state',
+      (tester) async {
+    final now = DateTime.utc(2026, 7, 15);
+    final store = _MemoryLocalStore([
+      CadProject(
+        id: 'bracket',
+        name: 'Mounting bracket',
+        note: '',
+        createdAt: now,
+        updatedAt: now.subtract(const Duration(days: 1)),
+        revision: 1,
+        syncState: SyncState.localOnly,
+      ),
+      CadProject(
+        id: 'cabinet',
+        name: 'Kitchen cabinet',
+        note: '',
+        createdAt: now,
+        updatedAt: now,
+        revision: 1,
+        syncState: SyncState.localOnly,
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [localStoreProvider.overrideWithValue(store)],
+        child: MaterialApp(
+          home: Scaffold(body: ProjectGrid(onOpen: (_) {}, query: 'cabinet')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Kitchen cabinet'), findsOneWidget);
+    expect(find.text('Mounting bracket'), findsNothing);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [localStoreProvider.overrideWithValue(store)],
+        child: MaterialApp(
+          home: Scaffold(body: ProjectGrid(onOpen: (_) {}, query: 'missing')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('No projects match your search.'), findsOneWidget);
+  });
   testWidgets('local project deletion requires confirmation', (tester) async {
     final store = _MemoryLocalStore([
       CadProject(
