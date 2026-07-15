@@ -54,6 +54,44 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No projects match your search.'), findsOneWidget);
   });
+  testWidgets('duplicates a project as an independent local draft',
+      (tester) async {
+    final now = DateTime.utc(2026, 7, 15);
+    final source = CadProject(
+      id: 'source-project',
+      name: 'Original bracket',
+      note: 'M6 holes',
+      createdAt: now,
+      updatedAt: now,
+      revision: 4,
+      syncState: SyncState.synced,
+      lastSyncedRevision: 3,
+    );
+    final store = _MemoryLocalStore([source]);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [localStoreProvider.overrideWithValue(store)],
+        child: MaterialApp(
+          home: Scaffold(body: ProjectGrid(onOpen: (_) {})),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Duplicate project'));
+    await tester.pumpAndSettle();
+
+    expect(store.projects, hasLength(2));
+    final duplicate = store.projects.first;
+    expect(duplicate.id, isNot(source.id));
+    expect(duplicate.name, 'Original bracket copy');
+    expect(duplicate.note, source.note);
+    expect(duplicate.revision, 1);
+    expect(duplicate.syncState, SyncState.localOnly);
+    expect(duplicate.lastSyncedRevision, isNull);
+    expect(
+        find.textContaining('Created Original bracket copy'), findsOneWidget);
+  });
   testWidgets('local project deletion requires confirmation', (tester) async {
     final store = _MemoryLocalStore([
       CadProject(

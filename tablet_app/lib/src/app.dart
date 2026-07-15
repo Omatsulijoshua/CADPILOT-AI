@@ -742,6 +742,22 @@ class ProjectGrid extends ConsumerStatefulWidget {
 
 class _ProjectGridState extends ConsumerState<ProjectGrid> {
   String? deletingId;
+  String? duplicatingId;
+
+  Future<void> duplicate(CadProject project) async {
+    if (deletingId != null || duplicatingId != null) return;
+    setState(() => duplicatingId = project.id);
+    try {
+      final copy = await ref.read(projectsProvider.notifier).duplicate(project);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Created ${copy.name} as a local draft.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => duplicatingId = null);
+    }
+  }
 
   Future<void> delete(CadProject project) async {
     if (deletingId != null) return;
@@ -836,8 +852,23 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
                                             fontWeight: FontWeight.w700)),
                                   ),
                                   IconButton(
+                                    tooltip: 'Duplicate project',
+                                    onPressed: deletingId == null &&
+                                            duplicatingId == null
+                                        ? () => duplicate(project)
+                                        : null,
+                                    icon: duplicatingId == project.id
+                                        ? const SizedBox.square(
+                                            dimension: 18,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2),
+                                          )
+                                        : const Icon(Icons.copy_outlined),
+                                  ),
+                                  IconButton(
                                     tooltip: 'Delete local project',
-                                    onPressed: deletingId == null
+                                    onPressed: deletingId == null &&
+                                            duplicatingId == null
                                         ? () => delete(project)
                                         : null,
                                     icon: deletingId == project.id

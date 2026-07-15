@@ -193,6 +193,28 @@ class ProjectsController extends AsyncNotifier<List<CadProject>> {
     return project;
   }
 
+  Future<CadProject> duplicate(CadProject source) async {
+    final now = DateTime.now().toUtc();
+    final duplicate = CadProject(
+      id: const Uuid().v4(),
+      name: '${source.name} copy',
+      note: source.note,
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+      syncState: SyncState.localOnly,
+      sketch: source.sketch,
+      model: source.model,
+      aiHistory: source.aiHistory,
+      spatialPlacements: source.spatialPlacements,
+      arScreenshots: source.arScreenshots,
+    );
+    final next = [duplicate, ...state.valueOrNull ?? const <CadProject>[]];
+    await _store.writeProjects(next);
+    state = AsyncData(next);
+    return duplicate;
+  }
+
   Future<void> save(CadProject project) async {
     final projects = [...state.valueOrNull ?? const <CadProject>[]];
     final index = projects.indexWhere((item) => item.id == project.id);
