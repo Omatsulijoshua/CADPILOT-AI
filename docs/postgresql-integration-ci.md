@@ -38,6 +38,7 @@ The integration test starts a real Nest HTTP application, connects the actual `P
 3. sync a project mutation at revision 1;
 4. replay the same mutation idempotently without a second revision increase;
 5. list the persisted project at revision 2 with its synced name.
+6. archive the project and confirm active read and list routes no longer expose it.
 
 The test also registers a second test user and verifies it receives an empty project list plus `404` for the first user's read and sync routes. This confirms ownership isolation against a real database. It also exercises persisted refresh-token rotation and logout revocation directly through the real AuthService so controller rate limiting does not mask token-lifecycle behavior. The test cleans only records owned by test-domain accounts. Its suite is skipped during ordinary `npm test` runs; GitHub enables it with `RUN_POSTGRES_INTEGRATION=true` and calls `npm run test:postgres`.
 
