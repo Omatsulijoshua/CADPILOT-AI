@@ -11,6 +11,7 @@ import 'controllers.dart';
 import 'models.dart';
 import 'project_file_export.dart';
 import 'project_file_import.dart';
+import 'project_manifest.dart';
 import 'modeling_canvas.dart';
 import 'sketch_canvas.dart';
 import 'spatial.dart';
@@ -297,14 +298,7 @@ class _DashboardState extends ConsumerState<Dashboard> {
     try {
       final content = await importProjectFile();
       if (content == null || !mounted) return;
-      if (utf8.encode(content).length > 2 * 1024 * 1024) {
-        throw const FormatException('Project manifest is larger than 2 MiB.');
-      }
-      final decoded = jsonDecode(content);
-      if (decoded is! Map) {
-        throw const FormatException('Project manifest must be a JSON object.');
-      }
-      final source = CadProject.fromJson(Map<String, Object?>.from(decoded));
+      final source = ProjectManifest.parse(content).project;
       final imported =
           await ref.read(projectsProvider.notifier).importPortable(source);
       if (!mounted) return;
@@ -825,7 +819,10 @@ class _ProjectGridState extends ConsumerState<ProjectGrid> {
       final fileName =
           '${project.name.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}.cadpilot.json';
       final message = await exportProjectFile(
-        content: const JsonEncoder.withIndent('  ').convert(project.toJson()),
+        content: const JsonEncoder.withIndent('  ').convert(
+          ProjectManifest(project: project, exportedAt: DateTime.now())
+              .toJson(),
+        ),
         fileName: fileName,
       );
       if (mounted) {
