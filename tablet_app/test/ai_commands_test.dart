@@ -47,6 +47,34 @@ void main() {
     expect(preview.summary, contains('Extrude base'));
   });
 
+  test('full revolve produces an editable revolved operation', () {
+    final parsed = AiCadCommand.fromJson(command([
+      {
+        'operationId': 'revolve-1',
+        'type': 'revolve',
+        'parameters': {'profileId': 'base', 'angle': 360}
+      },
+    ]));
+    final preview =
+        const AiCommandEngine().preview(parsed, sketch, const ModelDocument());
+    expect(preview.model.operations.single.kind, ModelOperationKind.revolve);
+    expect(preview.summary, contains('360 degrees'));
+  });
+
+  test('partial AI revolve is rejected before mutation', () {
+    final parsed = AiCadCommand.fromJson(command([
+      {
+        'operationId': 'revolve-1',
+        'type': 'revolve',
+        'parameters': {'profileId': 'base', 'angle': 180}
+      },
+    ]));
+    expect(
+        () => const AiCommandEngine()
+            .preview(parsed, sketch, const ModelDocument()),
+        throwsFormatException);
+  });
+
   test('unsupported and invalid operations are rejected before mutation', () {
     final unsupported = AiCadCommand.fromJson(command([
       {

@@ -6,10 +6,11 @@ This increment establishes the safety boundary for AI-authored CAD commands and 
 
 - Extrude an existing rectangular profile with a positive depth.
 - Cut an existing circular profile after a valid base extrusion exists.
+- Revolve an existing rectangular profile through a full 360 degrees.
 - Rename an existing model-tree operation.
 - Delete an existing model-tree operation.
 
-All other operation types are rejected before mutation. Profile references, operation references, dimensions, required fields, and duplicate operation IDs are checked locally.
+All other operation types are rejected before mutation. Partial revolutions are also rejected: the current evaluator supports only a full 360-degree revolve. Profile references, operation references, dimensions, required fields, and duplicate operation IDs are checked locally.
 
 ## Verify
 
@@ -18,8 +19,9 @@ All other operation types are rejected before mutation. Profile references, oper
 3. Preview the generated structured extrude command and confirm the model has not changed.
 4. Apply it and confirm the workspace switches to 3D and the operation appears in the model tree.
 5. Reopen the project and confirm the model operation remains available.
-6. Enter an unsupported type such as shell, or a missing profile ID, and confirm Preview rejects it.
-7. Preview a valid command and choose Cancel; confirm the model remains unchanged.
+6. Generate or enter a full `revolve` with a rectangular profile and `angle: 360`; preview and apply it, then confirm the revolved feature appears in the model tree.
+7. Enter a partial revolve such as `angle: 180`, an unsupported type such as shell, or a missing profile ID, and confirm Preview rejects it.
+8. Preview a valid command and choose Cancel; confirm the model remains unchanged.
 
 ## Server configuration
 

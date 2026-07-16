@@ -10,8 +10,8 @@ const commandSchema = {
     intent: { type: 'string', enum: ['create_model', 'modify_model'] },
     target: { type: 'object', additionalProperties: false, required: ['type', 'ids'], properties: { type: { type: 'string', enum: ['model', 'selection', 'sketch'] }, ids: { type: 'array', items: { type: 'string' } } } },
     operations: { type: 'array', minItems: 1, maxItems: 12, items: { type: 'object', additionalProperties: false, required: ['operationId', 'type', 'parameters'], properties: {
-      operationId: { type: 'string' }, type: { type: 'string', enum: ['extrude', 'cut', 'rename', 'delete'] },
-      parameters: { type: 'object', additionalProperties: false, properties: { profileId: { type: ['string', 'null'] }, depth: { type: ['number', 'null'] }, operationId: { type: ['string', 'null'] }, name: { type: ['string', 'null'] } }, required: ['profileId', 'depth', 'operationId', 'name'] }
+      operationId: { type: 'string' }, type: { type: 'string', enum: ['extrude', 'cut', 'revolve', 'rename', 'delete'] },
+      parameters: { type: 'object', additionalProperties: false, properties: { profileId: { type: ['string', 'null'] }, depth: { type: ['number', 'null'] }, angle: { type: ['number', 'null'] }, operationId: { type: ['string', 'null'] }, name: { type: ['string', 'null'] } }, required: ['profileId', 'depth', 'angle', 'operationId', 'name'] }
     } } },
     assumptions: { type: 'array', items: { type: 'string' }, maxItems: 12 },
     requiresConfirmation: { type: 'boolean', const: true }
@@ -64,7 +64,7 @@ function validCommand(value: unknown): value is JsonRecord {
   if (!value.operations.every(operation => isRecord(operation)
     && typeof operation.operationId === 'string'
     && operation.operationId.trim() !== ''
-    && ['extrude', 'cut', 'rename', 'delete'].includes(String(operation.type))
+    && ['extrude', 'cut', 'revolve', 'rename', 'delete'].includes(String(operation.type))
     && isRecord(operation.parameters))) return false;
   if (!Array.isArray(value.assumptions) || value.assumptions.length > 12 || !value.assumptions.every(item => typeof item === 'string')) return false;
   return value.requiresConfirmation === true;

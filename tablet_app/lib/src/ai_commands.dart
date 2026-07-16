@@ -124,7 +124,7 @@ class AiCommandPreview {
 
 class AiCommandEngine {
   const AiCommandEngine();
-  static const supported = {'extrude', 'cut', 'rename', 'delete'};
+  static const supported = {'extrude', 'cut', 'revolve', 'rename', 'delete'};
 
   AiCommandPreview preview(
       AiCadCommand command, SketchDocument sketch, ModelDocument current) {
@@ -164,6 +164,22 @@ class AiCommandEngine {
               depth: depth,
               createdAt: DateTime.now().toUtc()));
           summaries.add('Cut circular profile ${profile.id}');
+        case 'revolve':
+          final profile =
+              _profile(sketch, p['profileId'], SketchEntityKind.rectangle);
+          final angle = _positiveNumber(p['angle'], 'angle');
+          if (angle != 360) {
+            throw const FormatException(
+              'CadPilot currently supports only a full 360 degree revolve.',
+            );
+          }
+          next = next.add(ModelOperation(
+              id: operation.operationId,
+              kind: ModelOperationKind.revolve,
+              profileId: profile.id,
+              depth: angle,
+              createdAt: DateTime.now().toUtc()));
+          summaries.add('Revolve ${profile.id} through 360 degrees');
         case 'rename':
           final id = p['operationId'];
           final name = p['name'];
