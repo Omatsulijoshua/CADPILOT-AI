@@ -16,14 +16,15 @@ class AiGeneratedDraft {
 
 typedef AiCommandGenerator = Future<AiGeneratedDraft> Function(String prompt);
 typedef AiPlanGenerator = Future<AiPlanResponse> Function(String prompt);
-typedef AiPlanCommandGenerator = Future<AiGeneratedDraft> Function(String prompt, AiDesignPlan plan, AiPlanOption option, Map<String, String> answers);
+typedef AiPlanCommandGenerator = Future<AiGeneratedDraft> Function(String prompt, AiDesignPlan plan, AiPlanOption option, Map<String, String> answers, SketchDocument sketch);
 
 const maxAiPromptCharacters = 2000;
 
 class AiCommandDecision {
-  const AiCommandDecision({required this.record, this.model});
+  const AiCommandDecision({required this.record, this.model, this.sketch});
   final AiCommandRecord record;
   final ModelDocument? model;
+  final SketchDocument? sketch;
 }
 
 Future<AiCommandDecision?> showAiCommandDialog(BuildContext context,
@@ -58,11 +59,13 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
   bool generating = false;
   int? totalTokens;
   AiCommandPreview? preview;
+  SketchDocument? previewSketch;
   String? error;
   AiDesignPlan? plan;
   AiPlanOption? selectedOption;
   final Map<String, TextEditingController> answers = {};
   bool hasGeneratedPlanCommand = false;
+  bool showJson = false;
 
   @override
   void initState() {
@@ -102,7 +105,7 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
   Future<void> createPlan() async {
     final generator = widget.planGenerator;
     if (generator == null || prompt.text.trim().isEmpty) return;
-    setState(() { generating = true; error = null; preview = null; });
+    setState(() { generating = true; error = null; preview = null; previewSketch = null; showJson = false; });
     try {
       final response = await generator(prompt.text.trim());
       for (final controller in answers.values) { controller.dispose(); }
@@ -123,12 +126,40 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
   Future<void> generateFromPlan() async {
     final currentPlan = plan; final option = selectedOption; final generator = widget.planCommandGenerator;
     if (currentPlan == null || option == null || generator == null) return;
-    setState(() { generating = true; error = null; preview = null; });
+    setState(() { generating = true; error = null; preview = null; previewSketch = null; });
     try {
-      final draft = await generator(prompt.text.trim(), currentPlan, option, {for (final entry in answers.entries) entry.key: entry.value.text.trim()});
-      input.text = const JsonEncoder.withIndent('  ').convert(draft.command); totalTokens = draft.totalTokens; hasGeneratedPlanCommand = true; createPreview();
+      final preparedSketch = preparedSketchForPlan();
+      final draft = await generator(prompt.text.trim(), currentPlan, option, {for (final entry in answers.entries) entry.key: entry.value.text.trim()}, preparedSketch);
+      input.text = const JsonEncoder.withIndent('  ').convert(draft.command); totalTokens = draft.totalTokens; hasGeneratedPlanCommand = true; createPreview(sketch: preparedSketch);
     } catch (value) { setState(() => error = value.toString()); }
     finally { if (mounted) setState(() => generating = false); }
+  }
+
+  SketchDocument preparedSketchForPlan() {
+    if (widget.sketch.entities.any((item) => item.kind == SketchEntityKind.rectangle)) return widget.sketch;
+    final current = plan;
+    final option = selectedOption;
+    if (current == null || option == null) return widget.sketch;
+    final dimensions = <String, double>{};
+    for (final question in current.questions) {
+      final raw = (answers[question.id]?.text.trim().isNotEmpty ?? false)
+          ? answers[question.id]!.text
+          : question.suggestedValue;
+      final parsed = RegExp(r'(\d+(?:\.\d+)?)').firstMatch(raw);
+      if (parsed != null) dimensions[question.id.toLowerCase()] = double.parse(parsed.group(1)!);
+    }
+    final width = dimensions['width'] ?? dimensions['tablewidth'] ?? 1200;
+    final depth = dimensions['depth'] ?? dimensions['tabledepth'] ?? 600;
+    final chairWidth = dimensions['chairwidth'] ?? 500;
+    final chairDepth = dimensions['chairdepth'] ?? 500;
+    final entities = <SketchEntity>[
+      SketchEntity(id: const Uuid().v4(), kind: SketchEntityKind.rectangle, start: Offset.zero, end: Offset(width, depth), dimensionLocked: true),
+    ];
+    final text = '${current.summary} ${option.title}'.toLowerCase();
+    if (text.contains('chair')) {
+      entities.add(SketchEntity(id: const Uuid().v4(), kind: SketchEntityKind.rectangle, start: Offset(width + 160, 0), end: Offset(width + 160 + chairWidth, chairDepth), dimensionLocked: true));
+    }
+    return widget.sketch.copyWith(entities: [...widget.sketch.entities, ...entities]);
   }
 
   bool get requiredAnswersComplete {
@@ -149,6 +180,7 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
       generating = true;
       error = null;
       preview = null;
+      previewSketch = null;
     });
     try {
       final draft = await generator(promptText);
@@ -162,22 +194,25 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
     }
   }
 
-  void createPreview() {
+  void createPreview({SketchDocument? sketch}) {
     try {
       final decoded = jsonDecode(input.text);
       if (decoded is! Map) {
         throw const FormatException('Command must be a JSON object.');
       }
       final command = AiCadCommand.fromJson(Map<String, Object?>.from(decoded));
+      final activeSketch = sketch ?? previewSketch ?? widget.sketch;
       final value =
-          const AiCommandEngine().preview(command, widget.sketch, widget.model);
+          const AiCommandEngine().preview(command, activeSketch, widget.model);
       setState(() {
         preview = value;
+        previewSketch = activeSketch;
         error = null;
       });
     } catch (value) {
       setState(() {
         preview = null;
+        previewSketch = null;
         error = value is FormatException
             ? value.message
             : 'Command JSON is invalid.';
@@ -195,6 +230,7 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         context,
         AiCommandDecision(
           model: status == AiCommandStatus.applied ? value.model : null,
+          sketch: status == AiCommandStatus.applied ? previewSketch : null,
           record: AiCommandRecord(
               commandId: value.command.commandId,
               summary: value.summary,
@@ -269,6 +305,7 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
                           selectedOption = option;
                           error = null;
                           preview = null;
+                          previewSketch = null;
                           hasGeneratedPlanCommand = false;
                         }),
                         leading: Icon(selectedOption?.id == option.id ? Icons.radio_button_checked : Icons.radio_button_off),
@@ -277,10 +314,14 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
                       ),
                     )),
                     if (selectedOption != null) ...[const SizedBox(height: 10), const Text('Staged CAD plan', style: TextStyle(fontWeight: FontWeight.bold)), ...selectedOption!.stages.asMap().entries.map((entry) => ListTile(dense: true, leading: CircleAvatar(radius: 12, child: Text('${entry.key + 1}', style: const TextStyle(fontSize: 11))), title: Text(entry.value))),
-                      FilledButton.icon(onPressed: selectedOption!.executableNow && requiredAnswersComplete && !generating ? generateFromPlan : null, icon: const Icon(Icons.precision_manufacturing), label: const Text('Generate next CAD stage')),
+                      FilledButton.icon(onPressed: requiredAnswersComplete && !generating ? generateFromPlan : null, icon: const Icon(Icons.precision_manufacturing), label: Text(selectedOption!.executableNow ? 'Generate next CAD stage' : 'Create starter sketch and CAD stage')),
+                      if (hasGeneratedPlanCommand)
+                        TextButton.icon(onPressed: () => setState(() => showJson = !showJson), icon: Icon(showJson ? Icons.visibility_off : Icons.code), label: Text(showJson ? 'Hide command JSON' : 'Show command JSON')),
+                      if (showJson)
+                        SizedBox(height: 220, child: TextField(controller: input, expands: true, maxLines: null, minLines: null, style: const TextStyle(fontFamily: 'monospace', fontSize: 12), decoration: const InputDecoration(labelText: 'Structured command JSON', alignLabelWithHint: true))),
                     ],
                   ])) else Expanded(
-                      child: TextField(
+                      child: showJson ? TextField(
                           controller: input,
                           expands: true,
                           maxLines: null,
@@ -289,7 +330,7 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
                               fontFamily: 'monospace', fontSize: 12),
                           decoration: const InputDecoration(
                               labelText: 'Structured command JSON',
-                              alignLabelWithHint: true))),
+                              alignLabelWithHint: true)) : Center(child: TextButton.icon(onPressed: () => setState(() => showJson = true), icon: const Icon(Icons.code), label: const Text('Show command JSON')))),
                   if (error != null)
                     Padding(
                         padding: const EdgeInsets.only(top: 10),

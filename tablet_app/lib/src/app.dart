@@ -1779,7 +1779,15 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                 prompt: prompt, project: project, token: token),
         planCommandGenerator: token == null
             ? null
-            : (prompt, plan, option, answers) async {
+            : (prompt, plan, option, answers, sketch) async {
+                final projectForAi = project.copyWith(sketch: sketch);
+                if (!option.executableNow) {
+                  final response = await ref.read(cloudApiProvider).generateAiCommand(
+                      prompt: '$prompt\nSelected plan: ${option.title}\nAnswers: $answers\nGenerate the first executable CAD stage from the starter sketch profiles.',
+                      project: projectForAi,
+                      token: token);
+                  return AiGeneratedDraft(response.command, response.totalTokens);
+                }
                 final response = await ref.read(cloudApiProvider).generateAiCommandFromPlan(
                     prompt: prompt, plan: plan, option: option, answers: answers,
                     project: project, token: token);
@@ -1797,6 +1805,7 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
     if (decision == null || !mounted) return;
     final updated = project.copyWith(
       model: decision.model ?? project.model,
+      sketch: decision.sketch ?? project.sketch,
       aiHistory: [...project.aiHistory, decision.record],
     );
     await ref.read(projectsProvider.notifier).save(updated);
