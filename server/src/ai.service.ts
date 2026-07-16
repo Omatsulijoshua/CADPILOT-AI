@@ -10,8 +10,8 @@ const commandSchema = {
     intent: { type: 'string', enum: ['create_model', 'modify_model'] },
     target: { type: 'object', additionalProperties: false, required: ['type', 'ids'], properties: { type: { type: 'string', enum: ['model', 'selection', 'sketch'] }, ids: { type: 'array', items: { type: 'string' } } } },
     operations: { type: 'array', minItems: 1, maxItems: 12, items: { type: 'object', additionalProperties: false, required: ['operationId', 'type', 'parameters'], properties: {
-      operationId: { type: 'string' }, type: { type: 'string', enum: ['extrude', 'cut', 'revolve', 'rename', 'delete'] },
-      parameters: { type: 'object', additionalProperties: false, properties: { profileId: { type: ['string', 'null'] }, depth: { type: ['number', 'null'] }, angle: { type: ['number', 'null'] }, operationId: { type: ['string', 'null'] }, name: { type: ['string', 'null'] } }, required: ['profileId', 'depth', 'angle', 'operationId', 'name'] }
+      operationId: { type: 'string' }, type: { type: 'string', enum: ['extrude', 'cut', 'revolve', 'shell', 'rename', 'delete'] },
+      parameters: { type: 'object', additionalProperties: false, properties: { profileId: { type: ['string', 'null'] }, depth: { type: ['number', 'null'] }, angle: { type: ['number', 'null'] }, thickness: { type: ['number', 'null'] }, operationId: { type: ['string', 'null'] }, name: { type: ['string', 'null'] } }, required: ['profileId', 'depth', 'angle', 'thickness', 'operationId', 'name'] }
     } } },
     assumptions: { type: 'array', items: { type: 'string' }, maxItems: 12 },
     requiresConfirmation: { type: 'boolean', const: true }
@@ -72,6 +72,8 @@ function validParameters(type: string, parameters: JsonRecord): boolean {
       return nonEmptyString(parameters.profileId) && positiveNumber(parameters.depth);
     case 'revolve':
       return nonEmptyString(parameters.profileId) && parameters.angle === 360;
+    case 'shell':
+      return positiveNumber(parameters.thickness);
     case 'rename':
       return nonEmptyString(parameters.operationId) && nonEmptyString(parameters.name);
     case 'delete':

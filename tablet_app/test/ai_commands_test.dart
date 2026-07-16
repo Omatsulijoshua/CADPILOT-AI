@@ -75,6 +75,45 @@ void main() {
         throwsFormatException);
   });
 
+  test('AI can shell an extrusion only with safe wall thickness', () {
+    final parsed = AiCadCommand.fromJson(command([
+      {
+        'operationId': 'extrude-1',
+        'type': 'extrude',
+        'parameters': {'profileId': 'base', 'depth': 20}
+      },
+      {
+        'operationId': 'shell-1',
+        'type': 'shell',
+        'parameters': {'thickness': 2}
+      },
+    ]));
+    final preview =
+        const AiCommandEngine().preview(parsed, sketch, const ModelDocument());
+    expect(preview.model.operations.last.kind, ModelOperationKind.shell);
+    expect(const ModelEvaluator().evaluate(sketch, preview.model)!.shellThickness,
+        2);
+  });
+
+  test('AI rejects an unsafe shell thickness', () {
+    final parsed = AiCadCommand.fromJson(command([
+      {
+        'operationId': 'extrude-1',
+        'type': 'extrude',
+        'parameters': {'profileId': 'base', 'depth': 20}
+      },
+      {
+        'operationId': 'shell-1',
+        'type': 'shell',
+        'parameters': {'thickness': 20}
+      },
+    ]));
+    expect(
+        () => const AiCommandEngine()
+            .preview(parsed, sketch, const ModelDocument()),
+        throwsFormatException);
+  });
+
   test('unsupported and invalid operations are rejected before mutation', () {
     final unsupported = AiCadCommand.fromJson(command([
       {

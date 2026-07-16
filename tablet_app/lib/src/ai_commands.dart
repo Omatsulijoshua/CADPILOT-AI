@@ -124,7 +124,8 @@ class AiCommandPreview {
 
 class AiCommandEngine {
   const AiCommandEngine();
-  static const supported = {'extrude', 'cut', 'revolve', 'rename', 'delete'};
+  static const supported =
+      {'extrude', 'cut', 'revolve', 'shell', 'rename', 'delete'};
 
   AiCommandPreview preview(
       AiCadCommand command, SketchDocument sketch, ModelDocument current) {
@@ -180,6 +181,30 @@ class AiCommandEngine {
               depth: angle,
               createdAt: DateTime.now().toUtc()));
           summaries.add('Revolve ${profile.id} through 360 degrees');
+        case 'shell':
+          final solid = const ModelEvaluator().evaluate(sketch, next);
+          final bases = next.operations
+              .where((item) =>
+                  item.kind == ModelOperationKind.extrude && !item.suppressed)
+              .toList();
+          if (solid == null || bases.isEmpty) {
+            throw const FormatException('A shell requires an active extrusion.');
+          }
+          if (next.operations.any((item) =>
+              item.kind == ModelOperationKind.shell && !item.suppressed)) {
+            throw const FormatException('Only one active shell is supported.');
+          }
+          final thickness = _positiveNumber(p['thickness'], 'thickness');
+          final validation = const ShellValidator().validate(solid, thickness);
+          if (validation != null) throw FormatException(validation);
+          next = next.add(ModelOperation(
+              id: operation.operationId,
+              kind: ModelOperationKind.shell,
+              profileId: bases.first.profileId,
+              depth: thickness,
+              createdAt: DateTime.now().toUtc()));
+          summaries.add(
+              'Shell ${bases.first.profileId} with ${thickness.toStringAsFixed(1)} mm walls');
         case 'rename':
           final id = p['operationId'];
           final name = p['name'];

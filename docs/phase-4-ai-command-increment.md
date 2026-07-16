@@ -7,6 +7,7 @@ This increment establishes the safety boundary for AI-authored CAD commands and 
 - Extrude an existing rectangular profile with a positive depth.
 - Cut an existing circular profile after a valid base extrusion exists.
 - Revolve an existing rectangular profile through a full 360 degrees.
+- Shell an unmodified extrusion with a validator-approved wall thickness.
 - Rename an existing model-tree operation.
 - Delete an existing model-tree operation.
 
