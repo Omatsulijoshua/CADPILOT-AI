@@ -2,7 +2,7 @@
 
 <p align="center"><img src="tablet_app/web/icons/Icon-512.png" alt="CadPilot logo" width="160"></p>
 <p align="center"><strong>Tablet-first CAD, intelligent design assistance, spatial scanning, and augmented reality.</strong></p>
-<p align="center"><a href="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/backend-ci.yml"><img src="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/backend-ci.yml/badge.svg" alt="Backend CI"></a> <a href="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/flutter-ci.yml"><img src="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/flutter-ci.yml/badge.svg" alt="Flutter CI"></a></p>
+<p align="center"><a href="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/backend-ci.yml"><img src="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/backend-ci.yml/badge.svg" alt="Backend CI"></a> <a href="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/flutter-ci.yml"><img src="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/flutter-ci.yml/badge.svg" alt="Flutter CI"></a> <a href="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/admin-ci.yml"><img src="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/admin-ci.yml/badge.svg" alt="Admin CI"></a></p>
 <p align="center"><a href="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/native-engine-ci.yml"><img src="https://github.com/Omatsulijoshua/CADPILOT-AI/actions/workflows/native-engine-ci.yml/badge.svg" alt="Native CAD Engine CI"></a></p>
 <p align="center"><a href="https://cadpilot.vercel.app"><strong>Live App</strong></a> | <a href="docs/architecture.md">Architecture</a> | <a href="docs/api.md">API</a> | <a href="docs/cad-file-format.md">File Format</a> | <a href="docs/security.md">Security</a></p>
 
@@ -78,6 +78,7 @@ Open the browser build at **[cadpilot.vercel.app](https://cadpilot.vercel.app)**
 | Intelligent commands | Foundation | Plan, validation, preview, deterministic application |
 | Cloud API | Foundation | Authenticated backup and restore, remote revisions, conflicts, plans, spatial sessions, and audits |
 | Database | Foundation | Prisma schema and PostgreSQL migrations |
+| Admin dashboard | Implemented foundation | Separate Next.js read-only operations console; server-enforced super-admin allowlist |
 | Spatial controller | Implemented | Capability, permission, readiness, lifecycle, recovery |
 | ARCore availability | Implemented | Official asynchronous Android detection |
 | Native AR renderer | In progress | Planes, anchors, occlusion, rendering, placement UX remain |
@@ -576,6 +577,7 @@ Check `DATABASE_URL`, container health, ports, and migrations.
 | [OpenAI provider hardening](docs/openai-provider-hardening-increment.md) | Responses API timeout, validation, privacy, metering, and safe failures |
 | [Backend TypeScript lint gate](docs/backend-typescript-lint-gate.md) | ESLint activation, verification workflow, and dependency-audit baseline |
 | [Backend continuous integration](docs/backend-ci.md) | GitHub Actions triggers, least-privilege model, quality gates, local parity, and branch protection |
+| [Admin dashboard](admin/README.md) | Secure setup, API allowlist, local run instructions, and deployment configuration |
 | [PostgreSQL integration CI](docs/postgresql-integration-ci.md) | Disposable database lifecycle, real API persistence flow, isolation model, and safe local invocation |
 | [Backend rate limiting](docs/backend-rate-limiting.md) | IP-based limits for authentication and AI endpoints, distributed-deployment considerations, and integration coverage |
 | [Backend runtime configuration](docs/backend-runtime-configuration.md) | Production startup validation for JWT secrets and ports, with safe development defaults |
