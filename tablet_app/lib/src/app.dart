@@ -14,6 +14,7 @@ import 'project_file_errors.dart';
 import 'project_file_import.dart';
 import 'project_file_name.dart';
 import 'project_manifest.dart';
+import 'reentry_lock.dart';
 import 'modeling_canvas.dart';
 import 'sketch_canvas.dart';
 import 'spatial.dart';
@@ -39,8 +40,71 @@ class CadPilotApp extends StatelessWidget {
           ),
           useMaterial3: true,
         ),
-        home: const TabletGate(),
+        home: const LaunchGate(),
       );
+}
+
+class LaunchGate extends StatefulWidget {
+  const LaunchGate({super.key});
+
+  @override
+  State<LaunchGate> createState() => _LaunchGateState();
+}
+
+class _LaunchGateState extends State<LaunchGate>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1700),
+  )..forward();
+  var _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(const Duration(milliseconds: 2400), () {
+      if (mounted) setState(() => _ready = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_ready) return const TabletGate();
+    return Scaffold(
+      body: Center(
+        child: FadeTransition(
+          opacity: CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+          child: ScaleTransition(
+            scale: Tween<double>(begin: .72, end: 1).animate(
+              CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset('assets/branding/cadpilot-icon-master.png',
+                    width: 190, height: 190),
+                const SizedBox(height: 24),
+                const Text('CADPILOT',
+                    style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 5)),
+                const SizedBox(height: 8),
+                const Text('Design in context.',
+                    style: TextStyle(color: Color(0xff8ce5d3))),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class TabletGate extends StatelessWidget {
@@ -90,7 +154,7 @@ class SessionRouter extends ConsumerWidget {
             body: Center(child: Text('Could not load session: $error'))),
         data: (session) => session == null
             ? const SignInScreen()
-            : Dashboard(session: session),
+            : ReentryLock(session: session),
       );
 }
 
