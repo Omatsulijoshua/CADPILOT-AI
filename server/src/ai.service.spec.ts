@@ -9,7 +9,7 @@ const validCommand = {
   operations: [{
     operationId: 'op1',
     type: 'extrude',
-    parameters: { profileId: 'profile-1', depth: 12, operationId: null, name: null },
+    parameters: { profileId: 'profile-1', depth: 12, angle: null, operationId: null, name: null },
   }],
   assumptions: [],
   requiresConfirmation: true,
@@ -129,6 +129,25 @@ describe('AiService', () => {
     } as Response);
 
     await expect(new AiService(prisma).generateCommand('u1', 'Extrude it', {}))
+      .rejects.toThrow('AI returned an invalid structured command');
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['an unsupported operation', { ...validCommand, operations: [{ ...validCommand.operations[0], type: 'shell' }] }],
+    ['a non-positive extrusion depth', { ...validCommand, operations: [{ ...validCommand.operations[0], parameters: { ...validCommand.operations[0].parameters, depth: 0 } }] }],
+    ['a partial revolution', { ...validCommand, operations: [{ ...validCommand.operations[0], type: 'revolve', parameters: { ...validCommand.operations[0].parameters, angle: 180 } }] }],
+    ['an empty rename label', { ...validCommand, operations: [{ ...validCommand.operations[0], type: 'rename', parameters: { ...validCommand.operations[0].parameters, operationId: 'op1', name: ' ' } }] }],
+  ])('rejects %s before returning it to the client', async (_label, command) => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => providerResponse({
+        output: [{ content: [{ type: 'output_text', text: JSON.stringify(command) }] }],
+      }),
+    } as Response);
+
+    await expect(new AiService(prisma).generateCommand('u1', 'Unsafe operation', {}))
       .rejects.toThrow('AI returned an invalid structured command');
     expect(create).toHaveBeenCalledTimes(1);
   });

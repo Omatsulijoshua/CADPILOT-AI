@@ -55,6 +55,30 @@ function outputText(result: OpenAiResponse): string | null {
   return null;
 }
 
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+function positiveNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+function validParameters(type: string, parameters: JsonRecord): boolean {
+  switch (type) {
+    case 'extrude':
+    case 'cut':
+      return nonEmptyString(parameters.profileId) && positiveNumber(parameters.depth);
+    case 'revolve':
+      return nonEmptyString(parameters.profileId) && parameters.angle === 360;
+    case 'rename':
+      return nonEmptyString(parameters.operationId) && nonEmptyString(parameters.name);
+    case 'delete':
+      return nonEmptyString(parameters.operationId);
+    default:
+      return false;
+  }
+}
+
 function validCommand(value: unknown): value is JsonRecord {
   if (!isRecord(value) || value.schemaVersion !== 1 || typeof value.commandId !== 'string' || value.commandId.trim() === '') return false;
   if (value.intent !== 'create_model' && value.intent !== 'modify_model') return false;
@@ -62,10 +86,10 @@ function validCommand(value: unknown): value is JsonRecord {
   if (!value.target.ids.every(id => typeof id === 'string' && id.trim() !== '')) return false;
   if (!Array.isArray(value.operations) || value.operations.length < 1 || value.operations.length > 12) return false;
   if (!value.operations.every(operation => isRecord(operation)
-    && typeof operation.operationId === 'string'
-    && operation.operationId.trim() !== ''
-    && ['extrude', 'cut', 'revolve', 'rename', 'delete'].includes(String(operation.type))
-    && isRecord(operation.parameters))) return false;
+    && nonEmptyString(operation.operationId)
+    && typeof operation.type === 'string'
+    && isRecord(operation.parameters)
+    && validParameters(operation.type, operation.parameters))) return false;
   if (!Array.isArray(value.assumptions) || value.assumptions.length > 12 || !value.assumptions.every(item => typeof item === 'string')) return false;
   return value.requiresConfirmation === true;
 }
