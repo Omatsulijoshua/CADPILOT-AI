@@ -125,7 +125,7 @@ function validCommand(value: unknown): value is JsonRecord {
 
 @Injectable()
 export class AiService {
-  constructor(private readonly prisma: PrismaService, private readonly vault: AiKeyVaultService) {}
+  constructor(private readonly prisma: PrismaService, private readonly vault: AiKeyVaultService = new AiKeyVaultService()) {}
 
   async generateCommand(userId: string, prompt: string, context: object) {
     const input = commandInput(prompt, context);
