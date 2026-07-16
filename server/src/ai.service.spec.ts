@@ -138,6 +138,8 @@ describe('AiService', () => {
     ['a non-positive extrusion depth', { ...validCommand, operations: [{ ...validCommand.operations[0], parameters: { ...validCommand.operations[0].parameters, depth: 0 } }] }],
     ['a partial revolution', { ...validCommand, operations: [{ ...validCommand.operations[0], type: 'revolve', parameters: { ...validCommand.operations[0].parameters, angle: 180 } }] }],
     ['an empty rename label', { ...validCommand, operations: [{ ...validCommand.operations[0], type: 'rename', parameters: { ...validCommand.operations[0].parameters, operationId: 'op1', name: ' ' } }] }],
+    ['duplicate operation IDs', { ...validCommand, operations: [validCommand.operations[0], { ...validCommand.operations[0] }] }],
+    ['duplicate target IDs', { ...validCommand, target: { type: 'selection', ids: ['entity-1', 'entity-1'] } }],
   ])('rejects %s before returning it to the client', async (_label, command) => {
     process.env.OPENAI_API_KEY = 'test-key';
     jest.spyOn(global, 'fetch').mockResolvedValue({

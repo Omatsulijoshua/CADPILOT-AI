@@ -84,12 +84,14 @@ function validCommand(value: unknown): value is JsonRecord {
   if (value.intent !== 'create_model' && value.intent !== 'modify_model') return false;
   if (!isRecord(value.target) || !['model', 'selection', 'sketch'].includes(String(value.target.type)) || !Array.isArray(value.target.ids)) return false;
   if (!value.target.ids.every(id => typeof id === 'string' && id.trim() !== '')) return false;
+  if (new Set(value.target.ids).size !== value.target.ids.length) return false;
   if (!Array.isArray(value.operations) || value.operations.length < 1 || value.operations.length > 12) return false;
   if (!value.operations.every(operation => isRecord(operation)
     && nonEmptyString(operation.operationId)
     && typeof operation.type === 'string'
     && isRecord(operation.parameters)
     && validParameters(operation.type, operation.parameters))) return false;
+  if (new Set(value.operations.map(operation => (operation as JsonRecord).operationId)).size !== value.operations.length) return false;
   if (!Array.isArray(value.assumptions) || value.assumptions.length > 12 || !value.assumptions.every(item => typeof item === 'string')) return false;
   return value.requiresConfirmation === true;
 }

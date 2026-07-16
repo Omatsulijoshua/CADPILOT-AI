@@ -10,7 +10,7 @@ This increment establishes the safety boundary for AI-authored CAD commands and 
 - Rename an existing model-tree operation.
 - Delete an existing model-tree operation.
 
-All other operation types are rejected before mutation. Partial revolutions are also rejected: the current evaluator supports only a full 360-degree revolve. The server independently validates the supported operation parameters before returning provider output, while the tablet repeats the contextual model checks before mutation. Profile references, operation references, dimensions, required fields, and duplicate operation IDs are checked locally.
+All other operation types are rejected before mutation. Partial revolutions are also rejected: the current evaluator supports only a full 360-degree revolve. The server independently validates supported operation parameters and rejects duplicate target or operation IDs before returning provider output, while the tablet repeats the contextual model checks before mutation. Profile references, operation references, dimensions, required fields, and duplicate operation IDs are checked locally.
 
 ## Verify
 
