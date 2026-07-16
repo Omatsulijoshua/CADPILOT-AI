@@ -7,8 +7,32 @@ services:
       POSTGRES_DB: cadpilot
     ports: ["${POSTGRES_PORT:-5432}:5432"]
     volumes: [cadpilot-postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cadpilot -d cadpilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
   redis:
     image: redis:7-alpine
     ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  api:
+    profiles: ["api"]
+    build: ./server
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://cadpilot:cadpilot@postgres:5432/cadpilot?schema=public
+      REDIS_URL: redis://redis:6379
+      PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports: ["${API_PORT:-3000}:3000"]
 volumes:
   cadpilot-postgres:

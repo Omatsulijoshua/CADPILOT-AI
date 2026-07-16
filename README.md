@@ -87,6 +87,10 @@ Open the browser build at **[cadpilot.vercel.app](https://cadpilot.vercel.app)**
 | Collaboration | Planned | Presence and robust multi-user conflicts remain |
 | Production AI | Implemented foundation | OpenAI Responses API, strict command schema, bounded timeout, safe failures, review-before-apply, and token metering; production evals, quotas, and billing remain |
 
+For the optional local API container stack, see
+[container API stack](docs/container-api-stack.md). It requires Docker Desktop
+with WSL working and deliberate secret configuration.
+
 ## Architecture
 
 ```mermaid
