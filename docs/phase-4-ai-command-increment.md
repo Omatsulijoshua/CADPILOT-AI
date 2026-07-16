@@ -9,6 +9,7 @@ This increment establishes the safety boundary for AI-authored CAD commands and 
 - Revolve an existing rectangular profile through a full 360 degrees.
 - Shell an unmodified extrusion with a validator-approved wall thickness.
 - Fillet extrusion corners with a validator-approved radius.
+- Chamfer extrusion corners with a validator-approved distance.
 - Rename an existing model-tree operation.
 - Delete an existing model-tree operation.
 

@@ -134,6 +134,25 @@ void main() {
         4);
   });
 
+  test('AI can chamfer an extrusion with a validated distance', () {
+    final parsed = AiCadCommand.fromJson(command([
+      {
+        'operationId': 'extrude-1',
+        'type': 'extrude',
+        'parameters': {'profileId': 'base', 'depth': 20}
+      },
+      {
+        'operationId': 'chamfer-1',
+        'type': 'chamfer',
+        'parameters': {'distance': 3}
+      },
+    ]));
+    final preview =
+        const AiCommandEngine().preview(parsed, sketch, const ModelDocument());
+    expect(preview.model.operations.last.kind, ModelOperationKind.chamfer);
+    expect(const ModelEvaluator().evaluate(sketch, preview.model)!.chamfer, 3);
+  });
+
   test('unsupported and invalid operations are rejected before mutation', () {
     final unsupported = AiCadCommand.fromJson(command([
       {

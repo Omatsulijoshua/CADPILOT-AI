@@ -125,7 +125,7 @@ class AiCommandPreview {
 class AiCommandEngine {
   const AiCommandEngine();
   static const supported =
-      {'extrude', 'cut', 'revolve', 'shell', 'fillet', 'rename', 'delete'};
+      {'extrude', 'cut', 'revolve', 'shell', 'fillet', 'chamfer', 'rename', 'delete'};
 
   AiCommandPreview preview(
       AiCadCommand command, SketchDocument sketch, ModelDocument current) {
@@ -229,6 +229,30 @@ class AiCommandEngine {
               createdAt: DateTime.now().toUtc()));
           summaries.add(
               'Fillet ${bases.first.profileId} by ${radius.toStringAsFixed(1)} mm');
+        case 'chamfer':
+          final solid = const ModelEvaluator().evaluate(sketch, next);
+          final bases = next.operations
+              .where((item) =>
+                  item.kind == ModelOperationKind.extrude && !item.suppressed)
+              .toList();
+          if (solid == null || bases.isEmpty) {
+            throw const FormatException('A chamfer requires an active extrusion.');
+          }
+          if (next.operations.any((item) =>
+              item.kind == ModelOperationKind.chamfer && !item.suppressed)) {
+            throw const FormatException('Only one active chamfer is supported.');
+          }
+          final distance = _positiveNumber(p['distance'], 'distance');
+          final validation = const ChamferValidator().validate(solid, distance);
+          if (validation != null) throw FormatException(validation);
+          next = next.add(ModelOperation(
+              id: operation.operationId,
+              kind: ModelOperationKind.chamfer,
+              profileId: bases.first.profileId,
+              depth: distance,
+              createdAt: DateTime.now().toUtc()));
+          summaries.add(
+              'Chamfer ${bases.first.profileId} by ${distance.toStringAsFixed(1)} mm');
         case 'rename':
           final id = p['operationId'];
           final name = p['name'];
