@@ -1,4 +1,4 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 
 const commandSchema = {
@@ -21,6 +21,8 @@ const commandSchema = {
 const defaultTimeoutMs = 30_000;
 const minTimeoutMs = 1_000;
 const maxTimeoutMs = 120_000;
+const maxPromptLength = 2_000;
+const maxInputBytes = 64 * 1024;
 
 type JsonRecord = Record<string, unknown>;
 type ResponseUsage = { input_tokens?: unknown; output_tokens?: unknown; total_tokens?: unknown };
@@ -79,6 +81,23 @@ function validParameters(type: string, parameters: JsonRecord): boolean {
   }
 }
 
+function commandInput(prompt: string, context: object): string {
+  if (typeof prompt !== 'string' || prompt.trim() === '' || prompt.length > maxPromptLength) {
+    throw new BadRequestException('AI prompt must contain between 1 and 2000 characters');
+  }
+
+  let input: string;
+  try {
+    input = JSON.stringify({ prompt, context });
+  } catch {
+    throw new BadRequestException('AI command context must be JSON serializable');
+  }
+  if (new TextEncoder().encode(input).byteLength > maxInputBytes) {
+    throw new PayloadTooLargeException('AI command context is too large');
+  }
+  return input;
+}
+
 function validCommand(value: unknown): value is JsonRecord {
   if (!isRecord(value) || value.schemaVersion !== 1 || typeof value.commandId !== 'string' || value.commandId.trim() === '') return false;
   if (value.intent !== 'create_model' && value.intent !== 'modify_model') return false;
@@ -104,6 +123,7 @@ export class AiService {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new ServiceUnavailableException('AI commands are not configured on this server');
     const model = process.env.OPENAI_CAD_MODEL ?? 'gpt-5.6-luna';
+    const input = commandInput(prompt, context);
     let response: Response;
     try {
       response = await fetch('https://api.openai.com/v1/responses', {
@@ -113,7 +133,7 @@ export class AiService {
           model,
           store: false,
           instructions: 'Convert the user request into a safe CadPilot command. Use only IDs present in context. Never invent geometry IDs. All dimensions are millimetres. Return requiresConfirmation=true.',
-          input: JSON.stringify({ prompt, context }),
+          input,
           text: { format: { type: 'json_schema', name: 'cadpilot_command', strict: true, schema: commandSchema } }
         }),
         signal: AbortSignal.timeout(timeoutMs(process.env.OPENAI_TIMEOUT_MS)),

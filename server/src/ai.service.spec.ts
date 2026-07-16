@@ -1,4 +1,4 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
 import { AiService } from './ai.service';
 
 const validCommand = {
@@ -49,6 +49,29 @@ describe('AiService', () => {
     await expect(new AiService(prisma).generateCommand('u1', 'Extrude it', {}))
       .rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('bounds direct-service prompt and context input before calling the provider', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    const fetchMock = jest.spyOn(global, 'fetch');
+    await expect(new AiService(prisma).generateCommand('u1', ' ', {}))
+      .rejects.toBeInstanceOf(BadRequestException);
+    await expect(new AiService(prisma).generateCommand('u1', 'x'.repeat(2001), {}))
+      .rejects.toBeInstanceOf(BadRequestException);
+    await expect(new AiService(prisma).generateCommand('u1', 'Extrude it', { payload: 'x'.repeat(70 * 1024) }))
+      .rejects.toBeInstanceOf(PayloadTooLargeException);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-serializable direct-service context before calling the provider', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    const context: { self?: unknown } = {};
+    context.self = context;
+    const fetchMock = jest.spyOn(global, 'fetch');
+    await expect(new AiService(prisma).generateCommand('u1', 'Extrude it', context))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('returns validated structured commands and records token usage', async () => {
