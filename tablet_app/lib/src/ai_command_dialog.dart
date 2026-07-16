@@ -15,6 +15,8 @@ class AiGeneratedDraft {
 
 typedef AiCommandGenerator = Future<AiGeneratedDraft> Function(String prompt);
 
+const maxAiPromptCharacters = 2000;
+
 class AiCommandDecision {
   const AiCommandDecision({required this.record, this.model});
   final AiCommandRecord record;
@@ -87,14 +89,19 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
 
   Future<void> generate() async {
     final generator = widget.generator;
-    if (generator == null || prompt.text.trim().isEmpty) return;
+    final promptText = prompt.text.trim();
+    if (generator == null ||
+        promptText.isEmpty ||
+        prompt.text.length > maxAiPromptCharacters) {
+      return;
+    }
     setState(() {
       generating = true;
       error = null;
       preview = null;
     });
     try {
-      final draft = await generator(prompt.text.trim());
+      final draft = await generator(promptText);
       input.text = const JsonEncoder.withIndent('  ').convert(draft.command);
       setState(() => totalTokens = draft.totalTokens);
       createPreview();
@@ -169,6 +176,8 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
                         child: TextField(
                       controller: prompt,
                       enabled: widget.generator != null && !generating,
+                      maxLength: maxAiPromptCharacters,
+                      onChanged: (_) => setState(() {}),
                       decoration: InputDecoration(
                         labelText: 'Describe the change',
                         hintText: widget.generator == null
@@ -178,7 +187,10 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
                     )),
                     const SizedBox(width: 10),
                     FilledButton.icon(
-                      onPressed: widget.generator == null || generating
+                      onPressed: widget.generator == null ||
+                              generating ||
+                              prompt.text.trim().isEmpty ||
+                              prompt.text.length > maxAiPromptCharacters
                           ? null
                           : generate,
                       icon: generating
