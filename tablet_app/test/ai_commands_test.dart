@@ -114,6 +114,26 @@ void main() {
         throwsFormatException);
   });
 
+  test('AI can fillet an extrusion with a validated radius', () {
+    final parsed = AiCadCommand.fromJson(command([
+      {
+        'operationId': 'extrude-1',
+        'type': 'extrude',
+        'parameters': {'profileId': 'base', 'depth': 20}
+      },
+      {
+        'operationId': 'fillet-1',
+        'type': 'fillet',
+        'parameters': {'radius': 4}
+      },
+    ]));
+    final preview =
+        const AiCommandEngine().preview(parsed, sketch, const ModelDocument());
+    expect(preview.model.operations.last.kind, ModelOperationKind.fillet);
+    expect(const ModelEvaluator().evaluate(sketch, preview.model)!.cornerRadius,
+        4);
+  });
+
   test('unsupported and invalid operations are rejected before mutation', () {
     final unsupported = AiCadCommand.fromJson(command([
       {

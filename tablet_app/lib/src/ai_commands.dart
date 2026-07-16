@@ -125,7 +125,7 @@ class AiCommandPreview {
 class AiCommandEngine {
   const AiCommandEngine();
   static const supported =
-      {'extrude', 'cut', 'revolve', 'shell', 'rename', 'delete'};
+      {'extrude', 'cut', 'revolve', 'shell', 'fillet', 'rename', 'delete'};
 
   AiCommandPreview preview(
       AiCadCommand command, SketchDocument sketch, ModelDocument current) {
@@ -205,6 +205,30 @@ class AiCommandEngine {
               createdAt: DateTime.now().toUtc()));
           summaries.add(
               'Shell ${bases.first.profileId} with ${thickness.toStringAsFixed(1)} mm walls');
+        case 'fillet':
+          final solid = const ModelEvaluator().evaluate(sketch, next);
+          final bases = next.operations
+              .where((item) =>
+                  item.kind == ModelOperationKind.extrude && !item.suppressed)
+              .toList();
+          if (solid == null || bases.isEmpty) {
+            throw const FormatException('A fillet requires an active extrusion.');
+          }
+          if (next.operations.any((item) =>
+              item.kind == ModelOperationKind.fillet && !item.suppressed)) {
+            throw const FormatException('Only one active fillet is supported.');
+          }
+          final radius = _positiveNumber(p['radius'], 'radius');
+          final validation = const FilletValidator().validate(solid, radius);
+          if (validation != null) throw FormatException(validation);
+          next = next.add(ModelOperation(
+              id: operation.operationId,
+              kind: ModelOperationKind.fillet,
+              profileId: bases.first.profileId,
+              depth: radius,
+              createdAt: DateTime.now().toUtc()));
+          summaries.add(
+              'Fillet ${bases.first.profileId} by ${radius.toStringAsFixed(1)} mm');
         case 'rename':
           final id = p['operationId'];
           final name = p['name'];

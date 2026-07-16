@@ -9,7 +9,7 @@ const validCommand = {
   operations: [{
     operationId: 'op1',
     type: 'extrude',
-    parameters: { profileId: 'profile-1', depth: 12, angle: null, thickness: null, operationId: null, name: null },
+    parameters: { profileId: 'profile-1', depth: 12, angle: null, thickness: null, radius: null, operationId: null, name: null },
   }],
   assumptions: [],
   requiresConfirmation: true,
@@ -161,6 +161,7 @@ describe('AiService', () => {
     ['a non-positive extrusion depth', { ...validCommand, operations: [{ ...validCommand.operations[0], parameters: { ...validCommand.operations[0].parameters, depth: 0 } }] }],
     ['a partial revolution', { ...validCommand, operations: [{ ...validCommand.operations[0], type: 'revolve', parameters: { ...validCommand.operations[0].parameters, angle: 180 } }] }],
     ['a non-positive shell thickness', { ...validCommand, operations: [{ ...validCommand.operations[0], type: 'shell', parameters: { ...validCommand.operations[0].parameters, thickness: 0 } }] }],
+    ['a non-positive fillet radius', { ...validCommand, operations: [{ ...validCommand.operations[0], type: 'fillet', parameters: { ...validCommand.operations[0].parameters, radius: 0 } }] }],
     ['an empty rename label', { ...validCommand, operations: [{ ...validCommand.operations[0], type: 'rename', parameters: { ...validCommand.operations[0].parameters, operationId: 'op1', name: ' ' } }] }],
     ['duplicate operation IDs', { ...validCommand, operations: [validCommand.operations[0], { ...validCommand.operations[0] }] }],
     ['duplicate target IDs', { ...validCommand, target: { type: 'selection', ids: ['entity-1', 'entity-1'] } }],
