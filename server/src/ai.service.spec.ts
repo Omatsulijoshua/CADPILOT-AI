@@ -26,22 +26,36 @@ function providerResponse(overrides: Record<string, unknown> = {}) {
 
 describe('AiService', () => {
   const create = jest.fn();
-  const prisma = { aiUsage: { create } } as never;
+  const aggregate = jest.fn();
+  const groupBy = jest.fn();
+  const findMany = jest.fn();
+  const prisma = { aiUsage: { create, aggregate, groupBy }, project: { findMany } } as never;
   const originalKey = process.env.OPENAI_API_KEY;
   const originalModel = process.env.OPENAI_CAD_MODEL;
   const originalTimeout = process.env.OPENAI_TIMEOUT_MS;
+  const originalMonthlyLimit = process.env.AI_MONTHLY_TOKEN_LIMIT;
 
-  beforeEach(() => create.mockResolvedValue({}));
+  beforeEach(() => {
+    create.mockResolvedValue({});
+    aggregate.mockReset();
+    groupBy.mockReset();
+    findMany.mockReset();
+  });
 
   afterEach(() => {
     jest.restoreAllMocks();
     create.mockReset();
+    aggregate.mockReset();
+    groupBy.mockReset();
+    findMany.mockReset();
     if (originalKey == null) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = originalKey;
     if (originalModel == null) delete process.env.OPENAI_CAD_MODEL;
     else process.env.OPENAI_CAD_MODEL = originalModel;
     if (originalTimeout == null) delete process.env.OPENAI_TIMEOUT_MS;
     else process.env.OPENAI_TIMEOUT_MS = originalTimeout;
+    if (originalMonthlyLimit == null) delete process.env.AI_MONTHLY_TOKEN_LIMIT;
+    else process.env.AI_MONTHLY_TOKEN_LIMIT = originalMonthlyLimit;
   });
 
   it('fails closed when the server has no API key', async () => {
@@ -142,6 +156,36 @@ describe('AiService', () => {
     expect(new Set(operations.map(operation => operation.operationId)).size).toBe(2);
     expect(operations[0].operationId).toBe('op1');
     expect(operations[1].operationId).not.toBe('op1');
+  });
+
+  it('summarizes current-month AI usage by project', async () => {
+    aggregate.mockResolvedValue({
+      _sum: { totalTokens: 2400, inputTokens: 1500, outputTokens: 900 },
+      _count: { _all: 3 },
+    });
+    groupBy.mockResolvedValue([
+      {
+        projectId: 'project-1',
+        _sum: { totalTokens: 2000, inputTokens: 1200, outputTokens: 800 },
+        _count: { _all: 2 },
+        _max: { createdAt: new Date('2026-07-16T12:00:00.000Z') },
+      },
+      {
+        projectId: null,
+        _sum: { totalTokens: 400, inputTokens: 300, outputTokens: 100 },
+        _count: { _all: 1 },
+        _max: { createdAt: new Date('2026-07-16T13:00:00.000Z') },
+      },
+    ]);
+    findMany.mockResolvedValue([{ id: 'project-1', name: 'Table' }]);
+    process.env.AI_MONTHLY_TOKEN_LIMIT = '10000';
+
+    const result = await new AiService(prisma).usageSummary('u1');
+
+    expect(result.month.totalTokens).toBe(2400);
+    expect(result.month.remainingTokens).toBe(7600);
+    expect(result.projects[0]).toEqual(expect.objectContaining({ projectId: 'project-1', projectName: 'Table', totalTokens: 2000 }));
+    expect(result.projects[1]).toEqual(expect.objectContaining({ projectId: null, projectName: null, totalTokens: 400 }));
   });
 
   it('maps provider errors and network failures to a safe unavailable response', async () => {

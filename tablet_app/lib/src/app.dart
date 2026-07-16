@@ -475,6 +475,10 @@ class _DashboardState extends ConsumerState<Dashboard> {
                 icon: Icon(Icons.cloud_outlined),
                 label: Text('Cloud'),
               ),
+              NavigationRailDestination(
+                icon: Icon(Icons.data_usage),
+                label: Text('AI usage'),
+              ),
             ],
           ),
           const VerticalDivider(width: 1),
@@ -493,7 +497,9 @@ class _DashboardState extends ConsumerState<Dashboard> {
                             Text(
                               selectedIndex == 0
                                   ? 'Good to see you, ${widget.session.displayName}'
-                                  : 'Cloud projects',
+                                  : selectedIndex == 1
+                                      ? 'Cloud projects'
+                                      : 'AI token usage',
                               style: const TextStyle(
                                 fontSize: 30,
                                 fontWeight: FontWeight.bold,
@@ -501,7 +507,9 @@ class _DashboardState extends ConsumerState<Dashboard> {
                             ),
                             Text(selectedIndex == 0
                                 ? 'Your local design workspace'
-                                : 'Authenticated backups available to this account'),
+                                : selectedIndex == 1
+                                    ? 'Authenticated backups available to this account'
+                                    : 'Monthly totals and per-project token spend'),
                           ],
                         ),
                       ),
@@ -577,10 +585,12 @@ class _DashboardState extends ConsumerState<Dashboard> {
                   Expanded(
                     child: selectedIndex == 0
                         ? ProjectGrid(onOpen: openProject, query: projectQuery)
-                        : CloudProjectsPanel(
-                            session: widget.session,
-                            onOpen: openProject,
-                          ),
+                        : selectedIndex == 1
+                            ? CloudProjectsPanel(
+                                session: widget.session,
+                                onOpen: openProject,
+                              )
+                            : AiUsagePanel(session: widget.session),
                   ),
                 ],
               ),
@@ -590,6 +600,175 @@ class _DashboardState extends ConsumerState<Dashboard> {
       ),
     );
   }
+}
+
+class AiUsagePanel extends ConsumerStatefulWidget {
+  const AiUsagePanel({required this.session, super.key});
+  final Session session;
+
+  @override
+  ConsumerState<AiUsagePanel> createState() => _AiUsagePanelState();
+}
+
+class _AiUsagePanelState extends ConsumerState<AiUsagePanel> {
+  late Future<AiUsageSummary> usage;
+
+  @override
+  void initState() {
+    super.initState();
+    usage = load();
+  }
+
+  Future<AiUsageSummary> load() async {
+    final token = await ref.read(tokenStoreProvider).readAccessToken();
+    if (token == null || token.trim().isEmpty) {
+      throw const CloudApiException('Sign in to view AI token usage.');
+    }
+    return ref.read(cloudApiProvider).getAiUsage(token);
+  }
+
+  void refresh() => setState(() => usage = load());
+
+  String projectName(AiProjectUsage item, List<CadProject> projects) {
+    final id = item.projectId;
+    if (id == null) return 'Unassigned AI calls';
+    final local = projects.where((project) => project.id == id).firstOrNull;
+    return local?.name ?? item.projectName ?? 'Project $id';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.session.kind != SessionKind.signedIn) {
+      return const Center(child: Text('Sign in to view AI token usage.'));
+    }
+    final localProjects = ref.watch(projectsProvider).valueOrNull ?? const <CadProject>[];
+    return FutureBuilder<AiUsageSummary>(
+      future: usage,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return _CloudMessage(
+            icon: Icons.data_usage,
+            title: 'AI usage unavailable',
+            message: snapshot.error.toString(),
+            actionLabel: 'Retry',
+            onAction: refresh,
+          );
+        }
+        final value = snapshot.data!;
+        final month = value.month;
+        final limit = month.limitTokens;
+        final ratio = limit == null || limit == 0
+            ? null
+            : (month.totalTokens / limit).clamp(0.0, 1.0);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('THIS MONTH',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.2)),
+                          const SizedBox(height: 12),
+                          Text(_tokens(month.totalTokens),
+                              style: const TextStyle(
+                                  fontSize: 34, fontWeight: FontWeight.bold)),
+                          Text('${month.requestCount} AI request${month.requestCount == 1 ? '' : 's'}'),
+                          const SizedBox(height: 12),
+                          if (ratio != null) ...[
+                            LinearProgressIndicator(value: ratio),
+                            const SizedBox(height: 8),
+                            Text('${_tokens(month.remainingTokens ?? 0)} remaining out of ${_tokens(limit!)}'),
+                          ] else
+                            const Text('Monthly allowance is not set on the server.'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('TOKEN SPLIT',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.2)),
+                          const SizedBox(height: 12),
+                          Text('Input: ${_tokens(month.inputTokens)}'),
+                          const SizedBox(height: 8),
+                          Text('Output: ${_tokens(month.outputTokens)}'),
+                          const SizedBox(height: 8),
+                          Text('Window: ${month.start.toLocal().month}/${month.start.toLocal().year}'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('Project token usage',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
+                IconButton(
+                  tooltip: 'Refresh AI usage',
+                  onPressed: refresh,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: value.projects.isEmpty
+                  ? const Center(child: Text('No AI token usage this month.'))
+                  : ListView.separated(
+                      itemCount: value.projects.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final item = value.projects[index];
+                        return ListTile(
+                          leading: const Icon(Icons.folder_outlined),
+                          title: Text(projectName(item, localProjects),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          subtitle: Text(
+                              '${item.requestCount} request${item.requestCount == 1 ? '' : 's'} - Input ${_tokens(item.inputTokens)} - Output ${_tokens(item.outputTokens)}'),
+                          trailing: Text(_tokens(item.totalTokens),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold)),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+String _tokens(int value) {
+  if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(2)}M tokens';
+  if (value >= 1000) return '${(value / 1000).toStringAsFixed(1)}K tokens';
+  return '$value tokens';
 }
 
 class CloudSessionBanner extends StatelessWidget {

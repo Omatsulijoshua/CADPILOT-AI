@@ -30,6 +30,16 @@ type JsonRecord = Record<string, unknown>;
 type ResponseUsage = { input_tokens?: unknown; output_tokens?: unknown; total_tokens?: unknown };
 type OpenAiResponse = { id?: unknown; output?: unknown; usage?: ResponseUsage };
 type ChatResponse = { id?: unknown; choices?: unknown; usage?: ResponseUsage };
+type UsageRecordData = {
+  userId: string;
+  projectId?: string;
+  provider: string;
+  model: string;
+  responseId?: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+};
 
 export type CadPlan = {
   schemaVersion: 1;
@@ -55,6 +65,13 @@ function timeoutMs(value: string | undefined): number {
   return Number.isSafeInteger(parsed) && parsed >= minTimeoutMs && parsed <= maxTimeoutMs
     ? parsed
     : defaultTimeoutMs;
+}
+
+function monthlyTokenLimit(): number | null {
+  const value = process.env.AI_MONTHLY_TOKEN_LIMIT;
+  if (value == null || value.trim() === '') return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function outputText(result: OpenAiResponse): string | null {
@@ -232,7 +249,57 @@ export class AiService {
     catch { return []; }
   }
 
-  async generatePlan(userId: string, prompt: string, context: object) {
+  private recordUsage(data: UsageRecordData) {
+    return this.prisma.aiUsage.create({ data });
+  }
+
+  async usageSummary(userId: string) {
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const where = { userId, createdAt: { gte: monthStart, lt: nextMonthStart } };
+    const [monthly, grouped] = await Promise.all([
+      this.prisma.aiUsage.aggregate({ where, _sum: { totalTokens: true, inputTokens: true, outputTokens: true }, _count: { _all: true } }),
+      this.prisma.aiUsage.groupBy({
+        by: ['projectId'],
+        where,
+        _sum: { totalTokens: true, inputTokens: true, outputTokens: true },
+        _count: { _all: true },
+        _max: { createdAt: true },
+      }),
+    ]);
+    const projectIds = grouped.map(item => item.projectId).filter(nonEmptyString);
+    const projects = projectIds.length === 0 ? [] : await this.prisma.project.findMany({
+      where: { id: { in: projectIds }, ownerId: userId },
+      select: { id: true, name: true },
+    });
+    const names = new Map(projects.map(project => [project.id, project.name]));
+    const totalTokens = monthly._sum.totalTokens ?? 0;
+    const limitTokens = monthlyTokenLimit();
+    return {
+      month: {
+        start: monthStart.toISOString(),
+        end: nextMonthStart.toISOString(),
+        limitTokens,
+        totalTokens,
+        inputTokens: monthly._sum.inputTokens ?? 0,
+        outputTokens: monthly._sum.outputTokens ?? 0,
+        requestCount: monthly._count._all,
+        remainingTokens: limitTokens == null ? null : Math.max(0, limitTokens - totalTokens),
+      },
+      projects: grouped.map(item => ({
+        projectId: item.projectId,
+        projectName: item.projectId == null ? null : names.get(item.projectId) ?? null,
+        totalTokens: item._sum.totalTokens ?? 0,
+        inputTokens: item._sum.inputTokens ?? 0,
+        outputTokens: item._sum.outputTokens ?? 0,
+        requestCount: item._count._all,
+        lastUsedAt: item._max.createdAt?.toISOString() ?? null,
+      })).sort((a, b) => b.totalTokens - a.totalTokens),
+    };
+  }
+
+  async generatePlan(userId: string, prompt: string, context: object, projectId?: string) {
     const input = commandInput(prompt, context);
     const fallback = localPlan(prompt, context);
     for (const configuredKey of await this.groqKeys()) {
@@ -247,22 +314,22 @@ export class AiService {
         const plan: unknown = JSON.parse(text);
         if (!validPlan(plan)) continue;
         const usage = { inputTokens: tokenCount(decoded.usage?.input_tokens), outputTokens: tokenCount(decoded.usage?.output_tokens), totalTokens: tokenCount(decoded.usage?.total_tokens) };
-        await this.prisma.aiUsage.create({ data: { userId, provider: 'groq-plan', model, responseId: typeof decoded.id === 'string' ? decoded.id : undefined, ...usage } });
+        await this.recordUsage({ userId, projectId, provider: 'groq-plan', model, responseId: typeof decoded.id === 'string' ? decoded.id : undefined, ...usage });
         return { plan, usage };
       } catch { continue; }
     }
     return { plan: fallback, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } };
   }
 
-  async generateCommandFromPlan(userId: string, prompt: string, plan: object, selectedOptionId: string, answers: object, context: object) {
+  async generateCommandFromPlan(userId: string, prompt: string, plan: object, selectedOptionId: string, answers: object, context: object, projectId?: string) {
     if (!validPlan(plan)) throw new BadRequestException('AI plan is invalid');
     const option = plan.options.find(item => item.id === selectedOptionId);
     if (!option) throw new BadRequestException('Select a valid AI plan option');
     if (!option.executableNow) throw new BadRequestException(`This plan needs preparation before CAD generation: ${option.preparation.join(' ')}`);
-    return this.generateCommand(userId, `${prompt}\nSelected plan: ${option.title}\nAnswers: ${JSON.stringify(answers)}\nStages: ${option.stages.join(' -> ')}`, context);
+    return this.generateCommand(userId, `${prompt}\nSelected plan: ${option.title}\nAnswers: ${JSON.stringify(answers)}\nStages: ${option.stages.join(' -> ')}`, context, projectId);
   }
 
-  async generateCommand(userId: string, prompt: string, context: object) {
+  async generateCommand(userId: string, prompt: string, context: object, projectId?: string) {
     const input = commandInput(prompt, context);
     const groqKeys = await this.groqKeys();
     for (const configuredKey of groqKeys) {
@@ -277,7 +344,7 @@ export class AiService {
         const command = uniqueCommandOperationIds(JSON.parse(text), context);
         if (!validCommand(command)) continue;
         const usage = { inputTokens: tokenCount(decoded.usage?.input_tokens), outputTokens: tokenCount(decoded.usage?.output_tokens), totalTokens: tokenCount(decoded.usage?.total_tokens) };
-        await this.prisma.aiUsage.create({ data: { userId, provider: 'groq', model, responseId: typeof decoded.id === 'string' ? decoded.id : undefined, ...usage } });
+        await this.recordUsage({ userId, projectId, provider: 'groq', model, responseId: typeof decoded.id === 'string' ? decoded.id : undefined, ...usage });
         return { command, usage };
       } catch { continue; }
     }
@@ -320,13 +387,14 @@ export class AiService {
       outputTokens: tokenCount(result.usage?.output_tokens),
       totalTokens: tokenCount(result.usage?.total_tokens),
     };
-    await this.prisma.aiUsage.create({ data: {
+    await this.recordUsage({
       userId,
+      projectId,
       provider: 'openai',
       model,
       responseId: typeof result.id === 'string' ? result.id : undefined,
       ...usage,
-    }});
+    });
 
     const text = outputText(result);
     if (!text) throw new ServiceUnavailableException('AI returned no structured command');

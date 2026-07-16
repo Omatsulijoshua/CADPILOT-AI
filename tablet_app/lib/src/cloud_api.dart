@@ -22,6 +22,86 @@ class AiCommandResponse {
   final int totalTokens;
 }
 
+class AiUsageMonth {
+  const AiUsageMonth({
+    required this.start,
+    required this.end,
+    required this.limitTokens,
+    required this.totalTokens,
+    required this.inputTokens,
+    required this.outputTokens,
+    required this.requestCount,
+    required this.remainingTokens,
+  });
+
+  final DateTime start;
+  final DateTime end;
+  final int? limitTokens;
+  final int totalTokens;
+  final int inputTokens;
+  final int outputTokens;
+  final int requestCount;
+  final int? remainingTokens;
+
+  factory AiUsageMonth.fromMap(Map<String, Object?> value) => AiUsageMonth(
+        start: DateTime.parse(value['start']! as String).toUtc(),
+        end: DateTime.parse(value['end']! as String).toUtc(),
+        limitTokens: value['limitTokens'] as int?,
+        totalTokens: value['totalTokens']! as int,
+        inputTokens: value['inputTokens']! as int,
+        outputTokens: value['outputTokens']! as int,
+        requestCount: value['requestCount']! as int,
+        remainingTokens: value['remainingTokens'] as int?,
+      );
+}
+
+class AiProjectUsage {
+  const AiProjectUsage({
+    required this.projectId,
+    required this.projectName,
+    required this.totalTokens,
+    required this.inputTokens,
+    required this.outputTokens,
+    required this.requestCount,
+    required this.lastUsedAt,
+  });
+
+  final String? projectId;
+  final String? projectName;
+  final int totalTokens;
+  final int inputTokens;
+  final int outputTokens;
+  final int requestCount;
+  final DateTime? lastUsedAt;
+
+  factory AiProjectUsage.fromMap(Map<String, Object?> value) => AiProjectUsage(
+        projectId: value['projectId'] as String?,
+        projectName: value['projectName'] as String?,
+        totalTokens: value['totalTokens']! as int,
+        inputTokens: value['inputTokens']! as int,
+        outputTokens: value['outputTokens']! as int,
+        requestCount: value['requestCount']! as int,
+        lastUsedAt: value['lastUsedAt'] == null
+            ? null
+            : DateTime.parse(value['lastUsedAt']! as String).toUtc(),
+      );
+}
+
+class AiUsageSummary {
+  const AiUsageSummary({required this.month, required this.projects});
+  final AiUsageMonth month;
+  final List<AiProjectUsage> projects;
+
+  factory AiUsageSummary.fromMap(Map<String, Object?> value) => AiUsageSummary(
+        month: AiUsageMonth.fromMap(
+            Map<String, Object?>.from(value['month']! as Map)),
+        projects: (value['projects']! as List<Object?>)
+            .map((item) =>
+                AiProjectUsage.fromMap(Map<String, Object?>.from(item! as Map)))
+            .toList(growable: false),
+      );
+}
+
 class CloudProjectSummary {
   const CloudProjectSummary({
     required this.id,
@@ -235,6 +315,7 @@ class CloudApi {
   }) async {
     final requestBody = jsonEncode({
       'prompt': prompt,
+      'projectId': project.id,
       'context': {
         'sketch': project.sketch.toJson(),
         'model': project.model.toJson(),
@@ -267,7 +348,7 @@ class CloudApi {
   }
 
   Future<AiPlanResponse> generateAiPlan({required String prompt, required CadProject project, required String token}) async {
-    final requestBody = jsonEncode({'prompt': prompt, 'context': {'sketch': project.sketch.toJson(), 'model': project.model.toJson()}});
+    final requestBody = jsonEncode({'prompt': prompt, 'projectId': project.id, 'context': {'sketch': project.sketch.toJson(), 'model': project.model.toJson()}});
     if (utf8.encode(requestBody).length > maxAiCommandRequestBytes) throw const CloudApiException('This project is too large for AI planning.', 413);
     final response = await client.post(Uri.parse('$baseUrl/ai/plans'), headers: {'content-type': 'application/json', 'authorization': 'Bearer $token'}, body: requestBody);
     if (response.statusCode < 200 || response.statusCode >= 300) throw CloudApiException(response.statusCode == 503 ? 'AI planning is temporarily unavailable.' : 'AI planning failed.', response.statusCode);
@@ -279,7 +360,7 @@ class CloudApi {
   }
 
   Future<AiCommandResponse> generateAiCommandFromPlan({required String prompt, required AiDesignPlan plan, required AiPlanOption option, required Map<String, String> answers, required CadProject project, required String token}) async {
-    final response = await client.post(Uri.parse('$baseUrl/ai/plans/command'), headers: {'content-type': 'application/json', 'authorization': 'Bearer $token'}, body: jsonEncode({'prompt': prompt, 'plan': plan.raw, 'selectedOptionId': option.id, 'answers': answers, 'context': {'sketch': project.sketch.toJson(), 'model': project.model.toJson()}}));
+    final response = await client.post(Uri.parse('$baseUrl/ai/plans/command'), headers: {'content-type': 'application/json', 'authorization': 'Bearer $token'}, body: jsonEncode({'prompt': prompt, 'projectId': project.id, 'plan': plan.raw, 'selectedOptionId': option.id, 'answers': answers, 'context': {'sketch': project.sketch.toJson(), 'model': project.model.toJson()}}));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       String message = response.statusCode == 400 ? 'This plan needs the listed preparation before CAD generation.' : 'AI command generation failed.';
       try { final body = jsonDecode(response.body) as Map; if (body['message'] is String) message = body['message'] as String; } catch (_) {}
@@ -287,6 +368,18 @@ class CloudApi {
     }
     final body = Map<String, Object?>.from(jsonDecode(response.body) as Map); final usage = Map<String, Object?>.from(body['usage']! as Map);
     return AiCommandResponse(command: Map<String, Object?>.from(body['command']! as Map), totalTokens: usage['totalTokens']! as int);
+  }
+
+  Future<AiUsageSummary> getAiUsage(String token) async {
+    final response = await client.get(Uri.parse('$baseUrl/ai/usage'), headers: {'authorization': 'Bearer $token'});
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CloudApiException('Could not load AI usage.', response.statusCode);
+    }
+    try {
+      return AiUsageSummary.fromMap(Map<String, Object?>.from(jsonDecode(response.body) as Map));
+    } catch (_) {
+      throw const CloudApiException('AI usage response is invalid.');
+    }
   }
 
   Future<void> archiveProject(String projectId, String token) async {

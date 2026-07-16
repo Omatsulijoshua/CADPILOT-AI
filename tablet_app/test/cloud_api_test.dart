@@ -53,6 +53,7 @@ void main() {
       expect(request.headers['authorization'], 'Bearer access');
       final body = jsonDecode(request.body) as Map<String, Object?>;
       expect(body['prompt'], 'Extrude the base');
+      expect(body['projectId'], 'p1');
       expect(body['context'], isA<Map>());
       return http.Response(
           jsonEncode({
@@ -102,6 +103,7 @@ void main() {
     final project = CadProject(id: 'p1', name: 'Table', note: '', createdAt: DateTime.utc(2026), updatedAt: DateTime.utc(2026), revision: 1, syncState: SyncState.pending);
     final client = MockClient((request) async {
       expect(request.url.path, '/v1/ai/plans');
+      expect((jsonDecode(request.body) as Map<String, Object?>)['projectId'], 'p1');
       return http.Response(jsonEncode({'plan': {
         'schemaVersion': 1, 'planId': 'plan-1', 'summary': 'Choose a table style.',
         'extracted': {'objectType': 'table', 'style': null, 'dimensions': [], 'constraints': []},
@@ -114,6 +116,40 @@ void main() {
     });
     final result = await CloudApi(client: client, baseUrl: 'https://api.test/v1').generateAiPlan(prompt: 'Create a table', project: project, token: 'access');
     expect(result.plan.objectType, 'table'); expect(result.plan.options, hasLength(2)); expect(result.plan.questions.single.suggestedValue, '1200 mm');
+  });
+  test('AI usage parses monthly and project token totals', () async {
+    final client = MockClient((request) async {
+      expect(request.url.path, '/v1/ai/usage');
+      expect(request.headers['authorization'], 'Bearer access');
+      return http.Response(jsonEncode({
+        'month': {
+          'start': '2026-07-01T00:00:00.000Z',
+          'end': '2026-08-01T00:00:00.000Z',
+          'limitTokens': 100000,
+          'totalTokens': 2400,
+          'inputTokens': 1500,
+          'outputTokens': 900,
+          'requestCount': 3,
+          'remainingTokens': 97600,
+        },
+        'projects': [
+          {
+            'projectId': 'p1',
+            'projectName': 'Table',
+            'totalTokens': 2400,
+            'inputTokens': 1500,
+            'outputTokens': 900,
+            'requestCount': 3,
+            'lastUsedAt': '2026-07-16T12:00:00.000Z',
+          }
+        ],
+      }), 200);
+    });
+    final result = await CloudApi(client: client, baseUrl: 'https://api.test/v1').getAiUsage('access');
+    expect(result.month.totalTokens, 2400);
+    expect(result.month.remainingTokens, 97600);
+    expect(result.projects.single.projectName, 'Table');
+    expect(result.projects.single.totalTokens, 2400);
   });
   test('project backup sends unique mutation and remote base revision',
       () async {

@@ -120,6 +120,7 @@ model SyncMutation {
 model AiUsage {
   id           String   @id @default(uuid())
   userId       String
+  projectId    String?
   provider     String
   model        String
   responseId   String?
@@ -130,4 +131,5 @@ model AiUsage {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+  @@index([userId, projectId, createdAt])
 }
