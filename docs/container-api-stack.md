@@ -42,8 +42,9 @@ run destructive database commands.
 
 ## Verification status
 
-The Compose file is syntactically reviewed. Runtime verification requires a
-working Docker Desktop/WSL installation, which is currently unavailable on this
-machine. Run the commands above after Docker is repaired, then check
-`http://localhost:3000/health` and authenticate through the tablet or admin
-application.
+GitHub Actions builds the API image, validates the Compose profile, and runs
+the entrypoint configuration guard for every container-related change. Full
+local startup still requires a working Docker Desktop/WSL installation, which
+is currently unavailable on this machine. Run the commands above after Docker
+is repaired, then check `http://localhost:3000/health` and authenticate through
+the tablet or admin application.

@@ -23,7 +23,9 @@ services:
   api:
     profiles: ["api"]
     build: ./server
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgresql://cadpilot:cadpilot@postgres:5432/cadpilot?schema=public
       REDIS_URL: redis://redis:6379
