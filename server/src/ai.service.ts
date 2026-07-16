@@ -116,6 +116,19 @@ function commandInput(prompt: string, context: object): string {
   return input;
 }
 
+function commandSystemPrompt(): string {
+  return [
+    'You are CadPilot\'s CAD command converter.',
+    'Return JSON only. It must match this JSON schema exactly:',
+    JSON.stringify(commandSchema),
+    'Use only supported operation types: extrude, cut, revolve, shell, fillet, chamfer, rename, delete.',
+    'Every operation.parameters object must include all keys from the schema. Use null for unused parameter fields.',
+    'Use only geometry IDs that already exist in the supplied context. Do not invent profile, sketch, model, or operation IDs from outside the context.',
+    'For broad or multi-stage plans, generate only the next currently executable CAD stage from the selected plan.',
+    'All dimensions are millimetres. requiresConfirmation must be true.',
+  ].join(' ');
+}
+
 function validCommand(value: unknown): value is JsonRecord {
   if (!isRecord(value) || value.schemaVersion !== 1 || typeof value.commandId !== 'string' || value.commandId.trim() === '') return false;
   if (value.intent !== 'create_model' && value.intent !== 'modify_model') return false;
@@ -230,7 +243,7 @@ export class AiService {
     for (const configuredKey of groqKeys) {
       try {
         const model = process.env.GROQ_CAD_MODEL ?? 'llama-3.3-70b-versatile';
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${this.vault.decrypt(configuredKey.encryptedKey)}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, temperature: 0, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: 'Return only one valid JSON CadPilot command. Use only IDs in context. Dimensions are millimetres. requiresConfirmation must be true.' }, { role: 'user', content: input }] }), signal: AbortSignal.timeout(timeoutMs(process.env.OPENAI_TIMEOUT_MS)) });
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${this.vault.decrypt(configuredKey.encryptedKey)}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, temperature: 0, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: commandSystemPrompt() }, { role: 'user', content: input }] }), signal: AbortSignal.timeout(timeoutMs(process.env.OPENAI_TIMEOUT_MS)) });
         if (!response.ok) continue;
         const decoded = await response.json() as ChatResponse;
         const choice = Array.isArray(decoded.choices) ? decoded.choices[0] : null;
@@ -244,7 +257,11 @@ export class AiService {
       } catch { continue; }
     }
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new ServiceUnavailableException('AI commands are not configured on this server');
+    if (!apiKey) {
+      throw new ServiceUnavailableException(groqKeys.length > 0
+        ? 'AI could not produce a valid CAD command for this selected stage. Adjust the selected option or prepare the required sketch profiles.'
+        : 'AI commands are not configured on this server');
+    }
     const model = process.env.OPENAI_CAD_MODEL ?? 'gpt-5.6-luna';
     let response: Response;
     try {

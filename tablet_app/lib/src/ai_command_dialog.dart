@@ -265,14 +265,19 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
                     ...plan!.options.map((option) => Card(
                       color: selectedOption?.id == option.id ? Theme.of(context).colorScheme.primaryContainer : null,
                       child: ListTile(
-                        onTap: () => setState(() => selectedOption = option),
+                        onTap: () => setState(() {
+                          selectedOption = option;
+                          error = null;
+                          preview = null;
+                          hasGeneratedPlanCommand = false;
+                        }),
                         leading: Icon(selectedOption?.id == option.id ? Icons.radio_button_checked : Icons.radio_button_off),
                         title: Text(option.title),
                         subtitle: Text('${option.description}\n${option.executableNow ? 'Ready for CAD generation' : 'Preparation: ${option.preparation.join(' ')}'}'),
                       ),
                     )),
                     if (selectedOption != null) ...[const SizedBox(height: 10), const Text('Staged CAD plan', style: TextStyle(fontWeight: FontWeight.bold)), ...selectedOption!.stages.asMap().entries.map((entry) => ListTile(dense: true, leading: CircleAvatar(radius: 12, child: Text('${entry.key + 1}', style: const TextStyle(fontSize: 11))), title: Text(entry.value))),
-                      FilledButton.icon(onPressed: selectedOption!.executableNow && requiredAnswersComplete && !generating ? generateFromPlan : null, icon: const Icon(Icons.precision_manufacturing), label: const Text('Generate CAD from selected plan')),
+                      FilledButton.icon(onPressed: selectedOption!.executableNow && requiredAnswersComplete && !generating ? generateFromPlan : null, icon: const Icon(Icons.precision_manufacturing), label: const Text('Generate next CAD stage')),
                     ],
                   ])) else Expanded(
                       child: TextField(
