@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:cadpilot_tablet/src/cloud_api.dart';
 import 'package:cadpilot_tablet/src/models.dart';
+import 'package:cadpilot_tablet/src/sketch_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -66,6 +67,36 @@ void main() {
                 prompt: 'Extrude the base', project: project, token: 'access');
     expect(result.command['commandId'], 'c1');
     expect(result.totalTokens, 16);
+  });
+
+  test('AI command generation rejects oversized local context before HTTP',
+      () async {
+    final now = DateTime.utc(2026);
+    final project = CadProject(
+      id: 'p1',
+      name: 'Large part',
+      note: '',
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+      syncState: SyncState.pending,
+      sketch: SketchDocument(
+        entities: List.generate(
+            300,
+            (index) => SketchEntity(
+                id: 'entity-$index-${'x' * 300}',
+                kind: SketchEntityKind.line,
+                start: Offset.zero,
+                end: const Offset(10, 10))),
+      ),
+    );
+    final client = MockClient((_) => throw StateError('HTTP must not be called'));
+    expect(
+        () => CloudApi(client: client, baseUrl: 'https://api.test/v1')
+            .generateAiCommand(
+                prompt: 'Analyze this project', project: project, token: 'access'),
+        throwsA(isA<CloudApiException>().having((error) => error.statusCode,
+            'status code', 413)));
   });
   test('project backup sends unique mutation and remote base revision',
       () async {

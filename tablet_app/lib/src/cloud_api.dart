@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'models.dart';
 
+const maxAiCommandRequestBytes = 64 * 1024;
+
 class CloudCredentials {
   const CloudCredentials(
       {required this.session,
@@ -230,18 +232,24 @@ class CloudApi {
     required CadProject project,
     required String token,
   }) async {
+    final requestBody = jsonEncode({
+      'prompt': prompt,
+      'context': {
+        'sketch': project.sketch.toJson(),
+        'model': project.model.toJson(),
+      }
+    });
+    if (utf8.encode(requestBody).length > maxAiCommandRequestBytes) {
+      throw const CloudApiException(
+          'This project is too large for an AI command. Simplify the sketch or model and try again.',
+          413);
+    }
     final response = await client.post(Uri.parse('$baseUrl/ai/commands'),
         headers: {
           'content-type': 'application/json',
           'authorization': 'Bearer $token'
         },
-        body: jsonEncode({
-          'prompt': prompt,
-          'context': {
-            'sketch': project.sketch.toJson(),
-            'model': project.model.toJson(),
-          }
-        }));
+        body: requestBody);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw CloudApiException(
           response.statusCode == 503
