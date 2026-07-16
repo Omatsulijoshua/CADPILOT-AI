@@ -98,6 +98,23 @@ void main() {
         throwsA(isA<CloudApiException>().having((error) => error.statusCode,
             'status code', 413)));
   });
+  test('AI planning parses options and clarification questions', () async {
+    final project = CadProject(id: 'p1', name: 'Table', note: '', createdAt: DateTime.utc(2026), updatedAt: DateTime.utc(2026), revision: 1, syncState: SyncState.pending);
+    final client = MockClient((request) async {
+      expect(request.url.path, '/v1/ai/plans');
+      return http.Response(jsonEncode({'plan': {
+        'schemaVersion': 1, 'planId': 'plan-1', 'summary': 'Choose a table style.',
+        'extracted': {'objectType': 'table', 'style': null, 'dimensions': [], 'constraints': []},
+        'missingInputs': [{'id': 'width', 'label': 'Width', 'question': 'How wide?', 'required': true, 'suggestedValue': '1200 mm'}],
+        'options': [
+          {'id': 'four-leg', 'title': 'Four legs', 'description': 'Simple table', 'stages': ['Sketch', 'Extrude'], 'assumptions': [], 'executableNow': false, 'preparation': ['Create profiles']},
+          {'id': 'pedestal', 'title': 'Pedestal', 'description': 'Round table', 'stages': ['Sketch', 'Revolve'], 'assumptions': [], 'executableNow': false, 'preparation': ['Create profiles']}
+        ], 'canUseDefaults': true
+      }, 'usage': {'totalTokens': 22}}), 201);
+    });
+    final result = await CloudApi(client: client, baseUrl: 'https://api.test/v1').generateAiPlan(prompt: 'Create a table', project: project, token: 'access');
+    expect(result.plan.objectType, 'table'); expect(result.plan.options, hasLength(2)); expect(result.plan.questions.single.suggestedValue, '1200 mm');
+  });
   test('project backup sends unique mutation and remote base revision',
       () async {
     final project = CadProject(

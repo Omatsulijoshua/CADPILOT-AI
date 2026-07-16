@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 import 'ai_commands.dart';
+import 'ai_planning.dart';
 import 'model_3d.dart';
 import 'sketch_models.dart';
 
@@ -14,6 +15,8 @@ class AiGeneratedDraft {
 }
 
 typedef AiCommandGenerator = Future<AiGeneratedDraft> Function(String prompt);
+typedef AiPlanGenerator = Future<AiPlanResponse> Function(String prompt);
+typedef AiPlanCommandGenerator = Future<AiGeneratedDraft> Function(String prompt, AiDesignPlan plan, AiPlanOption option, Map<String, String> answers);
 
 const maxAiPromptCharacters = 2000;
 
@@ -26,20 +29,24 @@ class AiCommandDecision {
 Future<AiCommandDecision?> showAiCommandDialog(BuildContext context,
     {required SketchDocument sketch,
     required ModelDocument model,
-    AiCommandGenerator? generator}) {
+    AiCommandGenerator? generator,
+    AiPlanGenerator? planGenerator,
+    AiPlanCommandGenerator? planCommandGenerator}) {
   return showDialog<AiCommandDecision>(
       context: context,
       barrierDismissible: false,
       builder: (_) =>
-          AiCommandDialog(sketch: sketch, model: model, generator: generator));
+          AiCommandDialog(sketch: sketch, model: model, generator: generator, planGenerator: planGenerator, planCommandGenerator: planCommandGenerator));
 }
 
 class AiCommandDialog extends StatefulWidget {
   const AiCommandDialog(
-      {required this.sketch, required this.model, this.generator, super.key});
+      {required this.sketch, required this.model, this.generator, this.planGenerator, this.planCommandGenerator, super.key});
   final SketchDocument sketch;
   final ModelDocument model;
   final AiCommandGenerator? generator;
+  final AiPlanGenerator? planGenerator;
+  final AiPlanCommandGenerator? planCommandGenerator;
 
   @override
   State<AiCommandDialog> createState() => _AiCommandDialogState();
@@ -52,6 +59,10 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
   int? totalTokens;
   AiCommandPreview? preview;
   String? error;
+  AiDesignPlan? plan;
+  AiPlanOption? selectedOption;
+  final Map<String, TextEditingController> answers = {};
+  bool hasGeneratedPlanCommand = false;
 
   @override
   void initState() {
@@ -84,7 +95,46 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
   void dispose() {
     input.dispose();
     prompt.dispose();
+    for (final controller in answers.values) { controller.dispose(); }
     super.dispose();
+  }
+
+  Future<void> createPlan() async {
+    final generator = widget.planGenerator;
+    if (generator == null || prompt.text.trim().isEmpty) return;
+    setState(() { generating = true; error = null; preview = null; });
+    try {
+      final response = await generator(prompt.text.trim());
+      for (final controller in answers.values) { controller.dispose(); }
+      answers.clear();
+      for (final question in response.plan.questions) { answers[question.id] = TextEditingController(); }
+      setState(() { plan = response.plan; selectedOption = response.plan.options.first; totalTokens = response.totalTokens; hasGeneratedPlanCommand = false; });
+    } catch (value) { setState(() => error = value.toString()); }
+    finally { if (mounted) setState(() => generating = false); }
+  }
+
+  void useDefaults() {
+    final current = plan;
+    if (current == null) return;
+    for (final question in current.questions) { answers[question.id]?.text = question.suggestedValue; }
+    setState(() {});
+  }
+
+  Future<void> generateFromPlan() async {
+    final currentPlan = plan; final option = selectedOption; final generator = widget.planCommandGenerator;
+    if (currentPlan == null || option == null || generator == null) return;
+    setState(() { generating = true; error = null; preview = null; });
+    try {
+      final draft = await generator(prompt.text.trim(), currentPlan, option, {for (final entry in answers.entries) entry.key: entry.value.text.trim()});
+      input.text = const JsonEncoder.withIndent('  ').convert(draft.command); totalTokens = draft.totalTokens; hasGeneratedPlanCommand = true; createPreview();
+    } catch (value) { setState(() => error = value.toString()); }
+    finally { if (mounted) setState(() => generating = false); }
+  }
+
+  bool get requiredAnswersComplete {
+    final current = plan;
+    if (current == null) return true;
+    return current.questions.where((question) => question.required).every((question) => answers[question.id]?.text.trim().isNotEmpty ?? false);
   }
 
   Future<void> generate() async {
@@ -175,37 +225,56 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
                     Expanded(
                         child: TextField(
                       controller: prompt,
-                      enabled: widget.generator != null && !generating,
+                      enabled: (widget.planGenerator ?? widget.generator) != null && !generating,
                       maxLength: maxAiPromptCharacters,
                       onChanged: (_) => setState(() {}),
                       decoration: InputDecoration(
-                        labelText: 'Describe the change',
-                        hintText: widget.generator == null
+                        labelText: 'Describe what you want to design',
+                        hintText: (widget.planGenerator ?? widget.generator) == null
                             ? 'Sign in to generate commands from natural language.'
-                            : 'Extrude the base by 10 mm and cut the centre hole',
+                            : 'Create a moderate table',
                       ),
                     )),
                     const SizedBox(width: 10),
                     FilledButton.icon(
-                      onPressed: widget.generator == null ||
+                      onPressed: (widget.planGenerator ?? widget.generator) == null ||
                               generating ||
                               prompt.text.trim().isEmpty ||
                               prompt.text.length > maxAiPromptCharacters
                           ? null
-                          : generate,
+                          : (widget.planGenerator != null ? createPlan : generate),
                       icon: generating
                           ? const SizedBox.square(
                               dimension: 16,
                               child: CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.auto_awesome),
-                      label: Text(generating ? 'Generating' : 'Generate'),
+                      label: Text(generating ? 'Thinking' : (widget.planGenerator != null ? 'Plan' : 'Generate')),
                     ),
                   ]),
                   if (totalTokens != null)
                     Text('Usage: $totalTokens tokens',
                         textAlign: TextAlign.right),
                   const SizedBox(height: 12),
-                  Expanded(
+                  if (plan != null) Expanded(child: ListView(children: [
+                    Text(plan!.summary, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 8), Text('Extracted: ${plan!.objectType}${plan!.style == null ? '' : ' · ${plan!.style}'}'),
+                    if (plan!.questions.isNotEmpty) ...[const SizedBox(height: 14), Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Critical details', style: TextStyle(fontWeight: FontWeight.bold)), if (plan!.canUseDefaults) TextButton(onPressed: useDefaults, child: const Text('Use sensible defaults'))]),
+                      ...plan!.questions.map((question) => Padding(padding: const EdgeInsets.only(bottom: 10), child: TextField(controller: answers[question.id], onChanged: (_) => setState(() {}), decoration: InputDecoration(labelText: '${question.label}${question.required ? ' *' : ''}', helperText: question.question, hintText: question.suggestedValue)))),
+                    ],
+                    const SizedBox(height: 10), const Text('Choose a build approach', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ...plan!.options.map((option) => Card(
+                      color: selectedOption?.id == option.id ? Theme.of(context).colorScheme.primaryContainer : null,
+                      child: ListTile(
+                        onTap: () => setState(() => selectedOption = option),
+                        leading: Icon(selectedOption?.id == option.id ? Icons.radio_button_checked : Icons.radio_button_off),
+                        title: Text(option.title),
+                        subtitle: Text('${option.description}\n${option.executableNow ? 'Ready for CAD generation' : 'Preparation: ${option.preparation.join(' ')}'}'),
+                      ),
+                    )),
+                    if (selectedOption != null) ...[const SizedBox(height: 10), const Text('Staged CAD plan', style: TextStyle(fontWeight: FontWeight.bold)), ...selectedOption!.stages.asMap().entries.map((entry) => ListTile(dense: true, leading: CircleAvatar(radius: 12, child: Text('${entry.key + 1}', style: const TextStyle(fontSize: 11))), title: Text(entry.value))),
+                      FilledButton.icon(onPressed: selectedOption!.executableNow && requiredAnswersComplete && !generating ? generateFromPlan : null, icon: const Icon(Icons.precision_manufacturing), label: const Text('Generate CAD from selected plan')),
+                    ],
+                  ])) else Expanded(
                       child: TextField(
                           controller: input,
                           expands: true,
@@ -242,7 +311,7 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
               onPressed: () => finish(AiCommandStatus.cancelled),
               child: const Text('Cancel')),
           OutlinedButton.icon(
-              onPressed: createPreview,
+              onPressed: widget.planGenerator != null && !hasGeneratedPlanCommand ? null : createPreview,
               icon: const Icon(Icons.visibility),
               label: const Text('Preview')),
           FilledButton.icon(

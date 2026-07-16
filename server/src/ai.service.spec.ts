@@ -51,6 +51,24 @@ describe('AiService', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it('returns a useful local planning fallback for broad design requests', async () => {
+    const result = await new AiService(prisma).generatePlan('u1', 'Create a moderate table', { sketch: { entities: [] } });
+    expect(result.plan.extracted.objectType).toBe('table');
+    expect(result.plan.options).toHaveLength(3);
+    expect(result.plan.options.map(option => option.title)).toEqual(expect.arrayContaining([
+      'Rectangular tabletop with four legs',
+      'Round tabletop with pedestal base',
+      'Desk-style table with drawers',
+    ]));
+    expect(result.plan.missingInputs.map(input => input.id)).toEqual(expect.arrayContaining(['width', 'depth', 'height', 'topThickness', 'legStyle']));
+  });
+
+  it('does not execute a plan that still needs sketch preparation', async () => {
+    const { plan } = await new AiService(prisma).generatePlan('u1', 'Create a moderate table', { sketch: { entities: [] } });
+    await expect(new AiService(prisma).generateCommandFromPlan('u1', 'Create a moderate table', plan, plan.options[0].id, {}, {}))
+      .rejects.toThrow('needs preparation');
+  });
+
   it('bounds direct-service prompt and context input before calling the provider', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     const fetchMock = jest.spyOn(global, 'fetch');

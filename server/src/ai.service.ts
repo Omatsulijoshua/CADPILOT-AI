@@ -30,6 +30,16 @@ type ResponseUsage = { input_tokens?: unknown; output_tokens?: unknown; total_to
 type OpenAiResponse = { id?: unknown; output?: unknown; usage?: ResponseUsage };
 type ChatResponse = { id?: unknown; choices?: unknown; usage?: ResponseUsage };
 
+export type CadPlan = {
+  schemaVersion: 1;
+  planId: string;
+  summary: string;
+  extracted: { objectType: string; style: string | null; dimensions: Array<{ name: string; value: number | null; unit: 'mm' }>; constraints: string[] };
+  missingInputs: Array<{ id: string; label: string; question: string; required: boolean; suggestedValue: string }>;
+  options: Array<{ id: string; title: string; description: string; stages: string[]; assumptions: string[]; executableNow: boolean; preparation: string[] }>;
+  canUseDefaults: boolean;
+};
+
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -123,13 +133,100 @@ function validCommand(value: unknown): value is JsonRecord {
   return value.requiresConfirmation === true;
 }
 
+function validStringArray(value: unknown, min = 0, max = 12): value is string[] {
+  return Array.isArray(value) && value.length >= min && value.length <= max && value.every(nonEmptyString);
+}
+
+function validPlan(value: unknown): value is CadPlan {
+  if (!isRecord(value) || value.schemaVersion !== 1 || !nonEmptyString(value.planId) || !nonEmptyString(value.summary)) return false;
+  if (!isRecord(value.extracted) || !nonEmptyString(value.extracted.objectType) || !Array.isArray(value.extracted.dimensions) || !validStringArray(value.extracted.constraints)) return false;
+  if (!value.extracted.dimensions.every(item => isRecord(item) && nonEmptyString(item.name) && (item.value === null || positiveNumber(item.value)) && item.unit === 'mm')) return false;
+  if (!Array.isArray(value.missingInputs) || value.missingInputs.length > 8 || !value.missingInputs.every(item => isRecord(item) && nonEmptyString(item.id) && nonEmptyString(item.label) && nonEmptyString(item.question) && typeof item.required === 'boolean' && typeof item.suggestedValue === 'string')) return false;
+  if (!Array.isArray(value.options) || value.options.length < 2 || value.options.length > 3) return false;
+  if (!value.options.every(option => isRecord(option) && nonEmptyString(option.id) && nonEmptyString(option.title) && nonEmptyString(option.description) && validStringArray(option.stages, 2, 12) && validStringArray(option.assumptions) && typeof option.executableNow === 'boolean' && validStringArray(option.preparation))) return false;
+  return typeof value.canUseDefaults === 'boolean';
+}
+
+function localPlan(prompt: string, context: object): CadPlan {
+  const lower = prompt.toLowerCase();
+  const table = lower.includes('table') || lower.includes('desk');
+  const hasProfile = JSON.stringify(context).includes('rectangle');
+  const dimensions = table
+    ? [{ name: 'width', value: null, unit: 'mm' as const }, { name: 'depth', value: null, unit: 'mm' as const }, { name: 'height', value: null, unit: 'mm' as const }, { name: 'top thickness', value: null, unit: 'mm' as const }]
+    : [{ name: 'primary size', value: null, unit: 'mm' as const }];
+  const missingInputs = table
+    ? [
+        { id: 'width', label: 'Width', question: 'How wide should it be?', required: true, suggestedValue: '1200 mm' },
+        { id: 'depth', label: 'Depth', question: 'How deep should it be?', required: true, suggestedValue: '600 mm' },
+        { id: 'height', label: 'Height', question: 'How tall should it be?', required: true, suggestedValue: '750 mm' },
+        { id: 'topThickness', label: 'Top thickness', question: 'How thick should the tabletop be?', required: false, suggestedValue: '30 mm' },
+        { id: 'legStyle', label: 'Leg style', question: 'Which leg style do you prefer?', required: false, suggestedValue: 'Four square legs' },
+      ]
+    : [{ id: 'size', label: 'Main dimension', question: 'What primary size should CadPilot use?', required: true, suggestedValue: '100 mm' }];
+  const commonStages = ['Confirm dimensions and constraints', 'Generate sketches and closed profiles', 'Create primary solids', 'Add secondary features and joins', 'Validate dimensions', 'Show preview for approval'];
+  const tableOptions = [
+    ['rectangular-four-leg', 'Rectangular tabletop with four legs', 'A practical general-purpose table with a rectangular top and four square legs.'],
+    ['round-pedestal', 'Round tabletop with pedestal base', 'A circular table with a centred pedestal and stabilising base.'],
+    ['desk-drawers', 'Desk-style table with drawers', 'A rectangular work desk with a drawer unit and leg structure.'],
+  ];
+  const genericOptions = [
+    ['simple-solid', 'Simple solid starting point', 'Build the smallest manufacturable interpretation first.'],
+    ['lightweight', 'Lightweight or hollow design', 'Reduce material while preserving the main form.'],
+    ['parametric', 'Parametric detailed design', 'Use editable dimensions and staged secondary features.'],
+  ];
+  return {
+    schemaVersion: 1,
+    planId: `local-${Date.now()}`,
+    summary: table ? 'I can create this as a table design. Choose a construction approach and confirm the essential dimensions.' : `I extracted a buildable path for: ${prompt.trim()}`,
+    extracted: { objectType: table ? 'table' : 'custom CAD part', style: lower.includes('modern') ? 'modern' : null, dimensions, constraints: [] },
+    missingInputs,
+    options: (table ? tableOptions : genericOptions).map(([id, title, description], index) => ({ id, title, description, stages: commonStages, assumptions: ['Dimensions are millimetres.', 'The final model requires preview approval.'], executableNow: hasProfile && index === 0, preparation: hasProfile ? [] : ['Create or select the required closed sketch profiles before geometry generation.'] })),
+    canUseDefaults: true,
+  };
+}
+
 @Injectable()
 export class AiService {
   constructor(private readonly prisma: PrismaService, private readonly vault: AiKeyVaultService = new AiKeyVaultService()) {}
 
+  private async groqKeys() {
+    try { return await this.prisma.aiProviderKey.findMany({ where: { provider: 'GROQ', enabled: true }, orderBy: { priority: 'asc' } }); }
+    catch { return []; }
+  }
+
+  async generatePlan(userId: string, prompt: string, context: object) {
+    const input = commandInput(prompt, context);
+    const fallback = localPlan(prompt, context);
+    for (const configuredKey of await this.groqKeys()) {
+      try {
+        const model = process.env.GROQ_CAD_MODEL ?? 'llama-3.3-70b-versatile';
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${this.vault.decrypt(configuredKey.encryptedKey)}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: `You are CadPilot's design planner. Return JSON only. Extract intent and dimensions, ask only critical questions, and offer exactly 2 or 3 viable options. Never claim unsupported geometry is already executable. Use this exact shape: ${JSON.stringify(fallback)}` }, { role: 'user', content: input }] }), signal: AbortSignal.timeout(timeoutMs(process.env.OPENAI_TIMEOUT_MS)) });
+        if (!response.ok) continue;
+        const decoded = await response.json() as ChatResponse;
+        const choice = Array.isArray(decoded.choices) ? decoded.choices[0] : null;
+        const text = isRecord(choice) && isRecord(choice.message) && typeof choice.message.content === 'string' ? choice.message.content : null;
+        if (!text) continue;
+        const plan: unknown = JSON.parse(text);
+        if (!validPlan(plan)) continue;
+        const usage = { inputTokens: tokenCount(decoded.usage?.input_tokens), outputTokens: tokenCount(decoded.usage?.output_tokens), totalTokens: tokenCount(decoded.usage?.total_tokens) };
+        await this.prisma.aiUsage.create({ data: { userId, provider: 'groq-plan', model, responseId: typeof decoded.id === 'string' ? decoded.id : undefined, ...usage } });
+        return { plan, usage };
+      } catch { continue; }
+    }
+    return { plan: fallback, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } };
+  }
+
+  async generateCommandFromPlan(userId: string, prompt: string, plan: object, selectedOptionId: string, answers: object, context: object) {
+    if (!validPlan(plan)) throw new BadRequestException('AI plan is invalid');
+    const option = plan.options.find(item => item.id === selectedOptionId);
+    if (!option) throw new BadRequestException('Select a valid AI plan option');
+    if (!option.executableNow) throw new BadRequestException(`This plan needs preparation before CAD generation: ${option.preparation.join(' ')}`);
+    return this.generateCommand(userId, `${prompt}\nSelected plan: ${option.title}\nAnswers: ${JSON.stringify(answers)}\nStages: ${option.stages.join(' -> ')}`, context);
+  }
+
   async generateCommand(userId: string, prompt: string, context: object) {
     const input = commandInput(prompt, context);
-    const groqKeys = await this.prisma.aiProviderKey.findMany({ where: { provider: 'GROQ', enabled: true }, orderBy: { priority: 'asc' } });
+    const groqKeys = await this.groqKeys();
     for (const configuredKey of groqKeys) {
       try {
         const model = process.env.GROQ_CAD_MODEL ?? 'llama-3.3-70b-versatile';

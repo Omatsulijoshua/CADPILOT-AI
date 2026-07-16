@@ -1490,6 +1490,18 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
     final decision = await showAiCommandDialog(context,
         sketch: project.sketch,
         model: project.model,
+        planGenerator: token == null
+            ? null
+            : (prompt) => ref.read(cloudApiProvider).generateAiPlan(
+                prompt: prompt, project: project, token: token),
+        planCommandGenerator: token == null
+            ? null
+            : (prompt, plan, option, answers) async {
+                final response = await ref.read(cloudApiProvider).generateAiCommandFromPlan(
+                    prompt: prompt, plan: plan, option: option, answers: answers,
+                    project: project, token: token);
+                return AiGeneratedDraft(response.command, response.totalTokens);
+              },
         generator: token == null
             ? null
             : (prompt) async {

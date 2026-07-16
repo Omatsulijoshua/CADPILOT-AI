@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'models.dart';
+import 'ai_planning.dart';
 
 const maxAiCommandRequestBytes = 64 * 1024;
 
@@ -263,6 +264,29 @@ class CloudApi {
       command: Map<String, Object?>.from(body['command']! as Map),
       totalTokens: usage['totalTokens']! as int,
     );
+  }
+
+  Future<AiPlanResponse> generateAiPlan({required String prompt, required CadProject project, required String token}) async {
+    final requestBody = jsonEncode({'prompt': prompt, 'context': {'sketch': project.sketch.toJson(), 'model': project.model.toJson()}});
+    if (utf8.encode(requestBody).length > maxAiCommandRequestBytes) throw const CloudApiException('This project is too large for AI planning.', 413);
+    final response = await client.post(Uri.parse('$baseUrl/ai/plans'), headers: {'content-type': 'application/json', 'authorization': 'Bearer $token'}, body: requestBody);
+    if (response.statusCode < 200 || response.statusCode >= 300) throw CloudApiException(response.statusCode == 503 ? 'AI planning is temporarily unavailable.' : 'AI planning failed.', response.statusCode);
+    try {
+      final body = Map<String, Object?>.from(jsonDecode(response.body) as Map);
+      final usage = Map<String, Object?>.from(body['usage']! as Map);
+      return AiPlanResponse(AiDesignPlan.fromMap(Map<String, Object?>.from(body['plan']! as Map)), usage['totalTokens']! as int);
+    } catch (_) { throw const CloudApiException('The AI plan response was invalid.'); }
+  }
+
+  Future<AiCommandResponse> generateAiCommandFromPlan({required String prompt, required AiDesignPlan plan, required AiPlanOption option, required Map<String, String> answers, required CadProject project, required String token}) async {
+    final response = await client.post(Uri.parse('$baseUrl/ai/plans/command'), headers: {'content-type': 'application/json', 'authorization': 'Bearer $token'}, body: jsonEncode({'prompt': prompt, 'plan': plan.raw, 'selectedOptionId': option.id, 'answers': answers, 'context': {'sketch': project.sketch.toJson(), 'model': project.model.toJson()}}));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String message = response.statusCode == 400 ? 'This plan needs the listed preparation before CAD generation.' : 'AI command generation failed.';
+      try { final body = jsonDecode(response.body) as Map; if (body['message'] is String) message = body['message'] as String; } catch (_) {}
+      throw CloudApiException(message, response.statusCode);
+    }
+    final body = Map<String, Object?>.from(jsonDecode(response.body) as Map); final usage = Map<String, Object?>.from(body['usage']! as Map);
+    return AiCommandResponse(command: Map<String, Object?>.from(body['command']! as Map), totalTokens: usage['totalTokens']! as int);
   }
 
   Future<void> archiveProject(String projectId, String token) async {
