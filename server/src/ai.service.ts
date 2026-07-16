@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { PrismaService } from './prisma.service';
 import { AiKeyVaultService } from './ai-key-vault.service';
 
@@ -146,6 +147,30 @@ function validCommand(value: unknown): value is JsonRecord {
   return value.requiresConfirmation === true;
 }
 
+function existingOperationIds(context: object): Set<string> {
+  const ids = new Set<string>();
+  if (!isRecord(context) || !isRecord(context.model) || !Array.isArray(context.model.operations)) return ids;
+  for (const operation of context.model.operations) {
+    if (isRecord(operation) && nonEmptyString(operation.id)) ids.add(operation.id);
+  }
+  return ids;
+}
+
+function uniqueCommandOperationIds(command: unknown, context: object): unknown {
+  if (!isRecord(command) || !Array.isArray(command.operations)) return command;
+  const used = existingOperationIds(context);
+  const next = { ...command, operations: command.operations.map(operation => {
+    if (!isRecord(operation)) return operation;
+    let operationId = nonEmptyString(operation.operationId) ? operation.operationId : '';
+    if (operationId === '' || used.has(operationId)) {
+      do { operationId = randomUUID(); } while (used.has(operationId));
+    }
+    used.add(operationId);
+    return { ...operation, operationId };
+  }) };
+  return next;
+}
+
 function validStringArray(value: unknown, min = 0, max = 12): value is string[] {
   return Array.isArray(value) && value.length >= min && value.length <= max && value.every(nonEmptyString);
 }
@@ -249,7 +274,7 @@ export class AiService {
         const choice = Array.isArray(decoded.choices) ? decoded.choices[0] : null;
         const text = isRecord(choice) && isRecord(choice.message) && typeof choice.message.content === 'string' ? choice.message.content : null;
         if (!text) continue;
-        const command = JSON.parse(text);
+        const command = uniqueCommandOperationIds(JSON.parse(text), context);
         if (!validCommand(command)) continue;
         const usage = { inputTokens: tokenCount(decoded.usage?.input_tokens), outputTokens: tokenCount(decoded.usage?.output_tokens), totalTokens: tokenCount(decoded.usage?.total_tokens) };
         await this.prisma.aiUsage.create({ data: { userId, provider: 'groq', model, responseId: typeof decoded.id === 'string' ? decoded.id : undefined, ...usage } });
@@ -307,7 +332,7 @@ export class AiService {
     if (!text) throw new ServiceUnavailableException('AI returned no structured command');
     let command: unknown;
     try {
-      command = JSON.parse(text);
+      command = uniqueCommandOperationIds(JSON.parse(text), context);
     } catch {
       throw new ServiceUnavailableException('AI returned an invalid structured command');
     }

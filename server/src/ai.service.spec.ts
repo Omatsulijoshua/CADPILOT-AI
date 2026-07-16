@@ -110,6 +110,40 @@ describe('AiService', () => {
     expect(request[1].signal).toBeInstanceOf(AbortSignal);
   });
 
+  it('renames generated operation IDs that collide with the current model', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => providerResponse(),
+    } as Response);
+
+    const result = await new AiService(prisma).generateCommand('u1', 'Extrude it', {
+      model: { operations: [{ id: 'op1' }] },
+    });
+    const operations = result.command.operations as Array<{ operationId: string }>;
+
+    expect(operations[0].operationId).not.toBe('op1');
+    expect(operations[0].operationId).toEqual(expect.any(String));
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: 'u1', totalTokens: 20 }) });
+  });
+
+  it('renames duplicate generated operation IDs before returning a command', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => providerResponse({
+        output: [{ content: [{ type: 'output_text', text: JSON.stringify({ ...validCommand, operations: [validCommand.operations[0], { ...validCommand.operations[0] }] }) }] }],
+      }),
+    } as Response);
+
+    const result = await new AiService(prisma).generateCommand('u1', 'Extrude it twice', {});
+    const operations = result.command.operations as Array<{ operationId: string }>;
+
+    expect(new Set(operations.map(operation => operation.operationId)).size).toBe(2);
+    expect(operations[0].operationId).toBe('op1');
+    expect(operations[1].operationId).not.toBe('op1');
+  });
+
   it('maps provider errors and network failures to a safe unavailable response', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     const fetchMock = jest.spyOn(global, 'fetch');
@@ -182,7 +216,6 @@ describe('AiService', () => {
     ['a non-positive fillet radius', { ...validCommand, operations: [{ ...validCommand.operations[0], type: 'fillet', parameters: { ...validCommand.operations[0].parameters, radius: 0 } }] }],
     ['a non-positive chamfer distance', { ...validCommand, operations: [{ ...validCommand.operations[0], type: 'chamfer', parameters: { ...validCommand.operations[0].parameters, distance: 0 } }] }],
     ['an empty rename label', { ...validCommand, operations: [{ ...validCommand.operations[0], type: 'rename', parameters: { ...validCommand.operations[0].parameters, operationId: 'op1', name: ' ' } }] }],
-    ['duplicate operation IDs', { ...validCommand, operations: [validCommand.operations[0], { ...validCommand.operations[0] }] }],
     ['duplicate target IDs', { ...validCommand, target: { type: 'selection', ids: ['entity-1', 'entity-1'] } }],
   ])('rejects %s before returning it to the client', async (_label, command) => {
     process.env.OPENAI_API_KEY = 'test-key';
