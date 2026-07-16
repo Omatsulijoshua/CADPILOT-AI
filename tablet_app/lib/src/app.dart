@@ -463,11 +463,20 @@ class _DashboardState extends ConsumerState<Dashboard> {
                         ),
                       ],
                       const SizedBox(width: 8),
-                      IconButton(
-                        tooltip: 'Sign out',
-                        onPressed: ref.read(sessionProvider.notifier).signOut,
-                        icon: const Icon(Icons.logout),
-                      ),
+                      if (widget.session.kind == SessionKind.guest)
+                        OutlinedButton.icon(
+                          onPressed:
+                              ref.read(sessionProvider.notifier).signOut,
+                          icon: const Icon(Icons.person_outline),
+                          label: const Text('Sign in or create account'),
+                        )
+                      else
+                        IconButton(
+                          tooltip: 'Sign out',
+                          onPressed:
+                              ref.read(sessionProvider.notifier).signOut,
+                          icon: const Icon(Icons.logout),
+                        ),
                     ],
                   ),
                   if (widget.session.kind == SessionKind.signedIn &&
