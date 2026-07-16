@@ -37,6 +37,30 @@ model User {
   projects      Project[]      @relation("ProjectOwner")
   refreshTokens RefreshToken[]
   aiUsage       AiUsage[]
+  providerKeys  AiProviderKey[]
+}
+
+enum AiProvider {
+  GEMINI
+  GROQ
+  OPENROUTER
+  OPENAI
+}
+
+model AiProviderKey {
+  id          String     @id @default(uuid())
+  provider    AiProvider
+  label       String
+  encryptedKey String
+  keyHint     String
+  enabled     Boolean    @default(true)
+  priority    Int        @default(0)
+  createdById String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  createdBy   User       @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([provider, enabled, priority])
 }
 
 model RefreshToken {

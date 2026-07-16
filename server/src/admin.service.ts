@@ -1,9 +1,37 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
+import { AiProvider, Prisma } from '@prisma/client';
+import { AiKeyVaultService } from './ai-key-vault.service';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly vault: AiKeyVaultService = new AiKeyVaultService()) {}
+
+  providerKeys() {
+    return this.prisma.aiProviderKey.findMany({
+      select: { id: true, provider: true, label: true, keyHint: true, enabled: true, priority: true, createdAt: true, updatedAt: true },
+      orderBy: [{ provider: 'asc' }, { priority: 'asc' }, { createdAt: 'asc' }],
+    });
+  }
+
+  async addProviderKeys(userId: string, provider: AiProvider, rawKeys: string, label: string, priority: number) {
+    const keys = rawKeys.split(',').map(key => key.trim()).filter(Boolean);
+    if (keys.length === 0 || keys.length > 20 || keys.some(key => key.length < 12 || key.length > 512)) {
+      throw new Error('Provide between 1 and 20 valid API keys');
+    }
+    await this.prisma.aiProviderKey.createMany({ data: keys.map((key, index) => ({
+      provider, label: keys.length === 1 ? label : `${label || provider} ${index + 1}`,
+      encryptedKey: this.vault.encrypt(key), keyHint: this.vault.hint(key), priority: priority + index, createdById: userId,
+    })) });
+    return this.providerKeys();
+  }
+
+  async updateProviderKey(id: string, data: Prisma.AiProviderKeyUpdateInput) {
+    await this.prisma.aiProviderKey.update({ where: { id }, data });
+    return this.providerKeys();
+  }
+
+  async removeProviderKey(id: string) { await this.prisma.aiProviderKey.delete({ where: { id } }); return this.providerKeys(); }
 
   async overview() {
     const [users, activeProjects, archivedProjects, mutations, aiUsage] = await Promise.all([

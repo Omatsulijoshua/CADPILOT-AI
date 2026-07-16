@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
+import { AiKeyVaultService } from './ai-key-vault.service';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AuthController } from './auth.controller';
@@ -23,6 +24,6 @@ import { SuperAdminGuard } from './super-admin.guard';
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
   ],
   controllers: [HealthController, AuthController, ProjectsController, AiController, AdminController],
-  providers: [PrismaService, AuthService, ProjectsService, AiService, AdminService, AccessTokenGuard, SuperAdminGuard],
+  providers: [PrismaService, AuthService, ProjectsService, AiService, AiKeyVaultService, AdminService, AccessTokenGuard, SuperAdminGuard],
 })
 export class AppModule {}
