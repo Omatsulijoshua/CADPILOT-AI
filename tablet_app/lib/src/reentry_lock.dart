@@ -23,17 +23,26 @@ class ReentryLock extends StatefulWidget {
 
 class _ReentryLockState extends State<ReentryLock> {
   String? _savedHash;
+  var _loading = true;
 
   @override
   void initState() {
     super.initState();
     SharedPreferences.getInstance().then((prefs) {
-      if (mounted) setState(() => _savedHash = prefs.getString(_patternHashKey));
+      if (mounted) {
+        setState(() {
+          _savedHash = prefs.getString(_patternHashKey);
+          _loading = false;
+        });
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     if (_savedHash == null) {
       return PatternSetup(
         session: widget.session,
