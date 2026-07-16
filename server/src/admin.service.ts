@@ -44,4 +44,26 @@ export class AdminService {
       take: 100,
     });
   }
+
+  async audit() {
+    const [aiUsage, mutations] = await Promise.all([
+      this.prisma.aiUsage.findMany({
+        select: {
+          id: true, provider: true, model: true, totalTokens: true, createdAt: true,
+          user: { select: { email: true, displayName: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+      this.prisma.syncMutation.findMany({
+        select: {
+          id: true, status: true, baseRevision: true, appliedRevision: true, createdAt: true,
+          project: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+    ]);
+    return { aiUsage, mutations };
+  }
 }

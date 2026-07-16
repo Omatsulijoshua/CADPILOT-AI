@@ -15,6 +15,22 @@ describe('AdminService', () => {
       aiRequests: 3, aiTokens: 1200,
     });
   });
+
+  test('returns only safe AI and sync audit metadata', async () => {
+    const aiUsage = jest.fn().mockResolvedValue([{ id: 'usage-1', provider: 'openai', model: 'model', totalTokens: 20, createdAt: new Date(), user: { email: 'owner@example.com', displayName: 'Owner' } }]);
+    const mutations = jest.fn().mockResolvedValue([{ id: 'mutation-1', status: 'APPLIED', baseRevision: 2, appliedRevision: 3, createdAt: new Date(), project: { name: 'Bracket' } }]);
+    const prisma = { aiUsage: { findMany: aiUsage }, syncMutation: { findMany: mutations } };
+
+    await expect(new AdminService(prisma as never).audit()).resolves.toEqual({
+      aiUsage: expect.any(Array), mutations: expect.any(Array),
+    });
+    expect(aiUsage).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.not.objectContaining({ prompt: expect.anything() }), take: 100,
+    }));
+    expect(mutations).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.not.objectContaining({ payload: expect.anything() }), take: 100,
+    }));
+  });
 });
 
 describe('SuperAdminGuard', () => {

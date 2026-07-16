@@ -11,4 +11,5 @@ export class AdminController {
   @Get('overview') overview() { return this.admin.overview(); }
   @Get('users') users() { return this.admin.users(); }
   @Get('projects') projects() { return this.admin.projects(); }
+  @Get('audit') audit() { return this.admin.audit(); }
 }
