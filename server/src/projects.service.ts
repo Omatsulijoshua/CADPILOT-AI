@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ProjectRole } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 
 @Injectable()
@@ -15,14 +16,25 @@ export class ProjectsService {
 
   list(ownerId: string) {
     return this.prisma.project.findMany({
-      where: { ownerId, status: 'ACTIVE' },
+      where: {
+        status: 'ACTIVE',
+        OR: [{ ownerId }, { members: { some: { userId: ownerId } } }],
+      },
       orderBy: { updatedAt: 'desc' },
+      include: {
+        owner: { select: { email: true, displayName: true } },
+        members: { where: { userId: ownerId }, select: { role: true } },
+      },
     });
   }
 
   async get(ownerId: string, projectId: string) {
     const project = await this.prisma.project.findFirst({
-      where: { id: projectId, ownerId, status: 'ACTIVE' },
+      where: {
+        id: projectId,
+        status: 'ACTIVE',
+        OR: [{ ownerId }, { members: { some: { userId: ownerId } } }],
+      },
     });
     if (!project) throw new NotFoundException('Project not found');
     return project;
@@ -46,6 +58,7 @@ export class ProjectsService {
         appliedRevision: true,
         status: true,
         createdAt: true,
+        actor: { select: { email: true, displayName: true } },
       },
     });
   }
@@ -56,8 +69,36 @@ export class ProjectsService {
         ownerId,
         name: normalizedName,
         manifest: { formatVersion: 1, operations: [] },
+        members: { create: { userId: ownerId, role: 'OWNER' } },
       },
     });
+  }
+
+  async members(ownerId: string, projectId: string) {
+    await this.requireOwner(ownerId, projectId);
+    return this.prisma.projectMember.findMany({
+      where: { projectId },
+      orderBy: { role: 'asc' },
+      select: {
+        role: true,
+        user: { select: { email: true, displayName: true } },
+      },
+    });
+  }
+
+  async addMember(ownerId: string, projectId: string, email: string, role: ProjectRole) {
+    if (role === 'OWNER') throw new BadRequestException('Use EDITOR, COMMENTER, or VIEWER for collaborators');
+    await this.requireOwner(ownerId, projectId);
+    const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (!user) throw new NotFoundException('User not found');
+    const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
+    if (!project || project.ownerId === user.id) throw new BadRequestException('Project owner is already a collaborator');
+    await this.prisma.projectMember.upsert({
+      where: { projectId_userId: { projectId, userId: user.id } },
+      update: { role },
+      create: { projectId, userId: user.id, role },
+    });
+    return this.members(ownerId, projectId);
   }
 
   async sync(
@@ -70,12 +111,12 @@ export class ProjectsService {
     this.validateManifest(payload);
     const existingMutation = await this.prisma.syncMutation.findUnique({
       where: { mutationId },
-      include: { project: { select: { ownerId: true } } },
+      include: { project: { select: { ownerId: true, members: { select: { userId: true } } } } },
     });
     if (existingMutation) {
       if (
         existingMutation.projectId !== projectId ||
-        existingMutation.project.ownerId !== ownerId
+        !this.canRead(existingMutation.project, ownerId)
       ) {
         throw new NotFoundException('Project not found');
       }
@@ -84,8 +125,9 @@ export class ProjectsService {
 
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
+      include: { members: { select: { userId: true, role: true } } },
     });
-    if (project && project.ownerId !== ownerId) {
+    if (project && !this.canEdit(project, ownerId)) {
       throw new NotFoundException('Project not found');
     }
 
@@ -105,12 +147,14 @@ export class ProjectsService {
             name,
             revision: 1,
             manifest: payload,
+            members: { create: { userId: ownerId, role: 'OWNER' } },
           },
         });
         return tx.syncMutation.create({
           data: {
             mutationId,
             projectId,
+            actorUserId: ownerId,
             baseRevision: 0,
             appliedRevision: created.revision,
             payload,
@@ -140,6 +184,7 @@ export class ProjectsService {
         data: {
           mutationId,
           projectId,
+          actorUserId: ownerId,
           baseRevision,
           appliedRevision: updated.revision,
           payload,
@@ -154,6 +199,22 @@ export class ProjectsService {
     return typeof value === 'string' && value.trim().length > 0
       ? value.trim()
       : 'Untitled design';
+  }
+
+  private async requireOwner(ownerId: string, projectId: string) {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId, status: 'ACTIVE' },
+    });
+    if (!project) throw new NotFoundException('Project not found');
+    return project;
+  }
+
+  private canRead(project: { ownerId: string; members?: Array<{ userId: string }> }, userId: string): boolean {
+    return project.ownerId === userId || (project.members ?? []).some(member => member.userId === userId);
+  }
+
+  private canEdit(project: { ownerId: string; members?: Array<{ userId: string; role: ProjectRole }> }, userId: string): boolean {
+    return project.ownerId === userId || (project.members ?? []).some(member => member.userId === userId && ['OWNER', 'EDITOR'].includes(member.role));
   }
 
   private validateManifest(payload: object): void {

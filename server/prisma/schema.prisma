@@ -38,6 +38,7 @@ model User {
   refreshTokens RefreshToken[]
   aiUsage       AiUsage[]
   providerKeys  AiProviderKey[]
+  syncMutations SyncMutation[]
 }
 
 enum AiProvider {
@@ -107,14 +108,17 @@ model SyncMutation {
   id              String             @id @default(uuid())
   mutationId      String             @unique
   projectId       String
+  actorUserId     String?
   baseRevision    Int
   appliedRevision Int?
   payload         Json
   status          SyncMutationStatus @default(PENDING)
   createdAt       DateTime           @default(now())
   project         Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actor           User?              @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([projectId, createdAt])
+  @@index([actorUserId, createdAt])
 }
 
 model AiUsage {

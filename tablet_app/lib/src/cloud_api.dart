@@ -155,6 +155,8 @@ class CloudProjectChange {
     required this.appliedRevision,
     required this.status,
     required this.createdAt,
+    required this.actorName,
+    required this.actorEmail,
   });
 
   final String mutationId;
@@ -162,6 +164,8 @@ class CloudProjectChange {
   final int? appliedRevision;
   final String status;
   final DateTime createdAt;
+  final String? actorName;
+  final String? actorEmail;
 
   factory CloudProjectChange.fromMap(Map<String, Object?> value) {
     final mutationId = value['mutationId'] as String?;
@@ -169,6 +173,9 @@ class CloudProjectChange {
     final appliedRevision = value['appliedRevision'] as int?;
     final status = value['status'] as String?;
     final createdAt = DateTime.tryParse(value['createdAt'] as String? ?? '');
+    final actor = value['actor'] is Map
+        ? Map<String, Object?>.from(value['actor']! as Map)
+        : null;
     if (mutationId == null ||
         mutationId.trim().isEmpty ||
         baseRevision == null ||
@@ -185,7 +192,40 @@ class CloudProjectChange {
       appliedRevision: appliedRevision,
       status: status,
       createdAt: createdAt.toUtc(),
+      actorName: actor?['displayName'] as String?,
+      actorEmail: actor?['email'] as String?,
     );
+  }
+}
+
+class CloudProjectMember {
+  const CloudProjectMember({
+    required this.displayName,
+    required this.email,
+    required this.role,
+  });
+
+  final String displayName;
+  final String email;
+  final String role;
+
+  factory CloudProjectMember.fromMap(Map<String, Object?> value) {
+    final role = value['role'] as String?;
+    final user = value['user'] is Map
+        ? Map<String, Object?>.from(value['user']! as Map)
+        : null;
+    final email = user?['email'] as String?;
+    final displayName = user?['displayName'] as String?;
+    if (role == null ||
+        role.trim().isEmpty ||
+        email == null ||
+        !email.contains('@') ||
+        displayName == null ||
+        displayName.trim().isEmpty) {
+      throw const FormatException('Invalid project member.');
+    }
+    return CloudProjectMember(
+        displayName: displayName, email: email, role: role);
   }
 }
 
@@ -489,6 +529,52 @@ class CloudApi {
       throw const CloudApiException(
         'Cloud project history is invalid and could not be displayed.',
       );
+    }
+  }
+
+  Future<List<CloudProjectMember>> listProjectMembers(
+      String projectId, String token) async {
+    final response = await client.get(
+      Uri.parse('$baseUrl/projects/$projectId/members'),
+      headers: {'authorization': 'Bearer $token'},
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CloudApiException('Could not load project collaborators.',
+          response.statusCode);
+    }
+    try {
+      final values = jsonDecode(response.body) as List<Object?>;
+      return values
+          .map((value) => CloudProjectMember.fromMap(
+              Map<String, Object?>.from(value! as Map)))
+          .toList(growable: false);
+    } catch (_) {
+      throw const CloudApiException('Project collaborators are invalid.');
+    }
+  }
+
+  Future<List<CloudProjectMember>> addProjectMember(
+      String projectId, String email, String role, String token) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/projects/$projectId/members'),
+      headers: {'content-type': 'application/json', 'authorization': 'Bearer $token'},
+      body: jsonEncode({'email': email.trim().toLowerCase(), 'role': role}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CloudApiException(
+          response.statusCode == 404
+              ? 'No user was found for that email, or you do not own this project.'
+              : 'Could not update project collaborator.',
+          response.statusCode);
+    }
+    try {
+      final values = jsonDecode(response.body) as List<Object?>;
+      return values
+          .map((value) => CloudProjectMember.fromMap(
+              Map<String, Object?>.from(value! as Map)))
+          .toList(growable: false);
+    } catch (_) {
+      throw const CloudApiException('Project collaborators are invalid.');
     }
   }
 

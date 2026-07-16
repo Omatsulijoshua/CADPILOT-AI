@@ -1640,13 +1640,14 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                     shrinkWrap: true,
                     itemCount: changes.length,
                     itemBuilder: (_, index) {
-                      final change = changes[index];
+                  final change = changes[index];
+                      final actor = change.actorName ?? change.actorEmail ?? 'Unknown user';
                       return ListTile(
                         leading: const Icon(Icons.history),
                         title: Text(
                             'Revision ${change.appliedRevision ?? 'pending'} - ${change.status}'),
                         subtitle: Text(
-                            'From ${change.baseRevision} - ${change.createdAt.toLocal()}'),
+                            'From ${change.baseRevision} - by $actor - ${change.createdAt.toLocal()}'),
                       );
                     },
                   ),
@@ -1661,6 +1662,109 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
     } on CloudApiException catch (error) {
       if (mounted) setState(() => status = error.message);
     }
+  }
+
+  Future<void> showCollaborators(CadProject project) async {
+    final token = await ref.read(tokenStoreProvider).readAccessToken();
+    if (!mounted) return;
+    if (token == null) {
+      setState(() => status = 'Sign in to manage collaborators');
+      return;
+    }
+    final email = TextEditingController();
+    var role = 'EDITOR';
+    var members = const <CloudProjectMember>[];
+    var message = '';
+    var loading = true;
+    try {
+      members = await ref.read(cloudApiProvider).listProjectMembers(project.id, token);
+      loading = false;
+    } catch (error) {
+      loading = false;
+      message = error is CloudApiException ? error.message : error.toString();
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Future<void> addMember() async {
+            final value = email.text.trim();
+            if (value.isEmpty) return;
+            setDialogState(() {
+              loading = true;
+              message = '';
+            });
+            try {
+              members = await ref.read(cloudApiProvider).addProjectMember(project.id, value, role, token);
+              email.clear();
+              message = 'Collaborator updated.';
+            } catch (error) {
+              message = error is CloudApiException ? error.message : error.toString();
+            } finally {
+              setDialogState(() => loading = false);
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Project collaborators'),
+            content: SizedBox(
+              width: 520,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (members.isEmpty)
+                    Text(loading ? 'Loading collaborators...' : 'No collaborators yet.')
+                  else
+                    ...members.map((member) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.person_outline),
+                          title: Text(member.displayName),
+                          subtitle: Text(member.email),
+                          trailing: Text(member.role),
+                        )),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: email,
+                    decoration: const InputDecoration(labelText: 'User email'),
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: role,
+                    decoration: const InputDecoration(labelText: 'Role'),
+                    items: const [
+                      DropdownMenuItem(value: 'EDITOR', child: Text('Editor')),
+                      DropdownMenuItem(value: 'COMMENTER', child: Text('Commenter')),
+                      DropdownMenuItem(value: 'VIEWER', child: Text('Viewer')),
+                    ],
+                    onChanged: loading || role == 'OWNER'
+                        ? null
+                        : (value) => setDialogState(() => role = value ?? 'EDITOR'),
+                  ),
+                  if (message.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(message),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+              FilledButton.icon(
+                onPressed: loading ? null : addMember,
+                icon: loading
+                    ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.person_add_alt),
+                label: const Text('Add collaborator'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    email.dispose();
   }
 
   Future<void> runAiCommand(CadProject project) async {
@@ -1765,6 +1869,11 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
             tooltip: 'Cloud version history',
             onPressed: () => showCloudHistory(project),
             icon: const Icon(Icons.history),
+          ),
+          IconButton(
+            tooltip: 'Project collaborators',
+            onPressed: () => showCollaborators(project),
+            icon: const Icon(Icons.group_outlined),
           ),
           Tooltip(
             message: status,

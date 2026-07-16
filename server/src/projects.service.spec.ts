@@ -21,6 +21,13 @@ function createPrisma() {
         findUnique: jest.fn(),
         updateMany: jest.fn(),
       },
+      projectMember: {
+        findMany: jest.fn(),
+        upsert: jest.fn(),
+      },
+      user: {
+        findUnique: jest.fn(),
+      },
       syncMutation: {
         findUnique: jest.fn(),
         findMany: jest.fn(),
@@ -216,7 +223,11 @@ describe('ProjectsService get', () => {
     const project = await service.get('owner-1', 'project-1');
 
     expect(prisma.project.findFirst).toHaveBeenCalledWith({
-      where: { id: 'project-1', ownerId: 'owner-1', status: 'ACTIVE' },
+      where: {
+        id: 'project-1',
+        status: 'ACTIVE',
+        OR: [{ ownerId: 'owner-1' }, { members: { some: { userId: 'owner-1' } } }],
+      },
     });
     expect(project.revision).toBe(3);
   });
@@ -250,6 +261,7 @@ describe('ProjectsService changes', () => {
         appliedRevision: true,
         status: true,
         createdAt: true,
+        actor: { select: { email: true, displayName: true } },
       },
     });
   });
@@ -262,5 +274,26 @@ describe('ProjectsService changes', () => {
     await expect(service.changes('owner-1', 'foreign-project')).rejects
       .toBeInstanceOf(NotFoundException);
     expect(prisma.syncMutation.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('ProjectsService members', () => {
+  test('owner can add a collaborator by email with a limited role', async () => {
+    const { prisma } = createPrisma();
+    prisma.project.findFirst.mockResolvedValue({ id: 'project-1', ownerId: 'owner-1' });
+    prisma.project.findUnique.mockResolvedValue({ ownerId: 'owner-1' });
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-2', email: 'editor@example.com' });
+    prisma.projectMember.findMany.mockResolvedValue([
+      { role: 'EDITOR', user: { email: 'editor@example.com', displayName: 'Editor' } },
+    ]);
+    const service = new ProjectsService(prisma as never);
+
+    await expect(service.addMember('owner-1', 'project-1', 'editor@example.com', 'EDITOR')).resolves.toEqual([
+      { role: 'EDITOR', user: { email: 'editor@example.com', displayName: 'Editor' } },
+    ]);
+    expect(prisma.projectMember.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { projectId_userId: { projectId: 'project-1', userId: 'user-2' } },
+      update: { role: 'EDITOR' },
+    }));
   });
 });

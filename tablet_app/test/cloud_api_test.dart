@@ -338,6 +338,10 @@ void main() {
               'appliedRevision': 3,
               'status': 'APPLIED',
               'createdAt': '2026-07-16T00:00:00.000Z',
+              'actor': {
+                'displayName': 'Joshua Designer',
+                'email': 'joshua@example.com',
+              },
             }
           ]),
           200);
@@ -347,6 +351,38 @@ void main() {
             .listProjectChanges('project-1', 'access');
     expect(changes.single.appliedRevision, 3);
     expect(changes.single.status, 'APPLIED');
+    expect(changes.single.actorName, 'Joshua Designer');
+    expect(changes.single.actorEmail, 'joshua@example.com');
+  });
+  test('project collaborators can be listed and updated by email', () async {
+    final seenPaths = <String>[];
+    final client = MockClient((request) async {
+      seenPaths.add(request.url.path);
+      expect(request.headers['authorization'], 'Bearer access');
+      if (request.method == 'POST') {
+        final body = jsonDecode(request.body) as Map<String, Object?>;
+        expect(body['email'], 'editor@example.com');
+        expect(body['role'], 'EDITOR');
+      }
+      return http.Response(
+          jsonEncode([
+            {
+              'role': 'EDITOR',
+              'user': {
+                'displayName': 'Editor',
+                'email': 'editor@example.com',
+              }
+            }
+          ]),
+          200);
+    });
+    final api = CloudApi(client: client, baseUrl: 'https://api.test/v1');
+    final listed = await api.listProjectMembers('project-1', 'access');
+    final updated = await api.addProjectMember(
+        'project-1', 'EDITOR@example.com', 'EDITOR', 'access');
+    expect(seenPaths, ['/v1/projects/project-1/members', '/v1/projects/project-1/members']);
+    expect(listed.single.displayName, 'Editor');
+    expect(updated.single.role, 'EDITOR');
   });
   test('archives an owned cloud project with bearer authentication', () async {
     final client = MockClient((request) async {
