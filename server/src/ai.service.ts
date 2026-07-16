@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
+import { AiKeyVaultService } from './ai-key-vault.service';
 
 const commandSchema = {
   type: 'object', additionalProperties: false,
@@ -27,6 +28,7 @@ const maxInputBytes = 64 * 1024;
 type JsonRecord = Record<string, unknown>;
 type ResponseUsage = { input_tokens?: unknown; output_tokens?: unknown; total_tokens?: unknown };
 type OpenAiResponse = { id?: unknown; output?: unknown; usage?: ResponseUsage };
+type ChatResponse = { id?: unknown; choices?: unknown; usage?: ResponseUsage };
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -123,13 +125,30 @@ function validCommand(value: unknown): value is JsonRecord {
 
 @Injectable()
 export class AiService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly vault: AiKeyVaultService) {}
 
   async generateCommand(userId: string, prompt: string, context: object) {
+    const input = commandInput(prompt, context);
+    const groqKeys = await this.prisma.aiProviderKey.findMany({ where: { provider: 'GROQ', enabled: true }, orderBy: { priority: 'asc' } });
+    for (const configuredKey of groqKeys) {
+      try {
+        const model = process.env.GROQ_CAD_MODEL ?? 'llama-3.3-70b-versatile';
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${this.vault.decrypt(configuredKey.encryptedKey)}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, temperature: 0, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: 'Return only one valid JSON CadPilot command. Use only IDs in context. Dimensions are millimetres. requiresConfirmation must be true.' }, { role: 'user', content: input }] }), signal: AbortSignal.timeout(timeoutMs(process.env.OPENAI_TIMEOUT_MS)) });
+        if (!response.ok) continue;
+        const decoded = await response.json() as ChatResponse;
+        const choice = Array.isArray(decoded.choices) ? decoded.choices[0] : null;
+        const text = isRecord(choice) && isRecord(choice.message) && typeof choice.message.content === 'string' ? choice.message.content : null;
+        if (!text) continue;
+        const command = JSON.parse(text);
+        if (!validCommand(command)) continue;
+        const usage = { inputTokens: tokenCount(decoded.usage?.input_tokens), outputTokens: tokenCount(decoded.usage?.output_tokens), totalTokens: tokenCount(decoded.usage?.total_tokens) };
+        await this.prisma.aiUsage.create({ data: { userId, provider: 'groq', model, responseId: typeof decoded.id === 'string' ? decoded.id : undefined, ...usage } });
+        return { command, usage };
+      } catch { continue; }
+    }
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new ServiceUnavailableException('AI commands are not configured on this server');
     const model = process.env.OPENAI_CAD_MODEL ?? 'gpt-5.6-luna';
-    const input = commandInput(prompt, context);
     let response: Response;
     try {
       response = await fetch('https://api.openai.com/v1/responses', {
