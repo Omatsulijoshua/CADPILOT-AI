@@ -5,6 +5,21 @@ import 'model_3d.dart';
 import 'sketch_models.dart';
 import 'stl_file_export.dart';
 
+enum AssemblyViewMode { cad, assembled, exploded, render, labels }
+
+class AssemblyPart {
+  const AssemblyPart({
+    required this.operation,
+    required this.solid,
+    required this.offset,
+    required this.color,
+  });
+  final ModelOperation operation;
+  final EvaluatedSolid solid;
+  final Offset offset;
+  final Color color;
+}
+
 class ModelingCanvas extends StatefulWidget {
   const ModelingCanvas(
       {required this.projectName,
@@ -31,6 +46,7 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
   final viewportKey = GlobalKey();
   int? selectedFace;
   int? selectedEdge;
+  AssemblyViewMode assemblyMode = AssemblyViewMode.cad;
   final evaluator = const ModelEvaluator();
   @override
   void initState() {
@@ -53,7 +69,67 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
   SolidMeasurements? get measurements =>
       solid == null ? null : SolidMeasurements.from(solid!, model.material);
 
+  List<AssemblyPart> get assemblyParts {
+    final parts = <AssemblyPart>[];
+    for (final operation in model.operations) {
+      if (operation.suppressed ||
+          !{
+            ModelOperationKind.extrude,
+            ModelOperationKind.revolve,
+            ModelOperationKind.gear,
+          }.contains(operation.kind)) {
+        continue;
+      }
+      final solid = evaluator.evaluate(
+          widget.sketch, ModelDocument(operations: [operation]));
+      if (solid == null) continue;
+      parts.add(AssemblyPart(
+          operation: operation,
+          solid: solid,
+          offset: _assemblyOffset(operation, parts.length),
+          color: _partColor(operation.displayName)));
+    }
+    return parts;
+  }
+
+  Offset _assemblyOffset(ModelOperation operation, int index) {
+    final name = operation.displayName.toLowerCase();
+    if (name.contains('skid') || name.contains('base')) {
+      return const Offset(0, 95);
+    }
+    if (name.contains('engine')) return const Offset(-150, 15);
+    if (name.contains('alternator') || name.contains('generator head')) {
+      return const Offset(105, 18);
+    }
+    if (name.contains('fuel')) return const Offset(-50, -120);
+    if (name.contains('control')) return const Offset(260, -70);
+    if (name.contains('muffler') || name.contains('exhaust')) {
+      return const Offset(35, -178);
+    }
+    if (name.contains('battery')) return const Offset(-260, 55);
+    return Offset((index - 2) * 120.0, index.isEven ? -40 : 60);
+  }
+
+  Color _partColor(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('skid') || lower.contains('base')) {
+      return const Color(0xff2f3d48);
+    }
+    if (lower.contains('engine')) return const Color(0xff4b5563);
+    if (lower.contains('alternator') || lower.contains('generator head')) {
+      return const Color(0xff2563eb);
+    }
+    if (lower.contains('fuel')) return const Color(0xffd97706);
+    if (lower.contains('control')) return const Color(0xff111827);
+    if (lower.contains('muffler') || lower.contains('exhaust')) {
+      return const Color(0xffa3a3a3);
+    }
+    if (lower.contains('gear')) return const Color(0xff38bdf8);
+    return const Color(0xff29d3b2);
+  }
+
   void selectAt(TapUpDetails details) {
+    if (assemblyMode != AssemblyViewMode.cad) return;
     final current = solid;
     final box = viewportKey.currentContext?.findRenderObject() as RenderBox?;
     if (current == null || box == null) return;
@@ -696,6 +772,8 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                     child: CustomPaint(
                         painter: SolidPainter(
                             solid: solid,
+                            parts: assemblyParts,
+                            assemblyMode: assemblyMode,
                             yaw: yaw,
                             pitch: pitch,
                             zoom: zoom,
@@ -758,7 +836,36 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                             OutlinedButton.icon(
                                 onPressed: exportStl,
                                 icon: const Icon(Icons.download),
-                                label: const Text('Export STL'))
+                                label: const Text('Export STL')),
+                            const SizedBox(width: 8),
+                            SegmentedButton<AssemblyViewMode>(
+                                segments: const [
+                                  ButtonSegment(
+                                      value: AssemblyViewMode.cad,
+                                      icon: Icon(Icons.view_in_ar),
+                                      label: Text('CAD')),
+                                  ButtonSegment(
+                                      value: AssemblyViewMode.assembled,
+                                      icon: Icon(Icons.all_inbox),
+                                      label: Text('Assemble')),
+                                  ButtonSegment(
+                                      value: AssemblyViewMode.exploded,
+                                      icon: Icon(Icons.open_in_full),
+                                      label: Text('Take apart')),
+                                  ButtonSegment(
+                                      value: AssemblyViewMode.render,
+                                      icon: Icon(Icons.photo_camera),
+                                      label: Text('Render')),
+                                  ButtonSegment(
+                                      value: AssemblyViewMode.labels,
+                                      icon: Icon(Icons.label_outline),
+                                      label: Text('Labels')),
+                                ],
+                                selected: {
+                                  assemblyMode
+                                },
+                                onSelectionChanged: (value) =>
+                                    setState(() => assemblyMode = value.first))
                           ]))),
                   Positioned(
                       left: 18,
@@ -771,7 +878,9 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                               padding: const EdgeInsets.all(10),
                               child: Text(solid == null
                                   ? 'No solid | Extrude a rectangle profile'
-                                  : '${solid!.width.toStringAsFixed(1)} x ${solid!.height.toStringAsFixed(1)} x ${solid!.depth.toStringAsFixed(1)} mm^3')))),
+                                  : assemblyMode == AssemblyViewMode.cad
+                                      ? '${solid!.width.toStringAsFixed(1)} x ${solid!.height.toStringAsFixed(1)} x ${solid!.depth.toStringAsFixed(1)} mm^3'
+                                      : '${assemblyParts.length} assembly parts | ${assemblyMode.name} view')))),
                 ]))),
         SizedBox(
             width: 250,
@@ -987,6 +1096,8 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
 class SolidPainter extends CustomPainter {
   SolidPainter(
       {required this.solid,
+      required this.parts,
+      required this.assemblyMode,
       required this.yaw,
       required this.pitch,
       required this.zoom,
@@ -994,6 +1105,8 @@ class SolidPainter extends CustomPainter {
       required this.selectedFace,
       required this.selectedEdge});
   final EvaluatedSolid? solid;
+  final List<AssemblyPart> parts;
+  final AssemblyViewMode assemblyMode;
   final double yaw, pitch, zoom;
   final Offset pan;
   final int? selectedFace;
@@ -1011,6 +1124,10 @@ class SolidPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final current = solid;
+    if (assemblyMode != AssemblyViewMode.cad && parts.isNotEmpty) {
+      _paintAssembly(canvas, size);
+      return;
+    }
     if (current == null) {
       final text = TextPainter(
           text: const TextSpan(
@@ -1215,6 +1332,184 @@ class SolidPainter extends CustomPainter {
             ..style = PaintingStyle.fill);
       canvas.drawCircle(center, cut.radius * scale, edge);
     }
+  }
+
+  void _paintAssembly(Canvas canvas, Size size) {
+    final maxWidth = parts
+        .map((part) => part.offset.dx.abs() + part.solid.width)
+        .fold<double>(400, math.max);
+    final maxHeight = parts
+        .map((part) =>
+            part.offset.dy.abs() + part.solid.height + part.solid.depth)
+        .fold<double>(260, math.max);
+    final scale = (math.min(size.width / (maxWidth * 2.2),
+                size.height / (maxHeight * 1.9)) *
+            zoom)
+        .clamp(0.18, 4.0);
+    final sorted = [...parts]..sort((a, b) =>
+        (a.offset.dy + a.solid.depth).compareTo(b.offset.dy + b.solid.depth));
+    for (var index = 0; index < sorted.length; index += 1) {
+      final part = sorted[index];
+      final explode = assemblyMode == AssemblyViewMode.exploded ||
+          assemblyMode == AssemblyViewMode.labels;
+      final vector = part.offset == Offset.zero
+          ? Offset((index - sorted.length / 2) * 34, index.isEven ? -24 : 24)
+          : part.offset;
+      final offset = explode ? vector * 1.75 : vector;
+      final realistic = assemblyMode == AssemblyViewMode.render ||
+          assemblyMode == AssemblyViewMode.labels;
+      _drawPart(canvas, size, part, offset, scale, realistic: realistic);
+      if (assemblyMode == AssemblyViewMode.labels) {
+        _drawPartLabel(canvas, size, part, offset, scale, index + 1);
+      }
+    }
+    if (assemblyMode == AssemblyViewMode.render) {
+      _drawRenderTitle(canvas, size);
+    }
+  }
+
+  List<List<double>> _planPoints(EvaluatedSolid current) {
+    final w = current.width / 2, h = current.height / 2;
+    final plan = <List<double>>[];
+    if (current.gearTeeth > 0) {
+      final segments = current.gearTeeth.clamp(6, 80) * 4;
+      final outerRadius = current.width / 2;
+      final rootRadius = current.gearRootRadius <= 0
+          ? outerRadius * 0.82
+          : current.gearRootRadius;
+      for (var index = 0; index < segments; index++) {
+        final toothPhase = index % 4;
+        final radius =
+            toothPhase == 1 || toothPhase == 2 ? outerRadius : rootRadius;
+        final angle = index * math.pi * 2 / segments;
+        plan.add([math.cos(angle) * radius, math.sin(angle) * radius, 0]);
+      }
+    } else if (current.revolved) {
+      const segments = 48;
+      for (var index = 0; index < segments; index++) {
+        final angle = index * math.pi * 2 / segments;
+        plan.add([math.cos(angle) * w, math.sin(angle) * h, 0]);
+      }
+    } else {
+      plan.addAll([
+        [-w, -h, 0],
+        [w, -h, 0],
+        [w, h, 0],
+        [-w, h, 0],
+      ]);
+    }
+    return plan;
+  }
+
+  void _drawPart(
+      Canvas canvas, Size size, AssemblyPart part, Offset offset, double scale,
+      {required bool realistic}) {
+    final current = part.solid;
+    final plan = _planPoints(current);
+    final d = current.depth;
+    final v = <List<double>>[
+      ...plan.map((point) => [point[0] + offset.dx, point[1] + offset.dy, 0]),
+      ...plan.map((point) => [point[0] + offset.dx, point[1] + offset.dy, d]),
+    ];
+    final count = plan.length;
+    final faces = <List<int>>[
+      List.generate(count, (index) => index),
+      List.generate(count, (index) => count * 2 - 1 - index),
+      for (var index = 0; index < count; index++)
+        [
+          index,
+          (index + 1) % count,
+          count + (index + 1) % count,
+          count + index
+        ],
+    ];
+    final fill = Paint()..style = PaintingStyle.fill;
+    final edge = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = realistic ? 1.2 : 1.5
+      ..color = realistic ? const Color(0xffe5e7eb) : const Color(0xff9af4e0);
+    for (var i = 0; i < faces.length; i++) {
+      final path = Path();
+      for (var j = 0; j < faces[i].length; j++) {
+        final p = project(v[faces[i][j]], size, scale);
+        j == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+      }
+      path.close();
+      final shade = 0.68 + (i / faces.length) * 0.28;
+      fill.color = Color.lerp(Colors.black, part.color, shade)!
+          .withValues(alpha: realistic ? 0.92 : 0.75);
+      canvas.drawPath(path, fill);
+      canvas.drawPath(path, edge);
+    }
+    if (realistic &&
+        (part.operation.displayName.toLowerCase().contains('fuel') ||
+            part.operation.displayName.toLowerCase().contains('control'))) {
+      final center = project([offset.dx, offset.dy, d + 8], size, scale);
+      final text = TextPainter(
+          text: const TextSpan(
+              text: 'CadPilot',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold)),
+          textDirection: TextDirection.ltr)
+        ..layout();
+      text.paint(canvas, center - Offset(text.width / 2, text.height / 2));
+    }
+  }
+
+  void _drawPartLabel(Canvas canvas, Size size, AssemblyPart part,
+      Offset offset, double scale, int number) {
+    final anchor =
+        project([offset.dx, offset.dy, part.solid.depth + 20], size, scale);
+    final labelOffset =
+        Offset(anchor.dx + (offset.dx >= 0 ? 42 : -210), anchor.dy - 26);
+    final paint = Paint()
+      ..color = const Color(0xff8cf5df)
+      ..strokeWidth = 1.4;
+    canvas.drawLine(anchor, labelOffset + const Offset(18, 18), paint);
+    final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(labelOffset.dx, labelOffset.dy, 190, 42),
+        const Radius.circular(8));
+    canvas.drawRRect(
+        rect,
+        Paint()
+          ..color = const Color(0xdd0b1520)
+          ..style = PaintingStyle.fill);
+    canvas.drawRRect(rect, paint..style = PaintingStyle.stroke);
+    final text = TextPainter(
+        text: TextSpan(
+            text: '$number. ${part.operation.displayName}',
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600)),
+        maxLines: 2,
+        ellipsis: '…',
+        textDirection: TextDirection.ltr)
+      ..layout(maxWidth: 166);
+    text.paint(canvas, labelOffset + const Offset(12, 8));
+  }
+
+  void _drawRenderTitle(Canvas canvas, Size size) {
+    final title = TextPainter(
+        text: const TextSpan(
+            text: 'Real-life hardware render preview',
+            style: TextStyle(
+                color: Color(0xffdffdf7),
+                fontSize: 18,
+                fontWeight: FontWeight.bold)),
+        textDirection: TextDirection.ltr)
+      ..layout();
+    title.paint(canvas, Offset(24, size.height - 54));
+    final subtitle = TextPainter(
+        text: const TextSpan(
+            text:
+                'Colored parts and logo are visual guidance; CAD remains editable.',
+            style: TextStyle(color: Color(0xff9fb8c7), fontSize: 12)),
+        textDirection: TextDirection.ltr)
+      ..layout();
+    subtitle.paint(canvas, Offset(24, size.height - 30));
   }
 
   @override
