@@ -213,15 +213,18 @@ function localPlan(prompt: string, context: object): CadPlan {
   const lower = prompt.toLowerCase();
   const table = lower.includes('table') || lower.includes('desk');
   const chair = lower.includes('chair') || lower.includes('seat');
+  const generatorSet = lower.includes('generator set') || lower.includes('genset') || lower.includes('gen set') || lower.includes('petrol generator') || lower.includes('diesel generator') || lower.includes('gas generator') || lower.includes('generator without cover') || lower.includes('without outside cover') || lower.includes('no outside cover');
   const solarSystem = lower.includes('solar generator') || lower.includes('solar gen') || lower.includes('solar power') || lower.includes('power station') || lower.includes('battery generator');
   const motorSystem = lower.includes('electric motor') || lower.includes('electric moto') || lower.includes('alternator') || lower.includes('rotor') || lower.includes('stator');
   const coilSystem = lower.includes('coil') || lower.includes('solenoid') || lower.includes('winding') || lower.includes('inductor') || lower.includes('electromagnet');
-  const hardwareSystem = solarSystem || motorSystem || coilSystem || lower.includes('hardware system') || lower.includes('new system') || lower.includes('brainstorm') || lower.includes('machine') || lower.includes('device') || lower.includes('mechanism');
+  const hardwareSystem = generatorSet || solarSystem || motorSystem || coilSystem || lower.includes('hardware system') || lower.includes('new system') || lower.includes('brainstorm') || lower.includes('machine') || lower.includes('device') || lower.includes('mechanism');
   const gear = lower.includes('gear') || lower.includes('sprocket');
   const boredRound = lower.includes('pipe') || lower.includes('tube') || lower.includes('wheel') || lower.includes('pulley') || lower.includes('bearing');
   const round = boredRound || lower.includes('cylinder') || lower.includes('shaft') || lower.includes('rod') || lower.includes('disc') || lower.includes('disk') || lower.includes('round');
   const hasProfile = JSON.stringify(context).includes('rectangle');
-  const dimensions = solarSystem
+  const dimensions = generatorSet
+    ? [{ name: 'frame width', value: null, unit: 'mm' as const }, { name: 'frame depth', value: null, unit: 'mm' as const }, { name: 'rated power', value: null, unit: 'mm' as const }]
+    : solarSystem
     ? [{ name: 'enclosure width', value: null, unit: 'mm' as const }, { name: 'enclosure depth', value: null, unit: 'mm' as const }, { name: 'power target', value: null, unit: 'mm' as const }]
     : motorSystem || coilSystem
       ? [{ name: 'outside diameter', value: null, unit: 'mm' as const }, { name: 'length', value: null, unit: 'mm' as const }, { name: 'shaft or bore radius', value: null, unit: 'mm' as const }]
@@ -232,7 +235,15 @@ function localPlan(prompt: string, context: object): CadPlan {
     : round || gear
       ? [{ name: 'diameter', value: null, unit: 'mm' as const }, { name: 'thickness', value: null, unit: 'mm' as const }, ...(gear ? [{ name: 'teeth', value: null, unit: 'mm' as const }] : [])]
     : [{ name: 'primary size', value: null, unit: 'mm' as const }];
-  const missingInputs = solarSystem
+  const missingInputs = generatorSet
+    ? [
+        { id: 'width', label: 'Frame width', question: 'How wide should the open generator-set frame be?', required: true, suggestedValue: '900 mm' },
+        { id: 'depth', label: 'Frame depth', question: 'How deep should the frame/skid be?', required: true, suggestedValue: '520 mm' },
+        { id: 'height', label: 'Component height', question: 'What approximate maximum component height should it use?', required: false, suggestedValue: '480 mm' },
+        { id: 'powerTarget', label: 'Power rating', question: 'What generator power rating should the layout assume?', required: false, suggestedValue: '3 kW' },
+        { id: 'fuelType', label: 'Fuel type', question: 'What fuel type should the engine layout assume?', required: false, suggestedValue: 'petrol' },
+      ]
+    : solarSystem
     ? [
         { id: 'width', label: 'Enclosure width', question: 'How wide should the portable solar generator enclosure be?', required: true, suggestedValue: '600 mm' },
         { id: 'depth', label: 'Enclosure depth', question: 'How deep should the enclosure be?', required: true, suggestedValue: '360 mm' },
@@ -290,6 +301,11 @@ function localPlan(prompt: string, context: object): CadPlan {
     ['modular-power-station', 'Modular power-station architecture', 'Split the system into swappable battery, control, inverter, and input/output modules.'],
     ['rugged-field-generator', 'Rugged field solar generator', 'Prioritize handles, airflow, protected connectors, and serviceable internal modules.'],
   ];
+  const generatorSetOptions = [
+    ['open-genset-assembly', 'Open generator set with visible components', 'Create a multi-object layout: skid frame, engine block, alternator, fuel tank, control panel, muffler/exhaust, mounts, and service spacing.'],
+    ['maintenance-first-genset', 'Maintenance-first generator layout', 'Prioritize open access to engine, alternator, air filter, fuel tank, battery, oil drain, and removable mounts.'],
+    ['compact-genset-platform', 'Compact generator platform', 'Pack the engine, generator head, tank, exhaust, and control panel tightly on a base frame without an outside cover.'],
+  ];
   const motorOptions = [
     ['electric-motor-starter', 'Electric motor starter layout', 'Create rotor/stator/shaft starter geometry and plan the next coil and housing stages.'],
     ['generator-alternator-starter', 'Generator / alternator layout', 'Plan rotating shaft, stator ring, coil zone, and mounting frame.'],
@@ -325,12 +341,12 @@ function localPlan(prompt: string, context: object): CadPlan {
     ['lightweight', 'Lightweight or hollow design', 'Reduce material while preserving the main form.'],
     ['parametric', 'Parametric detailed design', 'Use editable dimensions and staged secondary features.'],
   ];
-  const options = solarSystem ? solarOptions : motorSystem ? motorOptions : coilSystem ? coilOptions : hardwareSystem ? systemOptions : gear ? gearOptions : round ? roundOptions : table ? tableOptions : chair ? furnitureOptions : genericOptions;
-  const objectType = solarSystem ? 'solar generator hardware system' : motorSystem ? 'electric motor / generator system' : coilSystem ? 'coil / electromagnetic system' : hardwareSystem ? 'custom hardware system' : gear ? 'gear' : round ? (boredRound ? 'bored round part' : 'round part') : table ? 'table' : chair ? 'furniture' : 'custom CAD part';
+  const options = generatorSet ? generatorSetOptions : solarSystem ? solarOptions : motorSystem ? motorOptions : coilSystem ? coilOptions : hardwareSystem ? systemOptions : gear ? gearOptions : round ? roundOptions : table ? tableOptions : chair ? furnitureOptions : genericOptions;
+  const objectType = generatorSet ? 'open generator set assembly' : solarSystem ? 'solar generator hardware system' : motorSystem ? 'electric motor / generator system' : coilSystem ? 'coil / electromagnetic system' : hardwareSystem ? 'custom hardware system' : gear ? 'gear' : round ? (boredRound ? 'bored round part' : 'round part') : table ? 'table' : chair ? 'furniture' : 'custom CAD part';
   return {
     schemaVersion: 1,
     planId: `local-${Date.now()}`,
-    summary: hardwareSystem ? `I can help brainstorm and turn this into a staged hardware CAD system: ${prompt.trim()}` : table ? 'I can create this as a table design. Choose a construction approach and confirm the essential dimensions.' : `I extracted a buildable CAD path for: ${prompt.trim()}`,
+    summary: generatorSet ? 'I can create this as an open generator-set assembly with separate visible starter components instead of one outside cover.' : hardwareSystem ? `I can help brainstorm and turn this into a staged hardware CAD system: ${prompt.trim()}` : table ? 'I can create this as a table design. Choose a construction approach and confirm the essential dimensions.' : `I extracted a buildable CAD path for: ${prompt.trim()}`,
     extracted: { objectType, style: lower.includes('modern') ? 'modern' : null, dimensions, constraints: [] },
     missingInputs,
     options: options.map(([id, title, description], index) => ({ id, title, description, stages: commonStages, assumptions: ['Dimensions are millimetres.', 'The final model requires preview approval.'], executableNow: hasProfile && index === 0, preparation: hasProfile ? [] : ['Create or select the required closed sketch profiles before geometry generation.'] })),
@@ -403,7 +419,7 @@ export class AiService {
     for (const configuredKey of await this.groqKeys()) {
       try {
         const model = process.env.GROQ_CAD_MODEL ?? 'llama-3.3-70b-versatile';
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${this.vault.decrypt(configuredKey.encryptedKey)}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: `You are CadPilot's design planner. Return JSON only. Extract intent and dimensions, ask only critical questions, and offer exactly 2 or 3 viable options. For complex hardware systems such as solar generators, coils, electric motors, mechanisms, machines, or brainstormed inventions, plan the design as functional subsystems first: enclosure/envelope, energy or motion source, control module, interface/mounting, cooling/safety, then staged CAD geometry. Never claim unsupported geometry is already executable. Use this exact shape: ${JSON.stringify(fallback)}` }, { role: 'user', content: input }] }), signal: AbortSignal.timeout(timeoutMs(process.env.OPENAI_TIMEOUT_MS)) });
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${this.vault.decrypt(configuredKey.encryptedKey)}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: `You are CadPilot's design planner. Return JSON only. Extract intent and dimensions, ask only critical questions, and offer exactly 2 or 3 viable options. For complex hardware systems such as solar generators, coils, electric motors, mechanisms, machines, or brainstormed inventions, plan the design as functional subsystems first: enclosure/envelope, energy or motion source, control module, interface/mounting, cooling/safety, then staged CAD geometry. For generator sets or gensets without outside covers, plan a visible multi-component assembly: skid/base frame, engine block, alternator/generator head, fuel tank, control panel, battery, muffler/exhaust, mounts, pipes/cables, and service spacing. Never collapse a multi-component assembly into a single cube. Never claim unsupported geometry is already executable. Use this exact shape: ${JSON.stringify(fallback)}` }, { role: 'user', content: input }] }), signal: AbortSignal.timeout(timeoutMs(process.env.OPENAI_TIMEOUT_MS)) });
         if (!response.ok) continue;
         const decoded = await response.json() as ChatResponse;
         const choice = Array.isArray(decoded.choices) ? decoded.choices[0] : null;
