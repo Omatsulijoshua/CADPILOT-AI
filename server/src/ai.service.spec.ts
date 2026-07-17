@@ -212,7 +212,7 @@ describe('AiService', () => {
     expect(timeout).toHaveBeenCalledWith(4500);
   });
 
-  it('falls back to thirty seconds for an out-of-range timeout', async () => {
+  it('falls back to sixty seconds for an out-of-range timeout', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     process.env.OPENAI_TIMEOUT_MS = '500';
     const signal = AbortSignal.abort();
@@ -221,7 +221,7 @@ describe('AiService', () => {
 
     await expect(new AiService(prisma).generateCommand('u1', 'Extrude it', {}))
       .rejects.toThrow('AI command generation is temporarily unavailable');
-    expect(timeout).toHaveBeenCalledWith(30000);
+    expect(timeout).toHaveBeenCalledWith(60000);
   });
 
   it('records usage but rejects malformed structured command text', async () => {

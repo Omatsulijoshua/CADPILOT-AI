@@ -20,9 +20,9 @@ const commandSchema = {
   }
 } as const;
 
-const defaultTimeoutMs = 30_000;
+const defaultTimeoutMs = 60_000;
 const minTimeoutMs = 1_000;
-const maxTimeoutMs = 120_000;
+const maxTimeoutMs = 180_000;
 const maxPromptLength = 2_000;
 const maxInputBytes = 64 * 1024;
 
@@ -138,6 +138,89 @@ function commandInput(prompt: string, context: object): string {
     throw new PayloadTooLargeException('AI command context is too large');
   }
   return input;
+}
+
+function shouldResearch(prompt: string): boolean {
+  if (process.env.NODE_ENV === 'test') return false;
+  if (process.env.CADPILOT_WEB_RESEARCH === 'false') return false;
+  const lower = prompt.toLowerCase();
+  return ['generator', 'genset', 'motor', 'coil', 'machine', 'device', 'mechanism', 'hardware', 'solar', 'engine', 'pump', 'compressor'].some(item => lower.includes(item));
+}
+
+function stripHtml(value: string): string {
+  return value
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function researchReferences(prompt: string): Promise<string[]> {
+  if (!shouldResearch(prompt)) return [];
+  const query = `${prompt} main components exploded view CAD reference`;
+  const urls = [
+    `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
+    `https://en.wikipedia.org/w/api.php?action=opensearch&limit=5&namespace=0&format=json&search=${encodeURIComponent(prompt)}`,
+  ];
+  const snippets: string[] = [];
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        headers: { 'user-agent': 'CadPilot/1.0 design-reference-planner' },
+        signal: AbortSignal.timeout(4500),
+      });
+      if (!response.ok) continue;
+      const text = await response.text();
+      if (url.includes('w/api.php')) {
+        const decoded = JSON.parse(text) as unknown;
+        if (Array.isArray(decoded) && Array.isArray(decoded[1])) {
+          for (const title of decoded[1].slice(0, 3)) {
+            if (typeof title === 'string' && title.trim()) snippets.push(`Reference topic: ${title.trim()}`);
+          }
+        }
+      } else {
+        for (const match of text.matchAll(/<a[^>]+class="result__a"[^>]*>([\s\S]*?)<\/a>/gi)) {
+          const title = stripHtml(match[1]);
+          if (title) snippets.push(`Search result: ${title}`);
+          if (snippets.length >= 5) break;
+        }
+        for (const match of text.matchAll(/<a[^>]+class="result-link"[^>]*>([\s\S]*?)<\/a>/gi)) {
+          const title = stripHtml(match[1]);
+          if (title) snippets.push(`Search result: ${title}`);
+          if (snippets.length >= 5) break;
+        }
+      }
+    } catch {
+      continue;
+    }
+    if (snippets.length >= 5) break;
+  }
+  return [...new Set(snippets)].slice(0, 5);
+}
+
+function withResearchAssumptions(plan: CadPlan, references: string[]): CadPlan {
+  if (references.length === 0) return plan;
+  return {
+    ...plan,
+    summary: `${plan.summary} I checked online reference topics/results first and will use them only as design guidance, then keep the CAD stage editable and approval-based.`,
+    options: plan.options.map(option => ({
+      ...option,
+      stages: [
+        'Search online samples and identify visible components',
+        ...option.stages.filter(stage => !stage.toLowerCase().includes('search online')),
+      ].slice(0, 12),
+      assumptions: [
+        'Online references are used as visual/component guidance, not copied geometry.',
+        ...references,
+        ...option.assumptions,
+      ].slice(0, 12),
+    })),
+  };
 }
 
 function commandSystemPrompt(): string {
@@ -415,11 +498,15 @@ export class AiService {
 
   async generatePlan(userId: string, prompt: string, context: object, projectId?: string) {
     const input = commandInput(prompt, context);
-    const fallback = localPlan(prompt, context);
+    const references = await researchReferences(prompt);
+    const fallback = withResearchAssumptions(localPlan(prompt, context), references);
+    const researchContext = references.length === 0
+      ? 'No online reference snippets were available; use general engineering component knowledge.'
+      : `Online reference snippets/topics for guidance only:\n${references.join('\n')}`;
     for (const configuredKey of await this.groqKeys()) {
       try {
         const model = process.env.GROQ_CAD_MODEL ?? 'llama-3.3-70b-versatile';
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${this.vault.decrypt(configuredKey.encryptedKey)}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: `You are CadPilot's design planner. Return JSON only. Extract intent and dimensions, ask only critical questions, and offer exactly 2 or 3 viable options. For complex hardware systems such as solar generators, coils, electric motors, mechanisms, machines, or brainstormed inventions, plan the design as functional subsystems first: enclosure/envelope, energy or motion source, control module, interface/mounting, cooling/safety, then staged CAD geometry. For generator sets or gensets without outside covers, plan a visible multi-component assembly: skid/base frame, engine block, alternator/generator head, fuel tank, control panel, battery, muffler/exhaust, mounts, pipes/cables, and service spacing. Never collapse a multi-component assembly into a single cube. Never claim unsupported geometry is already executable. Use this exact shape: ${JSON.stringify(fallback)}` }, { role: 'user', content: input }] }), signal: AbortSignal.timeout(timeoutMs(process.env.OPENAI_TIMEOUT_MS)) });
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${this.vault.decrypt(configuredKey.encryptedKey)}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: `You are CadPilot's design planner. Return JSON only. Extract intent and dimensions, ask only critical questions, and offer exactly 2 or 3 viable options. For complex hardware systems such as solar generators, coils, electric motors, mechanisms, machines, or brainstormed inventions, plan the design as functional subsystems first: enclosure/envelope, energy or motion source, control module, interface/mounting, cooling/safety, then staged CAD geometry. For generator sets or gensets without outside covers, plan a visible multi-component assembly: skid/base frame, engine block, alternator/generator head, fuel tank, control panel, battery, muffler/exhaust, mounts, pipes/cables, and service spacing. Never collapse a multi-component assembly into a single cube. Use online references only to infer likely components and proportions; do not copy proprietary geometry, logos, or exact designs. Never claim unsupported geometry is already executable. ${researchContext} Use this exact shape: ${JSON.stringify(fallback)}` }, { role: 'user', content: input }] }), signal: AbortSignal.timeout(timeoutMs(process.env.OPENAI_TIMEOUT_MS)) });
         if (!response.ok) continue;
         const decoded = await response.json() as ChatResponse;
         const choice = Array.isArray(decoded.choices) ? decoded.choices[0] : null;

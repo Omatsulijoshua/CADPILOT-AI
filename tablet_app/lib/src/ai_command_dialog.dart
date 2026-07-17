@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -93,6 +94,18 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
   final Map<String, TextEditingController> answers = {};
   bool hasGeneratedPlanCommand = false;
   bool showJson = false;
+  Timer? buildStatusTimer;
+  int buildStatusIndex = 0;
+  String? buildStatusText;
+
+  static const buildStatusMessages = [
+    'Searching online references...',
+    'Studying sample components...',
+    'Crafting the CAD plan...',
+    'Building starter geometry...',
+    'Almost done...',
+    'Refining and adding finishing touches...',
+  ];
 
   @override
   void initState() {
@@ -123,12 +136,37 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
 
   @override
   void dispose() {
+    buildStatusTimer?.cancel();
     input.dispose();
     prompt.dispose();
     for (final controller in answers.values) {
       controller.dispose();
     }
     super.dispose();
+  }
+
+  void startBuildStatus() {
+    buildStatusTimer?.cancel();
+    buildStatusIndex = 0;
+    buildStatusText = buildStatusMessages.first;
+    buildStatusTimer = Timer.periodic(const Duration(milliseconds: 2400), (_) {
+      if (!mounted || !generating) return;
+      setState(() {
+        buildStatusIndex = buildStatusIndex + 1 >= buildStatusMessages.length
+            ? buildStatusMessages.length - 1
+            : buildStatusIndex + 1;
+        buildStatusText = buildStatusMessages[buildStatusIndex];
+      });
+    });
+  }
+
+  void finishBuildStatus({required bool success}) {
+    buildStatusTimer?.cancel();
+    buildStatusTimer = null;
+    if (!mounted) return;
+    setState(() {
+      buildStatusText = success ? 'Done.' : null;
+    });
   }
 
   Future<void> createPlan() async {
@@ -141,6 +179,8 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
       previewSketch = null;
       showJson = false;
     });
+    startBuildStatus();
+    var success = false;
     try {
       final response = await generator(prompt.text.trim());
       for (final controller in answers.values) {
@@ -156,10 +196,12 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         totalTokens = response.totalTokens;
         hasGeneratedPlanCommand = false;
       });
+      success = true;
     } catch (value) {
       setState(() => error = value.toString());
     } finally {
       if (mounted) setState(() => generating = false);
+      finishBuildStatus(success: success);
     }
   }
 
@@ -183,6 +225,8 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
       preview = null;
       previewSketch = null;
     });
+    startBuildStatus();
+    var success = false;
     try {
       final preparedSketch = preparedSketchForPlan();
       final answerValues = {
@@ -199,10 +243,12 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
       totalTokens = draft.totalTokens;
       hasGeneratedPlanCommand = true;
       createPreview(sketch: preparedSketch);
+      success = true;
     } catch (value) {
       setState(() => error = value.toString());
     } finally {
       if (mounted) setState(() => generating = false);
+      finishBuildStatus(success: success);
     }
   }
 
@@ -681,15 +727,19 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
       preview = null;
       previewSketch = null;
     });
+    startBuildStatus();
+    var success = false;
     try {
       final draft = await generator(promptText);
       input.text = const JsonEncoder.withIndent('  ').convert(draft.command);
       setState(() => totalTokens = draft.totalTokens);
       createPreview();
+      success = true;
     } catch (value) {
       setState(() => error = value.toString());
     } finally {
       if (mounted) setState(() => generating = false);
+      finishBuildStatus(success: success);
     }
   }
 
@@ -799,6 +849,22 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
                   if (totalTokens != null)
                     Text('Usage: $totalTokens tokens',
                         textAlign: TextAlign.right),
+                  if (buildStatusText != null) ...[
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      if (generating) ...[
+                        const SizedBox.square(
+                            dimension: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2)),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                          child: Text(buildStatusText!,
+                              style: TextStyle(
+                                  color:
+                                      Theme.of(context).colorScheme.primary))),
+                    ]),
+                  ],
                   const SizedBox(height: 12),
                   if (plan != null)
                     Expanded(
