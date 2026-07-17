@@ -212,9 +212,15 @@ function validPlan(value: unknown): value is CadPlan {
 function localPlan(prompt: string, context: object): CadPlan {
   const lower = prompt.toLowerCase();
   const table = lower.includes('table') || lower.includes('desk');
+  const chair = lower.includes('chair') || lower.includes('seat');
+  const gear = lower.includes('gear') || lower.includes('sprocket');
+  const boredRound = lower.includes('pipe') || lower.includes('tube') || lower.includes('wheel') || lower.includes('pulley') || lower.includes('bearing');
+  const round = boredRound || lower.includes('cylinder') || lower.includes('shaft') || lower.includes('rod') || lower.includes('disc') || lower.includes('disk') || lower.includes('round');
   const hasProfile = JSON.stringify(context).includes('rectangle');
   const dimensions = table
     ? [{ name: 'width', value: null, unit: 'mm' as const }, { name: 'depth', value: null, unit: 'mm' as const }, { name: 'height', value: null, unit: 'mm' as const }, { name: 'top thickness', value: null, unit: 'mm' as const }]
+    : round || gear
+      ? [{ name: 'diameter', value: null, unit: 'mm' as const }, { name: 'thickness', value: null, unit: 'mm' as const }, ...(gear ? [{ name: 'teeth', value: null, unit: 'mm' as const }] : [])]
     : [{ name: 'primary size', value: null, unit: 'mm' as const }];
   const missingInputs = table
     ? [
@@ -224,6 +230,19 @@ function localPlan(prompt: string, context: object): CadPlan {
         { id: 'topThickness', label: 'Top thickness', question: 'How thick should the tabletop be?', required: false, suggestedValue: '30 mm' },
         { id: 'legStyle', label: 'Leg style', question: 'Which leg style do you prefer?', required: false, suggestedValue: 'Four square legs' },
       ]
+    : gear
+      ? [
+          { id: 'diameter', label: 'Gear diameter', question: 'What outside diameter should the gear use?', required: true, suggestedValue: '300 mm' },
+          { id: 'thickness', label: 'Gear thickness', question: 'How thick should the gear be?', required: false, suggestedValue: '18 mm' },
+          { id: 'teeth', label: 'Teeth', question: 'How many teeth should it have?', required: false, suggestedValue: '18' },
+          { id: 'boreRadius', label: 'Bore radius', question: 'What center bore radius should it use?', required: false, suggestedValue: '35 mm' },
+        ]
+    : round
+      ? [
+          { id: 'diameter', label: 'Diameter', question: 'What outside diameter should it use?', required: true, suggestedValue: '120 mm' },
+          { id: 'length', label: boredRound ? 'Thickness / length' : 'Length', question: 'How long or thick should it be?', required: true, suggestedValue: boredRound ? '30 mm' : '100 mm' },
+          ...(boredRound ? [{ id: 'boreRadius', label: 'Bore radius', question: 'What center bore radius should it use?', required: false, suggestedValue: '20 mm' }] : []),
+        ]
     : [{ id: 'size', label: 'Main dimension', question: 'What primary size should CadPilot use?', required: true, suggestedValue: '100 mm' }];
   const commonStages = ['Confirm dimensions and constraints', 'Generate sketches and closed profiles', 'Create primary solids', 'Add secondary features and joins', 'Validate dimensions', 'Show preview for approval'];
   const tableOptions = [
@@ -231,18 +250,35 @@ function localPlan(prompt: string, context: object): CadPlan {
     ['round-pedestal', 'Round tabletop with pedestal base', 'A circular table with a centred pedestal and stabilising base.'],
     ['desk-drawers', 'Desk-style table with drawers', 'A rectangular work desk with a drawer unit and leg structure.'],
   ];
+  const roundOptions = [
+    ['revolved-solid', boredRound ? 'Round part with center bore' : 'Revolved round solid', boredRound ? 'Create a wheel, pulley, tube, or bearing-like starter with a centered bore.' : 'Create a cylinder, shaft, rod, or disc as an editable revolved solid.'],
+    ['lightened-round', 'Lightweight round part', 'Start with a round body and add holes or cutouts in later stages.'],
+    ['parametric-round', 'Parametric rotational part', 'Keep the round profile dimensions editable for later detail work.'],
+  ];
+  const gearOptions = [
+    ['toothed-gear', 'Toothed gear with center bore', 'Create a toothed gear starter from a circular profile.'],
+    ['gear-train-starter', 'Gear train starter', 'Create one gear first, then add mating gears in the next stage.'],
+    ['sprocket-style', 'Sprocket-style gear', 'Create a toothed wheel prepared for later chain or linkage details.'],
+  ];
+  const furnitureOptions = [
+    ['furniture-starter', 'Furniture starter assembly', 'Create separate starter solids for the main furniture parts.'],
+    ['minimal-furniture', 'Minimal clean furniture', 'Use simple editable solids and add details later.'],
+    ['detailed-furniture', 'Detailed staged furniture', 'Plan joins, legs, supports, and storage as staged features.'],
+  ];
   const genericOptions = [
     ['simple-solid', 'Simple solid starting point', 'Build the smallest manufacturable interpretation first.'],
     ['lightweight', 'Lightweight or hollow design', 'Reduce material while preserving the main form.'],
     ['parametric', 'Parametric detailed design', 'Use editable dimensions and staged secondary features.'],
   ];
+  const options = gear ? gearOptions : round ? roundOptions : table ? tableOptions : chair ? furnitureOptions : genericOptions;
+  const objectType = gear ? 'gear' : round ? (boredRound ? 'bored round part' : 'round part') : table ? 'table' : chair ? 'furniture' : 'custom CAD part';
   return {
     schemaVersion: 1,
     planId: `local-${Date.now()}`,
-    summary: table ? 'I can create this as a table design. Choose a construction approach and confirm the essential dimensions.' : `I extracted a buildable path for: ${prompt.trim()}`,
-    extracted: { objectType: table ? 'table' : 'custom CAD part', style: lower.includes('modern') ? 'modern' : null, dimensions, constraints: [] },
+    summary: table ? 'I can create this as a table design. Choose a construction approach and confirm the essential dimensions.' : `I extracted a buildable CAD path for: ${prompt.trim()}`,
+    extracted: { objectType, style: lower.includes('modern') ? 'modern' : null, dimensions, constraints: [] },
     missingInputs,
-    options: (table ? tableOptions : genericOptions).map(([id, title, description], index) => ({ id, title, description, stages: commonStages, assumptions: ['Dimensions are millimetres.', 'The final model requires preview approval.'], executableNow: hasProfile && index === 0, preparation: hasProfile ? [] : ['Create or select the required closed sketch profiles before geometry generation.'] })),
+    options: options.map(([id, title, description], index) => ({ id, title, description, stages: commonStages, assumptions: ['Dimensions are millimetres.', 'The final model requires preview approval.'], executableNow: hasProfile && index === 0, preparation: hasProfile ? [] : ['Create or select the required closed sketch profiles before geometry generation.'] })),
     canUseDefaults: true,
   };
 }

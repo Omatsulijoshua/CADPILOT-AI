@@ -25,6 +25,8 @@ typedef AiPlanCommandGenerator = Future<AiGeneratedDraft> Function(
 
 const maxAiPromptCharacters = 2000;
 
+enum _StarterFamily { rectangular, round, boredRound, gear, furniture }
+
 class AiCommandDecision {
   const AiCommandDecision({required this.record, this.model, this.sketch});
   final AiCommandRecord record;
@@ -207,21 +209,28 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         dimensions[question.id.toLowerCase()] = double.parse(parsed.group(1)!);
       }
     }
-    final width = dimensions['width'] ?? dimensions['tablewidth'] ?? 1200;
+    final width = dimensions['width'] ??
+        dimensions['tablewidth'] ??
+        dimensions['size'] ??
+        1200;
     final depth = dimensions['depth'] ?? dimensions['tabledepth'] ?? 600;
+    final height = dimensions['height'] ??
+        dimensions['thickness'] ??
+        dimensions['length'] ??
+        80;
     final chairWidth = dimensions['chairwidth'] ?? 500;
     final chairDepth = dimensions['chairdepth'] ?? 500;
-    final text =
-        '${prompt.text} ${current.summary} ${current.objectType} ${current.style ?? ''} ${option.title} ${option.description}'
-            .toLowerCase();
+    final text = _planText(current, option);
+    final family = _starterFamily(text);
     final needsTable = text.contains('table') || text.contains('desk');
     final needsChair = text.contains('chair') || text.contains('seat');
-    final needsGear = text.contains('gear') ||
-        text.contains('mechanism') ||
-        text.contains('drive');
+    final needsGear = family == _StarterFamily.gear;
+    final needsRound =
+        family == _StarterFamily.round || family == _StarterFamily.boredRound;
     final targetRectangles = [
-      if (needsTable || (!needsChair && !needsGear)) 'table',
+      if (needsTable || (!needsChair && !needsGear && !needsRound)) 'table',
       if (needsChair) 'chair',
+      if (needsRound) 'round',
     ];
     final existingRectangles = widget.sketch.entities
         .where((item) => item.kind == SketchEntityKind.rectangle)
@@ -244,18 +253,36 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         index < targetRectangles.length;
         index += 1) {
       final target = targetRectangles[index];
-      final rectWidth = target == 'chair' ? chairWidth : width;
-      final rectDepth = target == 'chair' ? chairDepth : depth;
+      final rectWidth = target == 'chair'
+          ? chairWidth
+          : target == 'round'
+              ? (width / 2).clamp(20, 2000).toDouble()
+              : width;
+      final rectDepth = target == 'chair'
+          ? chairDepth
+          : target == 'round'
+              ? height.clamp(5, 1000).toDouble()
+              : depth;
       entities.add(SketchEntity(
           id: const Uuid().v4(),
           kind: SketchEntityKind.rectangle,
           start: Offset(cursorX, 0),
           end: Offset(cursorX + rectWidth, rectDepth),
           dimensionLocked: true));
+      if (target == 'round' && family == _StarterFamily.boredRound) {
+        final boreRadius =
+            (rectWidth * 0.22).clamp(2, rectWidth * 0.7).toDouble();
+        entities.add(SketchEntity(
+            id: const Uuid().v4(),
+            kind: SketchEntityKind.circle,
+            start: Offset(cursorX, rectWidth),
+            end: Offset(cursorX + boreRadius, rectWidth),
+            dimensionLocked: true));
+      }
       cursorX += rectWidth + 160;
     }
     if (needsGear && !hasGearProfile) {
-      const gearRadius = 150.0;
+      final gearRadius = (width / 2).clamp(50, 500).toDouble();
       entities.add(SketchEntity(
           id: const Uuid().v4(),
           kind: SketchEntityKind.circle,
@@ -278,12 +305,11 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         .toList();
     final circles =
         sketch.entities.where((item) => item.kind == SketchEntityKind.circle);
-    final text =
-        '${prompt.text} ${current.summary} ${current.objectType} ${current.style ?? ''} ${option.title} ${option.description}'
-            .toLowerCase();
-    final needsGear = text.contains('gear') ||
-        text.contains('mechanism') ||
-        text.contains('drive');
+    final text = _planText(current, option);
+    final family = _starterFamily(text);
+    final needsGear = family == _StarterFamily.gear;
+    final needsRound =
+        family == _StarterFamily.round || family == _StarterFamily.boredRound;
     if (rectangles.isEmpty && (!needsGear || circles.isEmpty)) {
       throw const FormatException('Create or approve a starter profile first.');
     }
@@ -292,6 +318,24 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
     final operations = <Map<String, Object?>>[];
     for (var index = 0; index < rectangles.length; index += 1) {
       final profile = rectangles[index];
+      if (needsRound && index == rectangles.length - 1) {
+        operations.add({
+          'operationId': const Uuid().v4(),
+          'type': 'revolve',
+          'parameters': {'profileId': profile.id, 'angle': 360}
+        });
+        if (family == _StarterFamily.boredRound && circles.isNotEmpty) {
+          operations.add({
+            'operationId': const Uuid().v4(),
+            'type': 'cut',
+            'parameters': {
+              'profileId': circles.last.id,
+              'depth': profile.secondaryDimension ?? profile.primaryDimension
+            }
+          });
+        }
+        continue;
+      }
       final label = index == 0
           ? 'table starter solid'
           : index == 1
@@ -350,6 +394,39 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
       if (parsed != null) return double.parse(parsed.group(1)!);
     }
     return null;
+  }
+
+  String _planText(AiDesignPlan current, AiPlanOption option) =>
+      '${prompt.text} ${current.summary} ${current.objectType} ${current.style ?? ''} ${option.title} ${option.description}'
+          .toLowerCase();
+
+  _StarterFamily _starterFamily(String text) {
+    if (text.contains('gear') || text.contains('sprocket')) {
+      return _StarterFamily.gear;
+    }
+    if (text.contains('pipe') ||
+        text.contains('tube') ||
+        text.contains('wheel') ||
+        text.contains('pulley') ||
+        text.contains('bearing') ||
+        text.contains('donut')) {
+      return _StarterFamily.boredRound;
+    }
+    if (text.contains('cylinder') ||
+        text.contains('shaft') ||
+        text.contains('rod') ||
+        text.contains('disc') ||
+        text.contains('disk') ||
+        text.contains('round')) {
+      return _StarterFamily.round;
+    }
+    if (text.contains('table') ||
+        text.contains('desk') ||
+        text.contains('chair') ||
+        text.contains('seat')) {
+      return _StarterFamily.furniture;
+    }
+    return _StarterFamily.rectangular;
   }
 
   bool get requiredAnswersComplete {
