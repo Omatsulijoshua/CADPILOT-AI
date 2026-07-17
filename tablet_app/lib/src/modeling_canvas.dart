@@ -46,7 +46,7 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
   final viewportKey = GlobalKey();
   int? selectedFace;
   int? selectedEdge;
-  AssemblyViewMode assemblyMode = AssemblyViewMode.cad;
+  AssemblyViewMode assemblyMode = AssemblyViewMode.assembled;
   final evaluator = const ModelEvaluator();
   @override
   void initState() {
@@ -68,6 +68,8 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
   EvaluatedSolid? get solid => evaluator.evaluate(widget.sketch, model);
   SolidMeasurements? get measurements =>
       solid == null ? null : SolidMeasurements.from(solid!, model.material);
+  AssemblyViewMode get effectiveAssemblyMode =>
+      assemblyParts.length > 1 ? assemblyMode : AssemblyViewMode.cad;
 
   List<AssemblyPart> get assemblyParts {
     final parts = <AssemblyPart>[];
@@ -129,7 +131,7 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
   }
 
   void selectAt(TapUpDetails details) {
-    if (assemblyMode != AssemblyViewMode.cad) return;
+    if (effectiveAssemblyMode != AssemblyViewMode.cad) return;
     final current = solid;
     final box = viewportKey.currentContext?.findRenderObject() as RenderBox?;
     if (current == null || box == null) return;
@@ -773,7 +775,7 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                         painter: SolidPainter(
                             solid: solid,
                             parts: assemblyParts,
-                            assemblyMode: assemblyMode,
+                            assemblyMode: effectiveAssemblyMode,
                             yaw: yaw,
                             pitch: pitch,
                             zoom: zoom,
@@ -878,9 +880,10 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                               padding: const EdgeInsets.all(10),
                               child: Text(solid == null
                                   ? 'No solid | Extrude a rectangle profile'
-                                  : assemblyMode == AssemblyViewMode.cad
+                                  : effectiveAssemblyMode ==
+                                          AssemblyViewMode.cad
                                       ? '${solid!.width.toStringAsFixed(1)} x ${solid!.height.toStringAsFixed(1)} x ${solid!.depth.toStringAsFixed(1)} mm^3'
-                                      : '${assemblyParts.length} assembly parts | ${assemblyMode.name} view')))),
+                                      : '${assemblyParts.length} assembly parts | ${effectiveAssemblyMode.name} view')))),
                 ]))),
         SizedBox(
             width: 250,

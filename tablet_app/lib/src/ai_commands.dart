@@ -156,6 +156,10 @@ class AiCommandEngine {
               kind: ModelOperationKind.extrude,
               profileId: profile.id,
               depth: depth,
+              name: p['name'] is String &&
+                      (p['name']! as String).trim().isNotEmpty
+                  ? (p['name']! as String).trim()
+                  : null,
               createdAt: DateTime.now().toUtc()));
           summaries
               .add('Extrude ${profile.id} by ${depth.toStringAsFixed(1)} mm');
@@ -188,6 +192,10 @@ class AiCommandEngine {
               kind: ModelOperationKind.revolve,
               profileId: profile.id,
               depth: angle,
+              name: p['name'] is String &&
+                      (p['name']! as String).trim().isNotEmpty
+                  ? (p['name']! as String).trim()
+                  : null,
               createdAt: DateTime.now().toUtc()));
           summaries.add('Revolve ${profile.id} through 360 degrees');
         case 'gear':
@@ -210,6 +218,10 @@ class AiCommandEngine {
               depth: depth,
               instanceCount: teeth,
               spacing: boreRadius,
+              name: p['name'] is String &&
+                      (p['name']! as String).trim().isNotEmpty
+                  ? (p['name']! as String).trim()
+                  : null,
               createdAt: DateTime.now().toUtc()));
           summaries.add(
               'Create $teeth-tooth gear ${profile.id} at ${depth.toStringAsFixed(1)} mm thick');
