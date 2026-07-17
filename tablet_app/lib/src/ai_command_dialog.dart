@@ -25,7 +25,17 @@ typedef AiPlanCommandGenerator = Future<AiGeneratedDraft> Function(
 
 const maxAiPromptCharacters = 2000;
 
-enum _StarterFamily { rectangular, round, boredRound, gear, furniture }
+enum _StarterFamily {
+  rectangular,
+  round,
+  boredRound,
+  gear,
+  coil,
+  motor,
+  solarGenerator,
+  hardwareSystem,
+  furniture
+}
 
 class AiCommandDecision {
   const AiCommandDecision({required this.record, this.model, this.sketch});
@@ -227,6 +237,25 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
     final needsGear = family == _StarterFamily.gear;
     final needsRound =
         family == _StarterFamily.round || family == _StarterFamily.boredRound;
+    final needsSystem = family == _StarterFamily.solarGenerator ||
+        family == _StarterFamily.motor ||
+        family == _StarterFamily.coil ||
+        family == _StarterFamily.hardwareSystem;
+    if (needsSystem) {
+      final prepared = _preparedHardwareSystemSketch(
+          family: family,
+          width: width,
+          depth: depth,
+          height: height,
+          existingRectangles: widget.sketch.entities
+              .where((item) => item.kind == SketchEntityKind.rectangle)
+              .toList(),
+          hasCircle: widget.sketch.entities
+              .any((item) => item.kind == SketchEntityKind.circle));
+      if (prepared.isEmpty) return widget.sketch;
+      return widget.sketch
+          .copyWith(entities: [...widget.sketch.entities, ...prepared]);
+    }
     final targetRectangles = [
       if (needsTable || (!needsChair && !needsGear && !needsRound)) 'table',
       if (needsChair) 'chair',
@@ -294,6 +323,82 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         .copyWith(entities: [...widget.sketch.entities, ...entities]);
   }
 
+  List<SketchEntity> _preparedHardwareSystemSketch({
+    required _StarterFamily family,
+    required double width,
+    required double depth,
+    required double height,
+    required List<SketchEntity> existingRectangles,
+    required bool hasCircle,
+  }) {
+    if (existingRectangles.length >= 3 && hasCircle) return const [];
+    final entities = <SketchEntity>[];
+    var cursorX = existingRectangles.isEmpty
+        ? 0.0
+        : existingRectangles
+                .map((item) =>
+                    item.end.dx > item.start.dx ? item.end.dx : item.start.dx)
+                .reduce((a, b) => a > b ? a : b) +
+            140;
+    void addRect(double w, double d) {
+      entities.add(SketchEntity(
+          id: const Uuid().v4(),
+          kind: SketchEntityKind.rectangle,
+          start: Offset(cursorX, 0),
+          end: Offset(cursorX + w, d),
+          dimensionLocked: true));
+      cursorX += w + 120;
+    }
+
+    switch (family) {
+      case _StarterFamily.solarGenerator:
+        addRect(width.clamp(300, 1600).toDouble(),
+            depth.clamp(180, 900).toDouble());
+        addRect((width * 0.32).clamp(120, 500).toDouble(),
+            (depth * 0.62).clamp(100, 500).toDouble());
+        addRect((width * 0.24).clamp(100, 420).toDouble(),
+            (depth * 0.46).clamp(80, 420).toDouble());
+        break;
+      case _StarterFamily.motor:
+        addRect(
+            width.clamp(180, 800).toDouble(), depth.clamp(120, 500).toDouble());
+        if (!hasCircle) {
+          final radius = (width * 0.18).clamp(40, 180).toDouble();
+          entities.add(SketchEntity(
+              id: const Uuid().v4(),
+              kind: SketchEntityKind.circle,
+              start: Offset(cursorX + radius, radius),
+              end: Offset(cursorX + radius * 2, radius),
+              dimensionLocked: true));
+        }
+        break;
+      case _StarterFamily.coil:
+        addRect((width * 0.45).clamp(80, 600).toDouble(),
+            height.clamp(20, 240).toDouble());
+        if (!hasCircle) {
+          final radius = (width * 0.12).clamp(12, 120).toDouble();
+          entities.add(SketchEntity(
+              id: const Uuid().v4(),
+              kind: SketchEntityKind.circle,
+              start: Offset(cursorX, radius * 2),
+              end: Offset(cursorX + radius, radius * 2),
+              dimensionLocked: true));
+        }
+        break;
+      case _StarterFamily.hardwareSystem:
+        addRect(width.clamp(160, 1200).toDouble(),
+            depth.clamp(120, 800).toDouble());
+        addRect((width * 0.38).clamp(80, 500).toDouble(),
+            (depth * 0.55).clamp(80, 400).toDouble());
+        addRect((width * 0.26).clamp(60, 360).toDouble(),
+            (depth * 0.38).clamp(60, 300).toDouble());
+        break;
+      case _:
+        break;
+    }
+    return entities;
+  }
+
   Map<String, Object?> starterCommandForPlan(
       SketchDocument sketch,
       AiDesignPlan current,
@@ -310,6 +415,10 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
     final needsGear = family == _StarterFamily.gear;
     final needsRound =
         family == _StarterFamily.round || family == _StarterFamily.boredRound;
+    final isHardwareSystem = family == _StarterFamily.solarGenerator ||
+        family == _StarterFamily.hardwareSystem;
+    final isMotorOrCoil =
+        family == _StarterFamily.motor || family == _StarterFamily.coil;
     if (rectangles.isEmpty && (!needsGear || circles.isEmpty)) {
       throw const FormatException('Create or approve a starter profile first.');
     }
@@ -318,13 +427,14 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
     final operations = <Map<String, Object?>>[];
     for (var index = 0; index < rectangles.length; index += 1) {
       final profile = rectangles[index];
-      if (needsRound && index == rectangles.length - 1) {
+      if ((needsRound || isMotorOrCoil) && index == rectangles.length - 1) {
         operations.add({
           'operationId': const Uuid().v4(),
           'type': 'revolve',
           'parameters': {'profileId': profile.id, 'angle': 360}
         });
-        if (family == _StarterFamily.boredRound && circles.isNotEmpty) {
+        if ((family == _StarterFamily.boredRound || isMotorOrCoil) &&
+            circles.isNotEmpty) {
           operations.add({
             'operationId': const Uuid().v4(),
             'type': 'cut',
@@ -337,18 +447,30 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         continue;
       }
       final label = index == 0
-          ? 'table starter solid'
+          ? isHardwareSystem
+              ? 'system enclosure starter'
+              : 'table starter solid'
           : index == 1
-              ? 'chair starter solid'
+              ? isHardwareSystem
+                  ? 'energy/control module starter'
+                  : 'chair starter solid'
               : index == 2
-                  ? 'gear-system starter solid'
+                  ? isHardwareSystem
+                      ? 'interface/subsystem starter'
+                      : 'gear-system starter solid'
                   : 'starter solid';
       final depth = index == 0
-          ? thickness
+          ? isHardwareSystem
+              ? (family == _StarterFamily.solarGenerator ? 90.0 : 45.0)
+              : thickness
           : index == 1
-              ? 45.0
+              ? isHardwareSystem
+                  ? 55.0
+                  : 45.0
               : index == 2
-                  ? 60.0
+                  ? isHardwareSystem
+                      ? 35.0
+                      : 60.0
                   : 25.0;
       operations.add({
         'operationId': const Uuid().v4(),
@@ -376,7 +498,10 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
       'operations': operations,
       'assumptions': [
         'This is a multi-object starter CAD stage generated from the approved plan.',
-        'Separate starter profiles are used so table, chair, and gear-system requests do not collapse into one cube.',
+        family == _StarterFamily.solarGenerator ||
+                family == _StarterFamily.hardwareSystem
+            ? 'Complex hardware systems start as subsystem CAD blocks before detailed parts are generated.'
+            : 'Separate starter profiles are used so table, chair, and gear-system requests do not collapse into one cube.',
         if (current.canUseDefaults)
           'Sensible default dimensions are used where the prompt did not provide exact measurements.',
         ...option.assumptions,
@@ -401,6 +526,36 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
           .toLowerCase();
 
   _StarterFamily _starterFamily(String text) {
+    if (text.contains('solar generator') ||
+        text.contains('solar gen') ||
+        text.contains('power station') ||
+        text.contains('solar power') ||
+        text.contains('battery generator')) {
+      return _StarterFamily.solarGenerator;
+    }
+    if (text.contains('electric motor') ||
+        text.contains('electric moto') ||
+        text.contains('generator motor') ||
+        text.contains('alternator') ||
+        text.contains('rotor') ||
+        text.contains('stator')) {
+      return _StarterFamily.motor;
+    }
+    if (text.contains('coil') ||
+        text.contains('solenoid') ||
+        text.contains('winding') ||
+        text.contains('inductor') ||
+        text.contains('electromagnet')) {
+      return _StarterFamily.coil;
+    }
+    if (text.contains('hardware system') ||
+        text.contains('new system') ||
+        text.contains('brainstorm') ||
+        text.contains('machine') ||
+        text.contains('device') ||
+        text.contains('mechanism')) {
+      return _StarterFamily.hardwareSystem;
+    }
     if (text.contains('gear') || text.contains('sprocket')) {
       return _StarterFamily.gear;
     }

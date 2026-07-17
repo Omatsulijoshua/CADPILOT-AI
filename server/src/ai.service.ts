@@ -213,16 +213,51 @@ function localPlan(prompt: string, context: object): CadPlan {
   const lower = prompt.toLowerCase();
   const table = lower.includes('table') || lower.includes('desk');
   const chair = lower.includes('chair') || lower.includes('seat');
+  const solarSystem = lower.includes('solar generator') || lower.includes('solar gen') || lower.includes('solar power') || lower.includes('power station') || lower.includes('battery generator');
+  const motorSystem = lower.includes('electric motor') || lower.includes('electric moto') || lower.includes('alternator') || lower.includes('rotor') || lower.includes('stator');
+  const coilSystem = lower.includes('coil') || lower.includes('solenoid') || lower.includes('winding') || lower.includes('inductor') || lower.includes('electromagnet');
+  const hardwareSystem = solarSystem || motorSystem || coilSystem || lower.includes('hardware system') || lower.includes('new system') || lower.includes('brainstorm') || lower.includes('machine') || lower.includes('device') || lower.includes('mechanism');
   const gear = lower.includes('gear') || lower.includes('sprocket');
   const boredRound = lower.includes('pipe') || lower.includes('tube') || lower.includes('wheel') || lower.includes('pulley') || lower.includes('bearing');
   const round = boredRound || lower.includes('cylinder') || lower.includes('shaft') || lower.includes('rod') || lower.includes('disc') || lower.includes('disk') || lower.includes('round');
   const hasProfile = JSON.stringify(context).includes('rectangle');
-  const dimensions = table
+  const dimensions = solarSystem
+    ? [{ name: 'enclosure width', value: null, unit: 'mm' as const }, { name: 'enclosure depth', value: null, unit: 'mm' as const }, { name: 'power target', value: null, unit: 'mm' as const }]
+    : motorSystem || coilSystem
+      ? [{ name: 'outside diameter', value: null, unit: 'mm' as const }, { name: 'length', value: null, unit: 'mm' as const }, { name: 'shaft or bore radius', value: null, unit: 'mm' as const }]
+    : hardwareSystem
+      ? [{ name: 'main envelope', value: null, unit: 'mm' as const }, { name: 'subsystems', value: null, unit: 'mm' as const }]
+    : table
     ? [{ name: 'width', value: null, unit: 'mm' as const }, { name: 'depth', value: null, unit: 'mm' as const }, { name: 'height', value: null, unit: 'mm' as const }, { name: 'top thickness', value: null, unit: 'mm' as const }]
     : round || gear
       ? [{ name: 'diameter', value: null, unit: 'mm' as const }, { name: 'thickness', value: null, unit: 'mm' as const }, ...(gear ? [{ name: 'teeth', value: null, unit: 'mm' as const }] : [])]
     : [{ name: 'primary size', value: null, unit: 'mm' as const }];
-  const missingInputs = table
+  const missingInputs = solarSystem
+    ? [
+        { id: 'width', label: 'Enclosure width', question: 'How wide should the portable solar generator enclosure be?', required: true, suggestedValue: '600 mm' },
+        { id: 'depth', label: 'Enclosure depth', question: 'How deep should the enclosure be?', required: true, suggestedValue: '360 mm' },
+        { id: 'powerTarget', label: 'Power target', question: 'What power target should the system be planned around?', required: false, suggestedValue: '1000 W' },
+        { id: 'batteryType', label: 'Battery type', question: 'Which battery chemistry should the layout assume?', required: false, suggestedValue: 'LiFePO4' },
+      ]
+    : motorSystem
+      ? [
+          { id: 'diameter', label: 'Motor diameter', question: 'What outside motor diameter should the first layout use?', required: true, suggestedValue: '120 mm' },
+          { id: 'length', label: 'Motor length', question: 'How long should the motor body be?', required: true, suggestedValue: '160 mm' },
+          { id: 'boreRadius', label: 'Shaft radius', question: 'What shaft radius should it use?', required: false, suggestedValue: '12 mm' },
+        ]
+    : coilSystem
+      ? [
+          { id: 'diameter', label: 'Coil diameter', question: 'What coil outside diameter should it use?', required: true, suggestedValue: '80 mm' },
+          { id: 'length', label: 'Coil length', question: 'How long should the coil/spool be?', required: true, suggestedValue: '60 mm' },
+          { id: 'boreRadius', label: 'Core radius', question: 'What core radius should it use?', required: false, suggestedValue: '15 mm' },
+        ]
+    : hardwareSystem
+      ? [
+          { id: 'width', label: 'System width', question: 'What main envelope width should CadPilot start with?', required: true, suggestedValue: '300 mm' },
+          { id: 'depth', label: 'System depth', question: 'What main envelope depth should CadPilot start with?', required: true, suggestedValue: '220 mm' },
+          { id: 'goal', label: 'System goal', question: 'What should this hardware system do?', required: false, suggestedValue: 'Describe the function in one sentence' },
+        ]
+    : table
     ? [
         { id: 'width', label: 'Width', question: 'How wide should it be?', required: true, suggestedValue: '1200 mm' },
         { id: 'depth', label: 'Depth', question: 'How deep should it be?', required: true, suggestedValue: '600 mm' },
@@ -250,6 +285,26 @@ function localPlan(prompt: string, context: object): CadPlan {
     ['round-pedestal', 'Round tabletop with pedestal base', 'A circular table with a centred pedestal and stabilising base.'],
     ['desk-drawers', 'Desk-style table with drawers', 'A rectangular work desk with a drawer unit and leg structure.'],
   ];
+  const solarOptions = [
+    ['portable-solar-generator', 'Portable solar generator layout', 'Plan enclosure, battery bay, inverter bay, charge controller, cooling, and external ports.'],
+    ['modular-power-station', 'Modular power-station architecture', 'Split the system into swappable battery, control, inverter, and input/output modules.'],
+    ['rugged-field-generator', 'Rugged field solar generator', 'Prioritize handles, airflow, protected connectors, and serviceable internal modules.'],
+  ];
+  const motorOptions = [
+    ['electric-motor-starter', 'Electric motor starter layout', 'Create rotor/stator/shaft starter geometry and plan the next coil and housing stages.'],
+    ['generator-alternator-starter', 'Generator / alternator layout', 'Plan rotating shaft, stator ring, coil zone, and mounting frame.'],
+    ['compact-motor-module', 'Compact motor module', 'Design a compact motor body with shaft, end caps, and mounting envelope.'],
+  ];
+  const coilOptions = [
+    ['coil-spool-starter', 'Coil and spool starter', 'Create a coil/spool body with a central core and winding envelope.'],
+    ['solenoid-module', 'Solenoid module', 'Plan coil, plunger/core, sleeve, and mount as staged components.'],
+    ['electromagnet-starter', 'Electromagnet starter', 'Plan core, winding area, terminals, and casing.'],
+  ];
+  const systemOptions = [
+    ['brainstorm-system-layout', 'Brainstormed hardware system layout', 'Turn the idea into functional blocks, interfaces, and a first CAD envelope.'],
+    ['modular-subsystems', 'Modular subsystem architecture', 'Split the design into modules that can be created and tested one at a time.'],
+    ['prototype-ready-layout', 'Prototype-ready hardware layout', 'Prioritize manufacturable block geometry, mounting zones, and service access.'],
+  ];
   const roundOptions = [
     ['revolved-solid', boredRound ? 'Round part with center bore' : 'Revolved round solid', boredRound ? 'Create a wheel, pulley, tube, or bearing-like starter with a centered bore.' : 'Create a cylinder, shaft, rod, or disc as an editable revolved solid.'],
     ['lightened-round', 'Lightweight round part', 'Start with a round body and add holes or cutouts in later stages.'],
@@ -270,12 +325,12 @@ function localPlan(prompt: string, context: object): CadPlan {
     ['lightweight', 'Lightweight or hollow design', 'Reduce material while preserving the main form.'],
     ['parametric', 'Parametric detailed design', 'Use editable dimensions and staged secondary features.'],
   ];
-  const options = gear ? gearOptions : round ? roundOptions : table ? tableOptions : chair ? furnitureOptions : genericOptions;
-  const objectType = gear ? 'gear' : round ? (boredRound ? 'bored round part' : 'round part') : table ? 'table' : chair ? 'furniture' : 'custom CAD part';
+  const options = solarSystem ? solarOptions : motorSystem ? motorOptions : coilSystem ? coilOptions : hardwareSystem ? systemOptions : gear ? gearOptions : round ? roundOptions : table ? tableOptions : chair ? furnitureOptions : genericOptions;
+  const objectType = solarSystem ? 'solar generator hardware system' : motorSystem ? 'electric motor / generator system' : coilSystem ? 'coil / electromagnetic system' : hardwareSystem ? 'custom hardware system' : gear ? 'gear' : round ? (boredRound ? 'bored round part' : 'round part') : table ? 'table' : chair ? 'furniture' : 'custom CAD part';
   return {
     schemaVersion: 1,
     planId: `local-${Date.now()}`,
-    summary: table ? 'I can create this as a table design. Choose a construction approach and confirm the essential dimensions.' : `I extracted a buildable CAD path for: ${prompt.trim()}`,
+    summary: hardwareSystem ? `I can help brainstorm and turn this into a staged hardware CAD system: ${prompt.trim()}` : table ? 'I can create this as a table design. Choose a construction approach and confirm the essential dimensions.' : `I extracted a buildable CAD path for: ${prompt.trim()}`,
     extracted: { objectType, style: lower.includes('modern') ? 'modern' : null, dimensions, constraints: [] },
     missingInputs,
     options: options.map(([id, title, description], index) => ({ id, title, description, stages: commonStages, assumptions: ['Dimensions are millimetres.', 'The final model requires preview approval.'], executableNow: hasProfile && index === 0, preparation: hasProfile ? [] : ['Create or select the required closed sketch profiles before geometry generation.'] })),
@@ -348,7 +403,7 @@ export class AiService {
     for (const configuredKey of await this.groqKeys()) {
       try {
         const model = process.env.GROQ_CAD_MODEL ?? 'llama-3.3-70b-versatile';
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${this.vault.decrypt(configuredKey.encryptedKey)}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: `You are CadPilot's design planner. Return JSON only. Extract intent and dimensions, ask only critical questions, and offer exactly 2 or 3 viable options. Never claim unsupported geometry is already executable. Use this exact shape: ${JSON.stringify(fallback)}` }, { role: 'user', content: input }] }), signal: AbortSignal.timeout(timeoutMs(process.env.OPENAI_TIMEOUT_MS)) });
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${this.vault.decrypt(configuredKey.encryptedKey)}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: `You are CadPilot's design planner. Return JSON only. Extract intent and dimensions, ask only critical questions, and offer exactly 2 or 3 viable options. For complex hardware systems such as solar generators, coils, electric motors, mechanisms, machines, or brainstormed inventions, plan the design as functional subsystems first: enclosure/envelope, energy or motion source, control module, interface/mounting, cooling/safety, then staged CAD geometry. Never claim unsupported geometry is already executable. Use this exact shape: ${JSON.stringify(fallback)}` }, { role: 'user', content: input }] }), signal: AbortSignal.timeout(timeoutMs(process.env.OPENAI_TIMEOUT_MS)) });
         if (!response.ok) continue;
         const decoded = await response.json() as ChatResponse;
         const choice = Array.isArray(decoded.choices) ? decoded.choices[0] : null;
