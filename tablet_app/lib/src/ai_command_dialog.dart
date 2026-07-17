@@ -379,7 +379,11 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
     required List<SketchEntity> existingRectangles,
     required bool hasCircle,
   }) {
-    final requiredRectangles = family == _StarterFamily.generatorSet ? 6 : 3;
+    final requiredRectangles = family == _StarterFamily.generatorSet
+        ? 6
+        : family == _StarterFamily.hardwareSystem
+            ? 5
+            : 3;
     if (existingRectangles.length >= requiredRectangles && hasCircle) {
       return const [];
     }
@@ -466,6 +470,10 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
             (depth * 0.55).clamp(80, 400).toDouble());
         addRect((width * 0.26).clamp(60, 360).toDouble(),
             (depth * 0.38).clamp(60, 300).toDouble());
+        addRect((width * 0.18).clamp(50, 260).toDouble(),
+            (depth * 0.28).clamp(50, 220).toDouble());
+        addRect((width * 0.22).clamp(60, 320).toDouble(),
+            (depth * 0.18).clamp(40, 180).toDouble());
         break;
       case _:
         break;
@@ -548,7 +556,11 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
                       ? isHardwareSystem
                           ? 'interface/subsystem starter'
                           : 'gear-system starter solid'
-                      : 'starter solid';
+                      : index == 3 && isHardwareSystem
+                          ? 'mounting / safety module starter'
+                          : index == 4 && isHardwareSystem
+                              ? 'future expansion module starter'
+                              : 'starter solid';
       final depth = isGeneratorSet
           ? _generatorSetComponentDepth(index)
           : index == 0
@@ -563,7 +575,11 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
                       ? isHardwareSystem
                           ? 35.0
                           : 60.0
-                      : 25.0;
+                      : index == 3 && isHardwareSystem
+                          ? 30.0
+                          : index == 4 && isHardwareSystem
+                              ? 24.0
+                              : 25.0;
       operations.add({
         'operationId': const Uuid().v4(),
         'type': 'extrude',
@@ -671,7 +687,19 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
       return _StarterFamily.coil;
     }
     if (text.contains('hardware system') ||
+        text.contains('new hardware') ||
+        text.contains('custom hardware') ||
         text.contains('new system') ||
+        text.contains('from scratch') ||
+        text.contains('scratch') ||
+        text.contains('invent') ||
+        text.contains('invention') ||
+        text.contains('prototype') ||
+        text.contains('vibe') ||
+        text.contains('correct') ||
+        text.contains('refine') ||
+        text.contains('improve') ||
+        text.contains('keep adding') ||
         text.contains('brainstorm') ||
         text.contains('machine') ||
         text.contains('device') ||
@@ -795,7 +823,7 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         title: const Row(children: [
           Icon(Icons.auto_awesome),
           SizedBox(width: 10),
-          Text('AI command preview')
+          Text('AI command / vibe CAD')
         ]),
         content: SizedBox(
             width: 720,
@@ -804,7 +832,7 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                      'Commands are validated locally and cannot change the model until you apply the preview.'),
+                      'Create from scratch, correct, add modules, and keep building through prompts. Commands are validated locally and apply only after preview approval.'),
                   const SizedBox(height: 12),
                   Row(children: [
                     Expanded(
@@ -820,7 +848,7 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
                         hintText: (widget.planGenerator ?? widget.generator) ==
                                 null
                             ? 'Sign in to generate commands from natural language.'
-                            : 'Create a moderate table',
+                            : 'Invent a portable seed-sorting machine from scratch, then I will keep adding and correcting it',
                       ),
                     )),
                     const SizedBox(width: 10),

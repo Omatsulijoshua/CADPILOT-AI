@@ -233,6 +233,8 @@ function commandSystemPrompt(): string {
     'Every operation.parameters object must include all keys from the schema. Use null for unused parameter fields.',
     'Use only geometry IDs that already exist in the supplied context. Do not invent profile, sketch, model, or operation IDs from outside the context.',
     'For broad or multi-stage plans, generate only the next currently executable CAD stage from the selected plan.',
+    'For iterative invention prompts, preserve existing model intent and add, rename, refine, or safely delete only the requested next part. Do not restart the whole design unless the user asks.',
+    'For brand-new hardware with no known real-world reference, infer functional modules from the prompt: structure, motion/energy source, control/interface, mounting, safety, service access, and future expansion.',
     'All dimensions are millimetres. requiresConfirmation must be true.',
   ].join(' ');
 }
@@ -294,18 +296,24 @@ function validPlan(value: unknown): value is CadPlan {
 
 function localPlan(prompt: string, context: object): CadPlan {
   const lower = prompt.toLowerCase();
+  const contextText = JSON.stringify(context).toLowerCase();
+  const hasExistingModel = contextText.includes('"operations"') && !contextText.includes('"operations":[]');
+  const invention = lower.includes('from scratch') || lower.includes('invent') || lower.includes('invention') || lower.includes('prototype') || lower.includes('vibe') || lower.includes('new hardware') || lower.includes('custom hardware') || lower.includes('not exist') || lower.includes('does not exist') || lower.includes('scratch');
+  const iteration = hasExistingModel && (lower.includes('add ') || lower.includes('correct') || lower.includes('change') || lower.includes('fix') || lower.includes('improve') || lower.includes('refine') || lower.includes('remove') || lower.includes('make it') || lower.includes('keep adding'));
   const table = lower.includes('table') || lower.includes('desk');
   const chair = lower.includes('chair') || lower.includes('seat');
   const generatorSet = lower.includes('generator set') || lower.includes('genset') || lower.includes('gen set') || lower.includes('petrol generator') || lower.includes('diesel generator') || lower.includes('gas generator') || lower.includes('generator without cover') || lower.includes('without outside cover') || lower.includes('no outside cover');
   const solarSystem = lower.includes('solar generator') || lower.includes('solar gen') || lower.includes('solar power') || lower.includes('power station') || lower.includes('battery generator');
   const motorSystem = lower.includes('electric motor') || lower.includes('electric moto') || lower.includes('alternator') || lower.includes('rotor') || lower.includes('stator');
   const coilSystem = lower.includes('coil') || lower.includes('solenoid') || lower.includes('winding') || lower.includes('inductor') || lower.includes('electromagnet');
-  const hardwareSystem = generatorSet || solarSystem || motorSystem || coilSystem || lower.includes('hardware system') || lower.includes('new system') || lower.includes('brainstorm') || lower.includes('machine') || lower.includes('device') || lower.includes('mechanism');
+  const hardwareSystem = invention || iteration || generatorSet || solarSystem || motorSystem || coilSystem || lower.includes('hardware system') || lower.includes('new system') || lower.includes('brainstorm') || lower.includes('machine') || lower.includes('device') || lower.includes('mechanism');
   const gear = lower.includes('gear') || lower.includes('sprocket');
   const boredRound = lower.includes('pipe') || lower.includes('tube') || lower.includes('wheel') || lower.includes('pulley') || lower.includes('bearing');
   const round = boredRound || lower.includes('cylinder') || lower.includes('shaft') || lower.includes('rod') || lower.includes('disc') || lower.includes('disk') || lower.includes('round');
   const hasProfile = JSON.stringify(context).includes('rectangle');
-  const dimensions = generatorSet
+  const dimensions = invention || iteration
+    ? [{ name: 'functional envelope', value: null, unit: 'mm' as const }, { name: 'module count', value: null, unit: 'mm' as const }, { name: 'iteration scope', value: null, unit: 'mm' as const }]
+    : generatorSet
     ? [{ name: 'frame width', value: null, unit: 'mm' as const }, { name: 'frame depth', value: null, unit: 'mm' as const }, { name: 'rated power', value: null, unit: 'mm' as const }]
     : solarSystem
     ? [{ name: 'enclosure width', value: null, unit: 'mm' as const }, { name: 'enclosure depth', value: null, unit: 'mm' as const }, { name: 'power target', value: null, unit: 'mm' as const }]
@@ -318,7 +326,14 @@ function localPlan(prompt: string, context: object): CadPlan {
     : round || gear
       ? [{ name: 'diameter', value: null, unit: 'mm' as const }, { name: 'thickness', value: null, unit: 'mm' as const }, ...(gear ? [{ name: 'teeth', value: null, unit: 'mm' as const }] : [])]
     : [{ name: 'primary size', value: null, unit: 'mm' as const }];
-  const missingInputs = generatorSet
+  const missingInputs = invention || iteration
+    ? [
+        { id: 'goal', label: 'What it should do', question: 'Describe what this new hardware should do in one sentence.', required: true, suggestedValue: 'Move, hold, power, sense, or transform something' },
+        { id: 'width', label: 'Starting width', question: 'What starting envelope width should CadPilot use?', required: false, suggestedValue: '400 mm' },
+        { id: 'depth', label: 'Starting depth', question: 'What starting envelope depth should CadPilot use?', required: false, suggestedValue: '260 mm' },
+        { id: 'constraints', label: 'Constraints', question: 'Any constraints such as portable, low-cost, waterproof, quiet, strong, or easy to repair?', required: false, suggestedValue: 'Portable and easy to service' },
+      ]
+    : generatorSet
     ? [
         { id: 'width', label: 'Frame width', question: 'How wide should the open generator-set frame be?', required: true, suggestedValue: '900 mm' },
         { id: 'depth', label: 'Frame depth', question: 'How deep should the frame/skid be?', required: true, suggestedValue: '520 mm' },
@@ -404,6 +419,17 @@ function localPlan(prompt: string, context: object): CadPlan {
     ['modular-subsystems', 'Modular subsystem architecture', 'Split the design into modules that can be created and tested one at a time.'],
     ['prototype-ready-layout', 'Prototype-ready hardware layout', 'Prioritize manufacturable block geometry, mounting zones, and service access.'],
   ];
+  const inventionOptions = iteration
+    ? [
+        ['continue-current-invention', 'Continue the current invention', 'Interpret the prompt as the next design edit and add or adjust only the requested subsystem.'],
+        ['refine-existing-modules', 'Refine existing modules', 'Keep the current assembly, improve proportions, names, mounting zones, and service access.'],
+        ['add-new-subsystem', 'Add a new subsystem', 'Create the next module as a separate editable component without collapsing the assembly.'],
+      ]
+    : [
+        ['blank-canvas-invention', 'Blank-canvas invention starter', 'Create a first editable hardware concept from only the prompt: base, functional module, control/interface, and service zones.'],
+        ['modular-vibe-build', 'Modular vibe-build workflow', 'Start with simple modules so the user can keep prompting, correcting, and adding parts step by step.'],
+        ['prototype-architecture', 'Prototype architecture', 'Turn the idea into a practical prototype layout with structure, power/motion path, controls, mounting, and safety space.'],
+      ];
   const roundOptions = [
     ['revolved-solid', boredRound ? 'Round part with center bore' : 'Revolved round solid', boredRound ? 'Create a wheel, pulley, tube, or bearing-like starter with a centered bore.' : 'Create a cylinder, shaft, rod, or disc as an editable revolved solid.'],
     ['lightened-round', 'Lightweight round part', 'Start with a round body and add holes or cutouts in later stages.'],
@@ -424,15 +450,18 @@ function localPlan(prompt: string, context: object): CadPlan {
     ['lightweight', 'Lightweight or hollow design', 'Reduce material while preserving the main form.'],
     ['parametric', 'Parametric detailed design', 'Use editable dimensions and staged secondary features.'],
   ];
-  const options = generatorSet ? generatorSetOptions : solarSystem ? solarOptions : motorSystem ? motorOptions : coilSystem ? coilOptions : hardwareSystem ? systemOptions : gear ? gearOptions : round ? roundOptions : table ? tableOptions : chair ? furnitureOptions : genericOptions;
-  const objectType = generatorSet ? 'open generator set assembly' : solarSystem ? 'solar generator hardware system' : motorSystem ? 'electric motor / generator system' : coilSystem ? 'coil / electromagnetic system' : hardwareSystem ? 'custom hardware system' : gear ? 'gear' : round ? (boredRound ? 'bored round part' : 'round part') : table ? 'table' : chair ? 'furniture' : 'custom CAD part';
+  const options = invention || iteration ? inventionOptions : generatorSet ? generatorSetOptions : solarSystem ? solarOptions : motorSystem ? motorOptions : coilSystem ? coilOptions : hardwareSystem ? systemOptions : gear ? gearOptions : round ? roundOptions : table ? tableOptions : chair ? furnitureOptions : genericOptions;
+  const objectType = invention ? 'blank-canvas hardware invention' : iteration ? 'iterative hardware design edit' : generatorSet ? 'open generator set assembly' : solarSystem ? 'solar generator hardware system' : motorSystem ? 'electric motor / generator system' : coilSystem ? 'coil / electromagnetic system' : hardwareSystem ? 'custom hardware system' : gear ? 'gear' : round ? (boredRound ? 'bored round part' : 'round part') : table ? 'table' : chair ? 'furniture' : 'custom CAD part';
+  const inventionStages = iteration
+    ? ['Understand the requested correction/addition', 'Inspect existing editable modules', 'Ask only if a critical constraint is missing', 'Generate the next safe CAD module or edit', 'Preserve prior work', 'Preview before applying']
+    : ['Understand the invention goal', 'Extract functions and constraints', 'Propose functional modules', 'Create editable starter geometry', 'Show assembly/render/labels preview', 'Let the user keep prompting to add or correct'];
   return {
     schemaVersion: 1,
     planId: `local-${Date.now()}`,
-    summary: generatorSet ? 'I can create this as an open generator-set assembly with separate visible starter components instead of one outside cover.' : hardwareSystem ? `I can help brainstorm and turn this into a staged hardware CAD system: ${prompt.trim()}` : table ? 'I can create this as a table design. Choose a construction approach and confirm the essential dimensions.' : `I extracted a buildable CAD path for: ${prompt.trim()}`,
+    summary: invention ? `Blank canvas mode: I can help invent this from scratch through prompts, corrections, and additive CAD stages: ${prompt.trim()}` : iteration ? `Iteration mode: I will keep the current design and apply this as the next safe CAD step: ${prompt.trim()}` : generatorSet ? 'I can create this as an open generator-set assembly with separate visible starter components instead of one outside cover.' : hardwareSystem ? `I can help brainstorm and turn this into a staged hardware CAD system: ${prompt.trim()}` : table ? 'I can create this as a table design. Choose a construction approach and confirm the essential dimensions.' : `I extracted a buildable CAD path for: ${prompt.trim()}`,
     extracted: { objectType, style: lower.includes('modern') ? 'modern' : null, dimensions, constraints: [] },
     missingInputs,
-    options: options.map(([id, title, description], index) => ({ id, title, description, stages: commonStages, assumptions: ['Dimensions are millimetres.', 'The final model requires preview approval.'], executableNow: hasProfile && index === 0, preparation: hasProfile ? [] : ['Create or select the required closed sketch profiles before geometry generation.'] })),
+    options: options.map(([id, title, description], index) => ({ id, title, description, stages: invention || iteration ? inventionStages : commonStages, assumptions: ['Dimensions are millimetres.', 'The final model requires preview approval.', ...(invention || iteration ? ['This is an iterative invention workflow: each prompt creates, corrects, or extends the editable assembly without requiring a known reference object.'] : [])], executableNow: hasProfile && index === 0, preparation: hasProfile ? [] : ['CadPilot can create starter sketch profiles automatically for broad invention/hardware prompts.'] })),
     canUseDefaults: true,
   };
 }
@@ -506,7 +535,7 @@ export class AiService {
     for (const configuredKey of await this.groqKeys()) {
       try {
         const model = process.env.GROQ_CAD_MODEL ?? 'llama-3.3-70b-versatile';
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${this.vault.decrypt(configuredKey.encryptedKey)}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: `You are CadPilot's design planner. Return JSON only. Extract intent and dimensions, ask only critical questions, and offer exactly 2 or 3 viable options. For complex hardware systems such as solar generators, coils, electric motors, mechanisms, machines, or brainstormed inventions, plan the design as functional subsystems first: enclosure/envelope, energy or motion source, control module, interface/mounting, cooling/safety, then staged CAD geometry. For generator sets or gensets without outside covers, plan a visible multi-component assembly: skid/base frame, engine block, alternator/generator head, fuel tank, control panel, battery, muffler/exhaust, mounts, pipes/cables, and service spacing. Never collapse a multi-component assembly into a single cube. Use online references only to infer likely components and proportions; do not copy proprietary geometry, logos, or exact designs. Never claim unsupported geometry is already executable. ${researchContext} Use this exact shape: ${JSON.stringify(fallback)}` }, { role: 'user', content: input }] }), signal: AbortSignal.timeout(timeoutMs(process.env.OPENAI_TIMEOUT_MS)) });
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${this.vault.decrypt(configuredKey.encryptedKey)}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: `You are CadPilot's design planner. Return JSON only. Extract intent and dimensions, ask only critical questions, and offer exactly 2 or 3 viable options. CadPilot supports vibe-CAD invention: users can create unknown hardware from scratch through prompts, then correct it, add modules, refine proportions, rename parts, and keep building. If the prompt describes an object that does not exist, do not search for an exact match; infer functional modules from first principles: structure, input, output, energy/motion path, controls, mounting, safety, service access, and expansion. If there is already a model in context and the user says add/correct/fix/improve/refine, treat it as an iterative edit and preserve the existing design. For complex hardware systems such as solar generators, coils, electric motors, mechanisms, machines, or brainstormed inventions, plan the design as functional subsystems first: enclosure/envelope, energy or motion source, control module, interface/mounting, cooling/safety, then staged CAD geometry. For generator sets or gensets without outside covers, plan a visible multi-component assembly: skid/base frame, engine block, alternator/generator head, fuel tank, control panel, battery, muffler/exhaust, mounts, pipes/cables, and service spacing. Never collapse a multi-component assembly into a single cube. Use online references only to infer likely components and proportions; do not copy proprietary geometry, logos, or exact designs. Never claim unsupported geometry is already executable. ${researchContext} Use this exact shape: ${JSON.stringify(fallback)}` }, { role: 'user', content: input }] }), signal: AbortSignal.timeout(timeoutMs(process.env.OPENAI_TIMEOUT_MS)) });
         if (!response.ok) continue;
         const decoded = await response.json() as ChatResponse;
         const choice = Array.isArray(decoded.choices) ? decoded.choices[0] : null;
