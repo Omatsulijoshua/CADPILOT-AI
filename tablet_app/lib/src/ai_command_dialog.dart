@@ -33,6 +33,7 @@ enum _StarterFamily {
   gear,
   coil,
   motor,
+  engine,
   solarGenerator,
   generatorSet,
   hardwareSystem,
@@ -237,6 +238,7 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
           family == _StarterFamily.hardwareSystem ||
           family == _StarterFamily.solarGenerator ||
           family == _StarterFamily.motor ||
+          family == _StarterFamily.engine ||
           family == _StarterFamily.coil;
       final localDraft = AiGeneratedDraft(
           starterCommandForPlan(
@@ -301,6 +303,7 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
     final needsSystem = family == _StarterFamily.solarGenerator ||
         family == _StarterFamily.generatorSet ||
         family == _StarterFamily.motor ||
+        family == _StarterFamily.engine ||
         family == _StarterFamily.coil ||
         family == _StarterFamily.hardwareSystem;
     if (needsSystem) {
@@ -395,9 +398,11 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
   }) {
     final requiredRectangles = family == _StarterFamily.generatorSet
         ? 6
-        : family == _StarterFamily.hardwareSystem
+        : family == _StarterFamily.engine
             ? 5
-            : 3;
+            : family == _StarterFamily.hardwareSystem
+                ? 5
+                : 3;
     if (existingRectangles.length >= requiredRectangles && hasCircle) {
       return const [];
     }
@@ -451,6 +456,18 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
               dimensionLocked: true));
         }
         break;
+      case _StarterFamily.engine:
+        addRect((width * 0.45).clamp(180, 700).toDouble(),
+            (depth * 0.45).clamp(140, 500).toDouble());
+        addRect((width * 0.38).clamp(160, 620).toDouble(),
+            (depth * 0.18).clamp(60, 200).toDouble());
+        addRect((width * 0.22).clamp(80, 260).toDouble(),
+            (height * 0.16).clamp(20, 100).toDouble());
+        addRect((width * 0.18).clamp(70, 240).toDouble(),
+            (height * 0.2).clamp(24, 120).toDouble());
+        addRect((width * 0.24).clamp(100, 340).toDouble(),
+            (depth * 0.16).clamp(40, 160).toDouble());
+        break;
       case _StarterFamily.motor:
         addRect(
             width.clamp(180, 800).toDouble(), depth.clamp(120, 500).toDouble());
@@ -500,9 +517,8 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
       AiDesignPlan current,
       AiPlanOption option,
       Map<String, String> answerValues) {
-    final rectangles = sketch.entities
+    final allRectangles = sketch.entities
         .where((item) => item.kind == SketchEntityKind.rectangle)
-        .take(6)
         .toList();
     final circles =
         sketch.entities.where((item) => item.kind == SketchEntityKind.circle);
@@ -513,10 +529,24 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         family == _StarterFamily.round || family == _StarterFamily.boredRound;
     final isHardwareSystem = family == _StarterFamily.solarGenerator ||
         family == _StarterFamily.generatorSet ||
+        family == _StarterFamily.engine ||
         family == _StarterFamily.hardwareSystem;
     final isGeneratorSet = family == _StarterFamily.generatorSet;
+    final isEngine = family == _StarterFamily.engine;
     final isMotorOrCoil =
         family == _StarterFamily.motor || family == _StarterFamily.coil;
+    final neededRectangles = isGeneratorSet
+        ? 6
+        : isEngine || family == _StarterFamily.hardwareSystem
+            ? 5
+            : isMotorOrCoil ||
+                    family == _StarterFamily.solarGenerator ||
+                    needsRound
+                ? 3
+                : 6;
+    final rectangles = allRectangles.length > neededRectangles
+        ? allRectangles.sublist(allRectangles.length - neededRectangles)
+        : allRectangles;
     if (rectangles.isEmpty && (!needsGear || circles.isEmpty)) {
       throw const FormatException('Create or approve a starter profile first.');
     }
@@ -532,6 +562,18 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
             'profileId': rectangles[index].id,
             'angle': 360,
             'name': _generatorSetComponentLabel(index)
+          }
+        });
+        continue;
+      }
+      if (isEngine && (index == 2 || index == 3)) {
+        operations.add({
+          'operationId': const Uuid().v4(),
+          'type': 'revolve',
+          'parameters': {
+            'profileId': rectangles[index].id,
+            'angle': 360,
+            'name': _engineComponentLabel(index)
           }
         });
         continue;
@@ -558,42 +600,46 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
       }
       final label = isGeneratorSet
           ? _generatorSetComponentLabel(index)
-          : index == 0
-              ? isHardwareSystem
-                  ? 'system enclosure starter'
-                  : 'table starter solid'
-              : index == 1
+          : isEngine
+              ? _engineComponentLabel(index)
+              : index == 0
                   ? isHardwareSystem
-                      ? 'energy/control module starter'
-                      : 'chair starter solid'
-                  : index == 2
+                      ? 'system enclosure starter'
+                      : 'table starter solid'
+                  : index == 1
                       ? isHardwareSystem
-                          ? 'interface/subsystem starter'
-                          : 'gear-system starter solid'
-                      : index == 3 && isHardwareSystem
-                          ? 'mounting / safety module starter'
-                          : index == 4 && isHardwareSystem
-                              ? 'future expansion module starter'
-                              : 'starter solid';
+                          ? 'energy/control module starter'
+                          : 'chair starter solid'
+                      : index == 2
+                          ? isHardwareSystem
+                              ? 'interface/subsystem starter'
+                              : 'gear-system starter solid'
+                          : index == 3 && isHardwareSystem
+                              ? 'mounting / safety module starter'
+                              : index == 4 && isHardwareSystem
+                                  ? 'future expansion module starter'
+                                  : 'starter solid';
       final depth = isGeneratorSet
           ? _generatorSetComponentDepth(index)
-          : index == 0
-              ? isHardwareSystem
-                  ? (family == _StarterFamily.solarGenerator ? 90.0 : 45.0)
-                  : thickness
-              : index == 1
+          : isEngine
+              ? _engineComponentDepth(index)
+              : index == 0
                   ? isHardwareSystem
-                      ? 55.0
-                      : 45.0
-                  : index == 2
+                      ? (family == _StarterFamily.solarGenerator ? 90.0 : 45.0)
+                      : thickness
+                  : index == 1
                       ? isHardwareSystem
-                          ? 35.0
-                          : 60.0
-                      : index == 3 && isHardwareSystem
-                          ? 30.0
-                          : index == 4 && isHardwareSystem
-                              ? 24.0
-                              : 25.0;
+                          ? 55.0
+                          : 45.0
+                      : index == 2
+                          ? isHardwareSystem
+                              ? 35.0
+                              : 60.0
+                          : index == 3 && isHardwareSystem
+                              ? 30.0
+                              : index == 4 && isHardwareSystem
+                                  ? 24.0
+                                  : 25.0;
       operations.add({
         'operationId': const Uuid().v4(),
         'type': 'extrude',
@@ -622,10 +668,12 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         'This is a multi-object starter CAD stage generated from the approved plan.',
         family == _StarterFamily.generatorSet
             ? 'The generator set is created as an open internal assembly with mixed starter geometry: skid/base and panels use editable solids, while the alternator/generator head and exhaust use revolved cylindrical parts instead of square blocks.'
-            : family == _StarterFamily.solarGenerator ||
-                    family == _StarterFamily.hardwareSystem
-                ? 'Complex hardware systems start as subsystem CAD blocks before detailed parts are generated.'
-                : 'Separate starter profiles are used so table, chair, and gear-system requests do not collapse into one cube.',
+            : family == _StarterFamily.engine
+                ? 'The engine is created as a visible simplified assembly with separate starter parts: engine block, cylinder head, crankshaft, flywheel, and intake/exhaust manifold. Cylindrical rotating parts are revolved instead of square blocks.'
+                : family == _StarterFamily.solarGenerator ||
+                        family == _StarterFamily.hardwareSystem
+                    ? 'Complex hardware systems start as subsystem CAD blocks before detailed parts are generated.'
+                    : 'Separate starter profiles are used so table, chair, and gear-system requests do not collapse into one cube.',
         if (current.canUseDefaults)
           'Sensible default dimensions are used where the prompt did not provide exact measurements.',
         ...option.assumptions,
@@ -662,6 +710,22 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
     return depths[index.clamp(0, depths.length - 1)];
   }
 
+  String _engineComponentLabel(int index) {
+    const labels = [
+      'engine block starter',
+      'cylinder head starter',
+      'crankshaft starter',
+      'flywheel starter',
+      'intake / exhaust manifold starter',
+    ];
+    return labels[index.clamp(0, labels.length - 1)];
+  }
+
+  double _engineComponentDepth(int index) {
+    const depths = [180.0, 70.0, 45.0, 65.0, 35.0];
+    return depths[index.clamp(0, depths.length - 1)];
+  }
+
   String _planText(AiDesignPlan current, AiPlanOption option) =>
       '${prompt.text} ${current.summary} ${current.objectType} ${current.style ?? ''} ${option.title} ${option.description}'
           .toLowerCase();
@@ -686,6 +750,13 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
     }
     if (solarLikeGenerator) {
       return _StarterFamily.solarGenerator;
+    }
+    if (text.contains('engine') ||
+        text.contains('piston') ||
+        text.contains('crankshaft') ||
+        text.contains('cylinder head') ||
+        text.contains('combustion')) {
+      return _StarterFamily.engine;
     }
     if (text.contains('electric motor') ||
         text.contains('electric moto') ||

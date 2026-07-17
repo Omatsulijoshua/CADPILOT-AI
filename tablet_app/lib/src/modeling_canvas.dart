@@ -99,6 +99,10 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
     if (name.contains('skid') || name.contains('base')) {
       return const Offset(0, 95);
     }
+    if (name.contains('cylinder head')) return const Offset(-150, -82);
+    if (name.contains('crankshaft')) return const Offset(35, 72);
+    if (name.contains('flywheel')) return const Offset(152, 70);
+    if (name.contains('intake')) return const Offset(-260, -35);
     if (name.contains('engine')) return const Offset(-150, 15);
     if (name.contains('alternator') || name.contains('generator head')) {
       return const Offset(105, 18);
@@ -117,6 +121,11 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
     if (lower.contains('skid') || lower.contains('base')) {
       return const Color(0xff2f3d48);
     }
+    if (lower.contains('cylinder head')) return const Color(0xff64748b);
+    if (lower.contains('crankshaft') || lower.contains('flywheel')) {
+      return const Color(0xff94a3b8);
+    }
+    if (lower.contains('intake')) return const Color(0xff334155);
     if (lower.contains('engine')) return const Color(0xff4b5563);
     if (lower.contains('alternator') || lower.contains('generator head')) {
       return const Color(0xff2563eb);
