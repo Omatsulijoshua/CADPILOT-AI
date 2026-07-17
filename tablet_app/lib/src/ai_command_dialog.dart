@@ -420,7 +420,7 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         addRect((width * 0.28).clamp(180, 620).toDouble(),
             (depth * 0.48).clamp(160, 520).toDouble());
         addRect((width * 0.22).clamp(150, 520).toDouble(),
-            (depth * 0.42).clamp(140, 460).toDouble());
+            (depth * 0.22).clamp(70, 220).toDouble());
         addRect((width * 0.36).clamp(240, 760).toDouble(),
             (depth * 0.24).clamp(90, 260).toDouble());
         addRect((width * 0.14).clamp(90, 260).toDouble(),
@@ -510,14 +510,14 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         _dimensionValue(answerValues, ['tabletopthickness', 'thickness']) ?? 30;
     final operations = <Map<String, Object?>>[];
     for (var index = 0; index < rectangles.length; index += 1) {
-      if (isGeneratorSet && index == 5) {
+      if (isGeneratorSet && (index == 2 || index == 5)) {
         operations.add({
           'operationId': const Uuid().v4(),
           'type': 'revolve',
           'parameters': {
             'profileId': rectangles[index].id,
             'angle': 360,
-            'name': 'muffler / exhaust cylinder starter'
+            'name': _generatorSetComponentLabel(index)
           }
         });
         continue;
@@ -607,7 +607,7 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
       'assumptions': [
         'This is a multi-object starter CAD stage generated from the approved plan.',
         family == _StarterFamily.generatorSet
-            ? 'The generator set is created as an open internal assembly: base frame, engine, alternator, fuel tank, control panel, and exhaust starter geometry without an outside cover.'
+            ? 'The generator set is created as an open internal assembly with mixed starter geometry: skid/base and panels use editable solids, while the alternator/generator head and exhaust use revolved cylindrical parts instead of square blocks.'
             : family == _StarterFamily.solarGenerator ||
                     family == _StarterFamily.hardwareSystem
                 ? 'Complex hardware systems start as subsystem CAD blocks before detailed parts are generated.'
