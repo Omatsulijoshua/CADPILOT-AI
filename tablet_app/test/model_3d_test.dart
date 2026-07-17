@@ -61,6 +61,32 @@ void main() {
     expect(stl.trim(), endsWith('endsolid bracket'));
   });
 
+  test('gear evaluates as a toothed solid and exports a closed mesh', () {
+    const gearProfile = SketchEntity(
+        id: 'gear-profile',
+        kind: SketchEntityKind.circle,
+        start: Offset(100, 100),
+        end: Offset(150, 100));
+    final gear = ModelOperation(
+        id: 'gear-1',
+        kind: ModelOperationKind.gear,
+        profileId: 'gear-profile',
+        depth: 12,
+        instanceCount: 20,
+        spacing: 10,
+        createdAt: DateTime.utc(2026));
+    final solid = const ModelEvaluator().evaluate(
+        const SketchDocument(entities: [gearProfile]),
+        ModelDocument(operations: [gear]))!;
+    expect(solid.gearTeeth, 20);
+    expect(solid.width, 100);
+    expect(solid.cuts.single.radius, 10);
+    expect(solid.volume, greaterThan(0));
+    final mesh = const SolidMesher(targetCells: 64).tessellate(solid);
+    expect(mesh.isClosedManifold, isTrue);
+    expect(mesh.triangles.length, greaterThan(100));
+  });
+
   test('cut-solid tessellation is closed manifold and volume-bounded', () {
     final cut = ModelOperation(
         id: 'op-2',

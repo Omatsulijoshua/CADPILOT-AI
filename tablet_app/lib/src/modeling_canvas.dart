@@ -846,6 +846,8 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                                 Icons.crop_square,
                                               ModelOperationKind.revolve =>
                                                 Icons.rotate_right,
+                                              ModelOperationKind.gear =>
+                                                Icons.settings,
                                             },
                                             color: operation.suppressed
                                                 ? Colors.grey
@@ -864,6 +866,8 @@ class _ModelingCanvasState extends State<ModelingCanvas> {
                                                   'Vertical center plane',
                                                 ModelOperationKind.revolve =>
                                                   '360 deg full revolution',
+                                                ModelOperationKind.gear =>
+                                                  '${operation.instanceCount} teeth · bore ${operation.spacing.toStringAsFixed(1)} mm',
                                                 _ =>
                                                   '${operation.depth.toStringAsFixed(1)} mm',
                                               }),
@@ -1030,7 +1034,20 @@ class SolidPainter extends CustomPainter {
         .clamp(0.2, 20.0);
     final w = current.width / 2, h = current.height / 2, d = current.depth;
     final plan = <List<double>>[];
-    if (current.revolved) {
+    if (current.gearTeeth > 0) {
+      final segments = current.gearTeeth.clamp(6, 80) * 4;
+      final outerRadius = current.width / 2;
+      final rootRadius = current.gearRootRadius <= 0
+          ? outerRadius * 0.82
+          : current.gearRootRadius;
+      for (var index = 0; index < segments; index++) {
+        final toothPhase = index % 4;
+        final radius =
+            toothPhase == 1 || toothPhase == 2 ? outerRadius : rootRadius;
+        final angle = index * math.pi * 2 / segments;
+        plan.add([math.cos(angle) * radius, math.sin(angle) * radius, 0]);
+      }
+    } else if (current.revolved) {
       const segments = 48;
       for (var index = 0; index < segments; index++) {
         final angle = index * math.pi * 2 / segments;

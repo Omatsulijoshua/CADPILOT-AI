@@ -124,8 +124,17 @@ class AiCommandPreview {
 
 class AiCommandEngine {
   const AiCommandEngine();
-  static const supported =
-      {'extrude', 'cut', 'revolve', 'shell', 'fillet', 'chamfer', 'rename', 'delete'};
+  static const supported = {
+    'extrude',
+    'cut',
+    'revolve',
+    'gear',
+    'shell',
+    'fillet',
+    'chamfer',
+    'rename',
+    'delete'
+  };
 
   AiCommandPreview preview(
       AiCadCommand command, SketchDocument sketch, ModelDocument current) {
@@ -181,6 +190,29 @@ class AiCommandEngine {
               depth: angle,
               createdAt: DateTime.now().toUtc()));
           summaries.add('Revolve ${profile.id} through 360 degrees');
+        case 'gear':
+          final profile =
+              _profile(sketch, p['profileId'], SketchEntityKind.circle);
+          final depth = _positiveNumber(p['depth'], 'depth');
+          final teeth = _positiveInteger(p['teeth'], 'teeth');
+          final boreRadius = (p['boreRadius'] as num?)?.toDouble() ?? 0;
+          if (teeth < 6 || teeth > 80) {
+            throw const FormatException('Gear teeth must be between 6 and 80.');
+          }
+          if (boreRadius < 0 || boreRadius >= profile.primaryDimension) {
+            throw const FormatException(
+                'Gear bore radius must be zero or smaller than the gear radius.');
+          }
+          next = next.add(ModelOperation(
+              id: operation.operationId,
+              kind: ModelOperationKind.gear,
+              profileId: profile.id,
+              depth: depth,
+              instanceCount: teeth,
+              spacing: boreRadius,
+              createdAt: DateTime.now().toUtc()));
+          summaries.add(
+              'Create $teeth-tooth gear ${profile.id} at ${depth.toStringAsFixed(1)} mm thick');
         case 'shell':
           final solid = const ModelEvaluator().evaluate(sketch, next);
           final bases = next.operations
@@ -188,7 +220,8 @@ class AiCommandEngine {
                   item.kind == ModelOperationKind.extrude && !item.suppressed)
               .toList();
           if (solid == null || bases.isEmpty) {
-            throw const FormatException('A shell requires an active extrusion.');
+            throw const FormatException(
+                'A shell requires an active extrusion.');
           }
           if (next.operations.any((item) =>
               item.kind == ModelOperationKind.shell && !item.suppressed)) {
@@ -212,7 +245,8 @@ class AiCommandEngine {
                   item.kind == ModelOperationKind.extrude && !item.suppressed)
               .toList();
           if (solid == null || bases.isEmpty) {
-            throw const FormatException('A fillet requires an active extrusion.');
+            throw const FormatException(
+                'A fillet requires an active extrusion.');
           }
           if (next.operations.any((item) =>
               item.kind == ModelOperationKind.fillet && !item.suppressed)) {
@@ -236,11 +270,13 @@ class AiCommandEngine {
                   item.kind == ModelOperationKind.extrude && !item.suppressed)
               .toList();
           if (solid == null || bases.isEmpty) {
-            throw const FormatException('A chamfer requires an active extrusion.');
+            throw const FormatException(
+                'A chamfer requires an active extrusion.');
           }
           if (next.operations.any((item) =>
               item.kind == ModelOperationKind.chamfer && !item.suppressed)) {
-            throw const FormatException('Only one active chamfer is supported.');
+            throw const FormatException(
+                'Only one active chamfer is supported.');
           }
           final distance = _positiveNumber(p['distance'], 'distance');
           final validation = const ChamferValidator().validate(solid, distance);
@@ -308,5 +344,12 @@ class AiCommandEngine {
       throw FormatException('$label must be between 0 and 100000 mm.');
     }
     return value.toDouble();
+  }
+
+  int _positiveInteger(Object? value, String label) {
+    if (value is! num || !value.isFinite || value <= 0 || value % 1 != 0) {
+      throw FormatException('$label must be a positive whole number.');
+    }
+    return value.toInt();
   }
 }

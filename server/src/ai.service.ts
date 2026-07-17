@@ -12,8 +12,8 @@ const commandSchema = {
     intent: { type: 'string', enum: ['create_model', 'modify_model'] },
     target: { type: 'object', additionalProperties: false, required: ['type', 'ids'], properties: { type: { type: 'string', enum: ['model', 'selection', 'sketch'] }, ids: { type: 'array', items: { type: 'string' } } } },
     operations: { type: 'array', minItems: 1, maxItems: 12, items: { type: 'object', additionalProperties: false, required: ['operationId', 'type', 'parameters'], properties: {
-      operationId: { type: 'string' }, type: { type: 'string', enum: ['extrude', 'cut', 'revolve', 'shell', 'fillet', 'chamfer', 'rename', 'delete'] },
-      parameters: { type: 'object', additionalProperties: false, properties: { profileId: { type: ['string', 'null'] }, depth: { type: ['number', 'null'] }, angle: { type: ['number', 'null'] }, thickness: { type: ['number', 'null'] }, radius: { type: ['number', 'null'] }, distance: { type: ['number', 'null'] }, operationId: { type: ['string', 'null'] }, name: { type: ['string', 'null'] } }, required: ['profileId', 'depth', 'angle', 'thickness', 'radius', 'distance', 'operationId', 'name'] }
+      operationId: { type: 'string' }, type: { type: 'string', enum: ['extrude', 'cut', 'revolve', 'gear', 'shell', 'fillet', 'chamfer', 'rename', 'delete'] },
+      parameters: { type: 'object', additionalProperties: false, properties: { profileId: { type: ['string', 'null'] }, depth: { type: ['number', 'null'] }, angle: { type: ['number', 'null'] }, teeth: { type: ['number', 'null'] }, boreRadius: { type: ['number', 'null'] }, thickness: { type: ['number', 'null'] }, radius: { type: ['number', 'null'] }, distance: { type: ['number', 'null'] }, operationId: { type: ['string', 'null'] }, name: { type: ['string', 'null'] } }, required: ['profileId', 'depth', 'angle', 'teeth', 'boreRadius', 'thickness', 'radius', 'distance', 'operationId', 'name'] }
     } } },
     assumptions: { type: 'array', items: { type: 'string' }, maxItems: 12 },
     requiresConfirmation: { type: 'boolean', const: true }
@@ -95,6 +95,10 @@ function positiveNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
+function wholeNumberBetween(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= min && value <= max;
+}
+
 function validParameters(type: string, parameters: JsonRecord): boolean {
   switch (type) {
     case 'extrude':
@@ -102,6 +106,8 @@ function validParameters(type: string, parameters: JsonRecord): boolean {
       return nonEmptyString(parameters.profileId) && positiveNumber(parameters.depth);
     case 'revolve':
       return nonEmptyString(parameters.profileId) && parameters.angle === 360;
+    case 'gear':
+      return nonEmptyString(parameters.profileId) && positiveNumber(parameters.depth) && wholeNumberBetween(parameters.teeth, 6, 80) && (parameters.boreRadius == null || (typeof parameters.boreRadius === 'number' && Number.isFinite(parameters.boreRadius) && parameters.boreRadius >= 0));
     case 'shell':
       return positiveNumber(parameters.thickness);
     case 'fillet':
@@ -139,7 +145,8 @@ function commandSystemPrompt(): string {
     'You are CadPilot\'s CAD command converter.',
     'Return JSON only. It must match this JSON schema exactly:',
     JSON.stringify(commandSchema),
-    'Use only supported operation types: extrude, cut, revolve, shell, fillet, chamfer, rename, delete.',
+    'Use only supported operation types: extrude, cut, revolve, gear, shell, fillet, chamfer, rename, delete.',
+    'Use gear only with an existing circular profileId; set teeth between 6 and 80 and boreRadius to 0 or a safe smaller radius.',
     'Every operation.parameters object must include all keys from the schema. Use null for unused parameter fields.',
     'Use only geometry IDs that already exist in the supplied context. Do not invent profile, sketch, model, or operation IDs from outside the context.',
     'For broad or multi-stage plans, generate only the next currently executable CAD stage from the selected plan.',

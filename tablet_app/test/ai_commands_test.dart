@@ -61,6 +61,29 @@ void main() {
     expect(preview.summary, contains('360 degrees'));
   });
 
+  test('AI can create a toothed gear from a circular profile', () {
+    final parsed = AiCadCommand.fromJson(command([
+      {
+        'operationId': 'gear-1',
+        'type': 'gear',
+        'parameters': {
+          'profileId': 'hole',
+          'depth': 6,
+          'teeth': 18,
+          'boreRadius': 2
+        }
+      },
+    ]));
+    final preview =
+        const AiCommandEngine().preview(parsed, sketch, const ModelDocument());
+    expect(preview.model.operations.single.kind, ModelOperationKind.gear);
+    expect(preview.model.operations.single.instanceCount, 18);
+    expect(preview.summary, contains('18-tooth gear'));
+    final solid = const ModelEvaluator().evaluate(sketch, preview.model)!;
+    expect(solid.gearTeeth, 18);
+    expect(solid.cuts.single.radius, 2);
+  });
+
   test('partial AI revolve is rejected before mutation', () {
     final parsed = AiCadCommand.fromJson(command([
       {
@@ -91,7 +114,8 @@ void main() {
     final preview =
         const AiCommandEngine().preview(parsed, sketch, const ModelDocument());
     expect(preview.model.operations.last.kind, ModelOperationKind.shell);
-    expect(const ModelEvaluator().evaluate(sketch, preview.model)!.shellThickness,
+    expect(
+        const ModelEvaluator().evaluate(sketch, preview.model)!.shellThickness,
         2);
   });
 

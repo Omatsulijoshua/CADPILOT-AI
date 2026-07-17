@@ -23,7 +23,8 @@ enum ModelOperationKind {
   chamfer,
   fillet,
   shell,
-  revolve
+  revolve,
+  gear
 }
 
 class ModelOperation {
@@ -62,6 +63,7 @@ class ModelOperation {
         ModelOperationKind.fillet => 'Fillet',
         ModelOperationKind.shell => 'Shell',
         ModelOperationKind.revolve => 'Revolve',
+        ModelOperationKind.gear => 'Gear',
       };
   ModelOperation copyWith(
           {double? depth,
@@ -180,7 +182,9 @@ class EvaluatedSolid {
       this.cornerRadius = 0,
       this.shellThickness = 0,
       this.revolved = false,
-      this.revolveRadius = 0});
+      this.revolveRadius = 0,
+      this.gearTeeth = 0,
+      this.gearRootRadius = 0});
   final Offset origin;
   final double width;
   final double height;
@@ -192,20 +196,63 @@ class EvaluatedSolid {
   final double shellThickness;
   final bool revolved;
   final double revolveRadius;
+  final int gearTeeth;
+  final double gearRootRadius;
   double get planArea => revolved
       ? math.pi * revolveRadius * revolveRadius
-      : cornerRadius > 0
-          ? width * height - (4 - math.pi) * cornerRadius * cornerRadius
-          : width * height - 2 * chamfer * chamfer;
+      : gearTeeth > 0
+          ? _gearPlanArea
+          : cornerRadius > 0
+              ? width * height - (4 - math.pi) * cornerRadius * cornerRadius
+              : width * height - 2 * chamfer * chamfer;
   double get planPerimeter => revolved
       ? 2 * math.pi * revolveRadius
-      : cornerRadius > 0
-          ? 2 * (width + height) - 8 * cornerRadius + 2 * math.pi * cornerRadius
-          : 2 * (width + height) + 4 * chamfer * (math.sqrt2 - 2);
+      : gearTeeth > 0
+          ? _gearPlanPerimeter
+          : cornerRadius > 0
+              ? 2 * (width + height) -
+                  8 * cornerRadius +
+                  2 * math.pi * cornerRadius
+              : 2 * (width + height) + 4 * chamfer * (math.sqrt2 - 2);
+  double get _gearOuterRadius => width / 2;
+  double get _gearInnerRadius =>
+      gearRootRadius <= 0 ? _gearOuterRadius * 0.82 : gearRootRadius;
+  double get _gearPlanArea {
+    final outer = math.pi * _gearInnerRadius * _gearInnerRadius;
+    final toothPitch = math.pi * 2 / gearTeeth;
+    final toothArea = gearTeeth *
+        0.5 *
+        (_gearOuterRadius * _gearOuterRadius -
+            _gearInnerRadius * _gearInnerRadius) *
+        toothPitch *
+        0.52;
+    return outer + toothArea;
+  }
+
+  double get _gearPlanPerimeter {
+    final toothPitch = math.pi * 2 / gearTeeth;
+    final flank = (_gearOuterRadius - _gearInnerRadius).abs();
+    return gearTeeth *
+        (_gearOuterRadius * toothPitch * 0.52 +
+            _gearInnerRadius * toothPitch * 0.48 +
+            2 * flank);
+  }
+
   bool containsPlanPoint(Offset point) {
     final x = point.dx - origin.dx;
     final y = point.dy - origin.dy;
     if (x < 0 || y < 0 || x > width || y > height) return false;
+    if (gearTeeth > 0) {
+      final center = Offset(width / 2, height / 2);
+      final vector = Offset(x, y) - center;
+      final distance = vector.distance;
+      if (distance <= _gearInnerRadius) return true;
+      if (distance > _gearOuterRadius) return false;
+      var angle = math.atan2(vector.dy, vector.dx);
+      if (angle < 0) angle += math.pi * 2;
+      final phase = (angle / (math.pi * 2 / gearTeeth)) % 1;
+      return phase > 0.18 && phase < 0.82;
+    }
     if (revolved) {
       return (Offset(x, y) - Offset(revolveRadius, revolveRadius)).distance <=
               revolveRadius &&
@@ -628,6 +675,23 @@ class ModelEvaluator {
         revolveRadius = section.width;
         revolved = true;
       }
+      if (operation.kind == ModelOperationKind.gear &&
+          profile.kind == SketchEntityKind.circle) {
+        final radius = profile.primaryDimension;
+        base = SketchEntity(
+            id: profile.id,
+            kind: SketchEntityKind.rectangle,
+            start: profile.start - Offset(radius, radius),
+            end: profile.start + Offset(radius, radius));
+        depth = operation.depth;
+        revolved = false;
+        revolveRadius = 0;
+        cuts.clear();
+        final boreRadius = operation.spacing;
+        if (boreRadius > 0 && boreRadius < radius) {
+          cuts.add(CircularCut(center: profile.start, radius: boreRadius));
+        }
+      }
       if (operation.kind == ModelOperationKind.booleanSubtract &&
           profile.kind == SketchEntityKind.rectangle &&
           base != null &&
@@ -726,6 +790,10 @@ class ModelEvaluator {
     }
     if (base == null || depth == null) return null;
     final rect = Rect.fromPoints(base.start, base.end);
+    final gearOperation = model.operations.reversed
+        .where((operation) =>
+            !operation.suppressed && operation.kind == ModelOperationKind.gear)
+        .firstOrNull;
     return EvaluatedSolid(
         origin: revolved
             ? Offset(rect.left - revolveRadius, rect.top)
@@ -739,7 +807,9 @@ class ModelEvaluator {
         cornerRadius: cornerRadius,
         shellThickness: shellThickness,
         revolved: revolved,
-        revolveRadius: revolveRadius);
+        revolveRadius: revolveRadius,
+        gearTeeth: gearOperation?.instanceCount ?? 0,
+        gearRootRadius: gearOperation == null ? 0 : rect.width / 2 * 0.82);
   }
 }
 
@@ -784,6 +854,7 @@ class SolidMesher {
   const SolidMesher({this.targetCells = 56});
   final int targetCells;
   SolidMesh tessellate(EvaluatedSolid solid) {
+    if (solid.gearTeeth > 0) return _gear(solid);
     if (solid.revolved) return _cylinder(solid);
     if (solid.shellThickness > 0) return _openTopShell(solid);
     if (solid.cuts.isEmpty && solid.rectangularCuts.isEmpty) {
@@ -843,6 +914,65 @@ class SolidMesher {
         triangles: triangles,
         tolerance: math.max(dx, dy),
         estimatedVolume: cells * dx * dy * solid.depth);
+  }
+
+  SolidMesh _gear(EvaluatedSolid solid) {
+    final teeth = solid.gearTeeth.clamp(6, 80);
+    final outerRadius = solid.width / 2;
+    final rootRadius =
+        solid.gearRootRadius <= 0 ? outerRadius * 0.82 : solid.gearRootRadius;
+    final boreRadius = solid.cuts.isEmpty ? 0.0 : solid.cuts.first.radius;
+    final depth = solid.depth;
+    final segments = teeth * 4;
+    final outerBottom = <MeshPoint>[];
+    final outerTop = <MeshPoint>[];
+    final innerBottom = <MeshPoint>[];
+    final innerTop = <MeshPoint>[];
+    for (var index = 0; index < segments; index++) {
+      final toothPhase = index % 4;
+      final radius =
+          toothPhase == 1 || toothPhase == 2 ? outerRadius : rootRadius;
+      final angle = index * math.pi * 2 / segments;
+      final x = outerRadius + math.cos(angle) * radius;
+      final y = outerRadius + math.sin(angle) * radius;
+      outerBottom.add(MeshPoint(x, y, 0));
+      outerTop.add(MeshPoint(x, y, depth));
+      if (boreRadius > 0) {
+        innerBottom.add(MeshPoint(outerRadius + math.cos(angle) * boreRadius,
+            outerRadius + math.sin(angle) * boreRadius, 0));
+        innerTop.add(MeshPoint(outerRadius + math.cos(angle) * boreRadius,
+            outerRadius + math.sin(angle) * boreRadius, depth));
+      }
+    }
+    final triangles = <MeshTriangle>[];
+    for (var index = 0; index < segments; index++) {
+      final next = (index + 1) % segments;
+      _quad(triangles, outerBottom[index], outerBottom[next], outerTop[next],
+          outerTop[index]);
+      if (boreRadius > 0) {
+        _quad(triangles, innerBottom[next], innerBottom[index], innerTop[index],
+            innerTop[next]);
+        _quad(triangles, outerBottom[next], outerBottom[index],
+            innerBottom[index], innerBottom[next]);
+        _quad(triangles, outerTop[index], outerTop[next], innerTop[next],
+            innerTop[index]);
+      }
+    }
+    if (boreRadius <= 0) {
+      final bottomCenter = MeshPoint(outerRadius, outerRadius, 0);
+      final topCenter = MeshPoint(outerRadius, outerRadius, depth);
+      for (var index = 0; index < segments; index++) {
+        final next = (index + 1) % segments;
+        triangles
+          ..add(
+              MeshTriangle(bottomCenter, outerBottom[next], outerBottom[index]))
+          ..add(MeshTriangle(topCenter, outerTop[index], outerTop[next]));
+      }
+    }
+    return SolidMesh(
+        triangles: triangles,
+        tolerance: outerRadius * (1 - math.cos(math.pi / segments)),
+        estimatedVolume: solid.volume);
   }
 
   void _quad(List<MeshTriangle> target, MeshPoint a, MeshPoint b, MeshPoint c,

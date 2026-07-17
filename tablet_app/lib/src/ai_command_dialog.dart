@@ -222,20 +222,15 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
     final targetRectangles = [
       if (needsTable || (!needsChair && !needsGear)) 'table',
       if (needsChair) 'chair',
-      if (needsGear) 'gear',
     ];
     final existingRectangles = widget.sketch.entities
         .where((item) => item.kind == SketchEntityKind.rectangle)
         .toList();
-    if (existingRectangles.length >= targetRectangles.length && !needsGear) {
+    final hasGearProfile = widget.sketch.entities
+        .any((item) => item.kind == SketchEntityKind.circle);
+    if (existingRectangles.length >= targetRectangles.length &&
+        (!needsGear || hasGearProfile)) {
       return widget.sketch;
-    }
-    if (existingRectangles.length >= targetRectangles.length && needsGear) {
-      final hasCircles = widget.sketch.entities
-          .any((item) => item.kind == SketchEntityKind.circle);
-      if (hasCircles) {
-        return widget.sketch;
-      }
     }
     final entities = <SketchEntity>[];
     var cursorX = existingRectangles.isEmpty
@@ -249,38 +244,24 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         index < targetRectangles.length;
         index += 1) {
       final target = targetRectangles[index];
-      final rectWidth = target == 'chair'
-          ? chairWidth
-          : target == 'gear'
-              ? 520.0
-              : width;
-      final rectDepth = target == 'chair'
-          ? chairDepth
-          : target == 'gear'
-              ? 320.0
-              : depth;
+      final rectWidth = target == 'chair' ? chairWidth : width;
+      final rectDepth = target == 'chair' ? chairDepth : depth;
       entities.add(SketchEntity(
           id: const Uuid().v4(),
           kind: SketchEntityKind.rectangle,
           start: Offset(cursorX, 0),
           end: Offset(cursorX + rectWidth, rectDepth),
           dimensionLocked: true));
-      if (target == 'gear') {
-        entities
-          ..add(SketchEntity(
-              id: const Uuid().v4(),
-              kind: SketchEntityKind.circle,
-              start: Offset(cursorX + 145, rectDepth / 2),
-              end: Offset(cursorX + 205, rectDepth / 2),
-              dimensionLocked: true))
-          ..add(SketchEntity(
-              id: const Uuid().v4(),
-              kind: SketchEntityKind.circle,
-              start: Offset(cursorX + 360, rectDepth / 2),
-              end: Offset(cursorX + 410, rectDepth / 2),
-              dimensionLocked: true));
-      }
       cursorX += rectWidth + 160;
+    }
+    if (needsGear && !hasGearProfile) {
+      const gearRadius = 150.0;
+      entities.add(SketchEntity(
+          id: const Uuid().v4(),
+          kind: SketchEntityKind.circle,
+          start: Offset(cursorX + gearRadius, gearRadius),
+          end: Offset(cursorX + gearRadius * 2, gearRadius),
+          dimensionLocked: true));
     }
     return widget.sketch
         .copyWith(entities: [...widget.sketch.entities, ...entities]);
@@ -295,9 +276,16 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         .where((item) => item.kind == SketchEntityKind.rectangle)
         .take(6)
         .toList();
-    if (rectangles.isEmpty) {
-      throw const FormatException(
-          'Create or approve a starter rectangle profile first.');
+    final circles =
+        sketch.entities.where((item) => item.kind == SketchEntityKind.circle);
+    final text =
+        '${prompt.text} ${current.summary} ${current.objectType} ${current.style ?? ''} ${option.title} ${option.description}'
+            .toLowerCase();
+    final needsGear = text.contains('gear') ||
+        text.contains('mechanism') ||
+        text.contains('drive');
+    if (rectangles.isEmpty && (!needsGear || circles.isEmpty)) {
+      throw const FormatException('Create or approve a starter profile first.');
     }
     final thickness =
         _dimensionValue(answerValues, ['tabletopthickness', 'thickness']) ?? 30;
@@ -322,6 +310,18 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         'operationId': const Uuid().v4(),
         'type': 'extrude',
         'parameters': {'profileId': profile.id, 'depth': depth, 'name': label}
+      });
+    }
+    if (needsGear && circles.isNotEmpty) {
+      operations.add({
+        'operationId': const Uuid().v4(),
+        'type': 'gear',
+        'parameters': {
+          'profileId': circles.last.id,
+          'depth': 18,
+          'teeth': 18,
+          'boreRadius': 35
+        }
       });
     }
     return {
