@@ -232,13 +232,27 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
       final answerValues = {
         for (final entry in answers.entries) entry.key: entry.value.text.trim()
       };
-      final draft = option.executableNow
-          ? await generator(prompt.text.trim(), currentPlan, option,
-              answerValues, preparedSketch)
-          : AiGeneratedDraft(
-              starterCommandForPlan(
-                  preparedSketch, currentPlan, option, answerValues),
-              0);
+      final family = _starterFamily(_planText(currentPlan, option));
+      final forceLocalStarter = family == _StarterFamily.generatorSet ||
+          family == _StarterFamily.hardwareSystem ||
+          family == _StarterFamily.solarGenerator ||
+          family == _StarterFamily.motor ||
+          family == _StarterFamily.coil;
+      final localDraft = AiGeneratedDraft(
+          starterCommandForPlan(
+              preparedSketch, currentPlan, option, answerValues),
+          0);
+      AiGeneratedDraft draft;
+      if (option.executableNow && !forceLocalStarter) {
+        try {
+          draft = await generator(prompt.text.trim(), currentPlan, option,
+              answerValues, preparedSketch);
+        } catch (_) {
+          draft = localDraft;
+        }
+      } else {
+        draft = localDraft;
+      }
       input.text = const JsonEncoder.withIndent('  ').convert(draft.command);
       totalTokens = draft.totalTokens;
       hasGeneratedPlanCommand = true;
@@ -653,6 +667,11 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
           .toLowerCase();
 
   _StarterFamily _starterFamily(String text) {
+    final solarLikeGenerator = text.contains('solar generator') ||
+        text.contains('solar gen') ||
+        text.contains('power station') ||
+        text.contains('solar power') ||
+        text.contains('battery generator');
     if (text.contains('generator set') ||
         text.contains('genset') ||
         text.contains('gen set') ||
@@ -661,14 +680,11 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         text.contains('gas generator') ||
         text.contains('generator without cover') ||
         text.contains('without outside cover') ||
-        text.contains('no outside cover')) {
+        text.contains('no outside cover') ||
+        (text.contains('generator') && !solarLikeGenerator)) {
       return _StarterFamily.generatorSet;
     }
-    if (text.contains('solar generator') ||
-        text.contains('solar gen') ||
-        text.contains('power station') ||
-        text.contains('solar power') ||
-        text.contains('battery generator')) {
+    if (solarLikeGenerator) {
       return _StarterFamily.solarGenerator;
     }
     if (text.contains('electric motor') ||
