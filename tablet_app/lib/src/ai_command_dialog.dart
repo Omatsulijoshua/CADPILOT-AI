@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import 'ai_commands.dart';
 import 'ai_planning.dart';
+import 'ai_starter_templates.dart';
 import 'model_3d.dart';
 import 'sketch_models.dart';
 
@@ -89,6 +90,8 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
   int? totalTokens;
   AiCommandPreview? preview;
   SketchDocument? previewSketch;
+  LearnedStarterTemplate? activeStarterTemplate;
+  List<SketchEntity> activeStarterProfiles = const [];
   String? error;
   AiDesignPlan? plan;
   AiPlanOption? selectedOption;
@@ -229,7 +232,7 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
     startBuildStatus();
     var success = false;
     try {
-      final preparedSketch = preparedSketchForPlan();
+      final preparedSketch = await preparedSketchForPlan();
       final answerValues = {
         for (final entry in answers.entries) entry.key: entry.value.text.trim()
       };
@@ -239,7 +242,8 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
           family == _StarterFamily.solarGenerator ||
           family == _StarterFamily.motor ||
           family == _StarterFamily.engine ||
-          family == _StarterFamily.coil;
+          family == _StarterFamily.coil ||
+          activeStarterTemplate != null;
       final localDraft = AiGeneratedDraft(
           starterCommandForPlan(
               preparedSketch, currentPlan, option, answerValues),
@@ -268,10 +272,12 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
     }
   }
 
-  SketchDocument preparedSketchForPlan() {
+  Future<SketchDocument> preparedSketchForPlan() async {
     final current = plan;
     final option = selectedOption;
     if (current == null || option == null) return widget.sketch;
+    activeStarterTemplate = null;
+    activeStarterProfiles = const [];
     final dimensions = <String, double>{};
     for (final question in current.questions) {
       final raw = (answers[question.id]?.text.trim().isNotEmpty ?? false)
@@ -306,6 +312,21 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         family == _StarterFamily.engine ||
         family == _StarterFamily.coil ||
         family == _StarterFamily.hardwareSystem;
+    final shouldLearnStarter = family == _StarterFamily.rectangular &&
+        !needsTable &&
+        !needsChair &&
+        !needsGear &&
+        !needsRound;
+    if (shouldLearnStarter) {
+      final store = AiStarterTemplateStore();
+      final template = await store.findOrCreate(
+          prompt: prompt.text.trim(), plan: current, option: option);
+      final prepared = store.createSketch(
+          template: template, base: widget.sketch, width: width, depth: depth);
+      activeStarterTemplate = template;
+      activeStarterProfiles = prepared.profiles;
+      return prepared.sketch;
+    }
     if (needsSystem) {
       final prepared = _preparedHardwareSystemSketch(
           family: family,
@@ -535,6 +556,10 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
     final isEngine = family == _StarterFamily.engine;
     final isMotorOrCoil =
         family == _StarterFamily.motor || family == _StarterFamily.coil;
+    if (activeStarterTemplate != null && activeStarterProfiles.isNotEmpty) {
+      return _starterCommandFromTemplate(
+          activeStarterTemplate!, activeStarterProfiles, current, option);
+    }
     final neededRectangles = isGeneratorSet
         ? 6
         : isEngine || family == _StarterFamily.hardwareSystem
@@ -674,6 +699,47 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
                         family == _StarterFamily.hardwareSystem
                     ? 'Complex hardware systems start as subsystem CAD blocks before detailed parts are generated.'
                     : 'Separate starter profiles are used so table, chair, and gear-system requests do not collapse into one cube.',
+        if (current.canUseDefaults)
+          'Sensible default dimensions are used where the prompt did not provide exact measurements.',
+        ...option.assumptions,
+      ],
+      'requiresConfirmation': true
+    };
+  }
+
+  Map<String, Object?> _starterCommandFromTemplate(
+      LearnedStarterTemplate template,
+      List<SketchEntity> profiles,
+      AiDesignPlan current,
+      AiPlanOption option) {
+    final operations = <Map<String, Object?>>[];
+    for (var index = 0;
+        index < profiles.length && index < template.components.length;
+        index += 1) {
+      final component = template.components[index];
+      operations.add({
+        'operationId': const Uuid().v4(),
+        'type': component.revolved ? 'revolve' : 'extrude',
+        'parameters': {
+          'profileId': profiles[index].id,
+          if (component.revolved)
+            'angle': 360
+          else
+            'depth': component.extrudeDepth,
+          'name': component.label,
+        }
+      });
+    }
+    return {
+      'schemaVersion': 1,
+      'commandId': const Uuid().v4(),
+      'intent': 'modify_model',
+      'target': {'type': 'model', 'ids': <String>[]},
+      'operations': operations,
+      'assumptions': [
+        'CadPilot did not have a built-in local starter for this prompt, so it created and saved a reusable starter template named "${template.title}".',
+        'Future similar prompts can reuse this local starter instead of collapsing into one cube.',
+        'The starter separates the design into named editable modules: body/frame, functional core, input, output/motion, and control/mounting.',
         if (current.canUseDefaults)
           'Sensible default dimensions are used where the prompt did not provide exact measurements.',
         ...option.assumptions,

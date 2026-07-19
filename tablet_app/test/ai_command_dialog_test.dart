@@ -1,11 +1,71 @@
 import 'package:cadpilot_tablet/src/ai_command_dialog.dart';
 import 'package:cadpilot_tablet/src/ai_planning.dart';
+import 'package:cadpilot_tablet/src/ai_starter_templates.dart';
 import 'package:cadpilot_tablet/src/model_3d.dart';
 import 'package:cadpilot_tablet/src/sketch_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('unknown AI prompt creates and reuses a learned starter template',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = AiStarterTemplateStore();
+    final plan = AiDesignPlan.fromMap({
+      'schemaVersion': 1,
+      'planId': 'p-custom',
+      'summary': 'Create a magnetic seed sorting machine.',
+      'extracted': {
+        'objectType': 'magnetic seed sorting machine',
+        'style': null,
+        'dimensions': <Object?>[],
+        'constraints': <Object?>[]
+      },
+      'missingInputs': <Object?>[],
+      'options': [
+        {
+          'id': 'starter',
+          'title': 'Machine starter',
+          'description':
+              'Frame, hopper, magnetic separation path, output tray.',
+          'stages': ['Plan modules', 'Create starter geometry'],
+          'assumptions': <Object?>[],
+          'executableNow': false,
+          'preparation': <Object?>[]
+        },
+        {
+          'id': 'compact',
+          'title': 'Compact machine',
+          'description': 'Compact alternative.',
+          'stages': ['Plan modules', 'Create starter geometry'],
+          'assumptions': <Object?>[],
+          'executableNow': false,
+          'preparation': <Object?>[]
+        },
+      ],
+      'canUseDefaults': true,
+    });
+    final first = await store.findOrCreate(
+        prompt: 'create a magnetic seed sorting machine',
+        plan: plan,
+        option: plan.options.first);
+    final second = await store.findOrCreate(
+        prompt: 'build magnetic seed sorting machine',
+        plan: plan,
+        option: plan.options.first);
+    final prepared = store.createSketch(
+        template: second, base: const SketchDocument(), width: 500, depth: 300);
+
+    expect(first.components, hasLength(greaterThanOrEqualTo(5)));
+    expect(second.key, first.key);
+    expect(second.uses, 2);
+    expect(prepared.profiles, hasLength(first.components.length));
+    expect(prepared.sketch.entities, hasLength(first.components.length));
+    expect(first.components.map((item) => item.label).join(' '),
+        contains('magnetic'));
+  });
+
   testWidgets(
       'AI prompt input shares the server character limit and enables generation when valid',
       (tester) async {
