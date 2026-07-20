@@ -29,7 +29,9 @@ describe('AiService', () => {
   const aggregate = jest.fn();
   const groupBy = jest.fn();
   const findMany = jest.fn();
-  const prisma = { aiUsage: { create, aggregate, groupBy }, project: { findMany } } as never;
+  const starterFindMany = jest.fn();
+  const starterUpsert = jest.fn();
+  const prisma = { aiUsage: { create, aggregate, groupBy }, project: { findMany }, aiStarterTemplate: { findMany: starterFindMany, upsert: starterUpsert } } as never;
   const originalKey = process.env.OPENAI_API_KEY;
   const originalModel = process.env.OPENAI_CAD_MODEL;
   const originalTimeout = process.env.OPENAI_TIMEOUT_MS;
@@ -40,6 +42,8 @@ describe('AiService', () => {
     aggregate.mockReset();
     groupBy.mockReset();
     findMany.mockReset();
+    starterFindMany.mockReset();
+    starterUpsert.mockReset();
   });
 
   afterEach(() => {
@@ -48,6 +52,8 @@ describe('AiService', () => {
     aggregate.mockReset();
     groupBy.mockReset();
     findMany.mockReset();
+    starterFindMany.mockReset();
+    starterUpsert.mockReset();
     if (originalKey == null) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = originalKey;
     if (originalModel == null) delete process.env.OPENAI_CAD_MODEL;
@@ -186,6 +192,57 @@ describe('AiService', () => {
     expect(result.month.remainingTokens).toBe(7600);
     expect(result.projects[0]).toEqual(expect.objectContaining({ projectId: 'project-1', projectName: 'Table', totalTokens: 2000 }));
     expect(result.projects[1]).toEqual(expect.objectContaining({ projectId: null, projectName: null, totalTokens: 400 }));
+  });
+
+  it('saves validated shared AI starter templates for reuse', async () => {
+    starterUpsert.mockResolvedValue({
+      id: 'starter-1',
+      key: 'magnetic-seed-sorter',
+      title: 'Magnetic seed sorter',
+      objectType: 'seed sorting machine',
+      components: [],
+      uses: 1,
+    });
+
+    const result = await new AiService(prisma).saveStarterTemplate('u1', {
+      key: 'Magnetic Seed Sorter',
+      title: 'Magnetic seed sorter',
+      objectType: 'seed sorting machine',
+      promptHint: 'create a magnetic seed sorting machine',
+      components: [
+        { label: 'frame', widthRatio: 0.5, depthRatio: 0.4, extrudeDepth: 80 },
+        { label: 'magnet drum', widthRatio: 0.25, depthRatio: 0.25, extrudeDepth: 60, revolved: true },
+      ],
+    });
+
+    expect(result.template.key).toBe('magnetic-seed-sorter');
+    expect(starterUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { key: 'magnetic-seed-sorter' },
+      create: expect.objectContaining({ createdById: 'u1' }),
+      update: expect.objectContaining({ uses: { increment: 1 } }),
+    }));
+  });
+
+  it('rejects invalid shared starter template components', async () => {
+    await expect(new AiService(prisma).saveStarterTemplate('u1', {
+      key: 'bad',
+      title: 'Bad',
+      objectType: 'bad part',
+      components: [{ label: 'only one', widthRatio: 0.5, depthRatio: 0.4, extrudeDepth: 80 }],
+    })).rejects.toThrow('Starter template components are invalid');
+    expect(starterUpsert).not.toHaveBeenCalled();
+  });
+
+  it('lists shared starter templates by query', async () => {
+    starterFindMany.mockResolvedValue([{ key: 'magnetic-seed-sorter', title: 'Magnetic seed sorter' }]);
+
+    const result = await new AiService(prisma).listStarterTemplates('seed sorter');
+
+    expect(result.templates).toHaveLength(1);
+    expect(starterFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      take: 25,
+      orderBy: [{ uses: 'desc' }, { updatedAt: 'desc' }],
+    }));
   });
 
   it('maps provider errors and network failures to a safe unavailable response', async () => {

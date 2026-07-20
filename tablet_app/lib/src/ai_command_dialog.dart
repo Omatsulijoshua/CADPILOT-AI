@@ -24,6 +24,8 @@ typedef AiPlanCommandGenerator = Future<AiGeneratedDraft> Function(
     AiPlanOption option,
     Map<String, String> answers,
     SketchDocument sketch);
+typedef AiStarterTemplatePublisher = Future<void> Function(
+    LearnedStarterTemplate template);
 
 const maxAiPromptCharacters = 2000;
 
@@ -53,7 +55,8 @@ Future<AiCommandDecision?> showAiCommandDialog(BuildContext context,
     required ModelDocument model,
     AiCommandGenerator? generator,
     AiPlanGenerator? planGenerator,
-    AiPlanCommandGenerator? planCommandGenerator}) {
+    AiPlanCommandGenerator? planCommandGenerator,
+    AiStarterTemplatePublisher? starterTemplatePublisher}) {
   return showDialog<AiCommandDecision>(
       context: context,
       barrierDismissible: false,
@@ -62,7 +65,8 @@ Future<AiCommandDecision?> showAiCommandDialog(BuildContext context,
           model: model,
           generator: generator,
           planGenerator: planGenerator,
-          planCommandGenerator: planCommandGenerator));
+          planCommandGenerator: planCommandGenerator,
+          starterTemplatePublisher: starterTemplatePublisher));
 }
 
 class AiCommandDialog extends StatefulWidget {
@@ -72,12 +76,14 @@ class AiCommandDialog extends StatefulWidget {
       this.generator,
       this.planGenerator,
       this.planCommandGenerator,
+      this.starterTemplatePublisher,
       super.key});
   final SketchDocument sketch;
   final ModelDocument model;
   final AiCommandGenerator? generator;
   final AiPlanGenerator? planGenerator;
   final AiPlanCommandGenerator? planCommandGenerator;
+  final AiStarterTemplatePublisher? starterTemplatePublisher;
 
   @override
   State<AiCommandDialog> createState() => _AiCommandDialogState();
@@ -321,6 +327,8 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
       final store = AiStarterTemplateStore();
       final template = await store.findOrCreate(
           prompt: prompt.text.trim(), plan: current, option: option);
+      unawaited(widget.starterTemplatePublisher?.call(template) ??
+          Future<void>.value());
       final prepared = store.createSketch(
           template: template, base: widget.sketch, width: width, depth: depth);
       activeStarterTemplate = template;

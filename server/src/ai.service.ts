@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from './prisma.service';
 import { AiKeyVaultService } from './ai-key-vault.service';
@@ -298,6 +299,29 @@ function validPlan(value: unknown): value is CadPlan {
   return typeof value.canUseDefaults === 'boolean';
 }
 
+function normalizeStarterKey(value: string): string {
+  return value.toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || `starter-${Date.now()}`;
+}
+
+function validStarterComponents(value: unknown): value is Array<Record<string, unknown>> {
+  return Array.isArray(value) &&
+    value.length >= 2 &&
+    value.length <= 16 &&
+    value.every(component =>
+      isRecord(component) &&
+      nonEmptyString(component.label) &&
+      positiveNumber(component.widthRatio) &&
+      positiveNumber(component.depthRatio) &&
+      positiveNumber(component.extrudeDepth) &&
+      component.widthRatio <= 1.5 &&
+      component.depthRatio <= 1.5 &&
+      component.extrudeDepth <= 5000 &&
+      (component.revolved == null || typeof component.revolved === 'boolean'));
+}
+
 function localPlan(prompt: string, context: object): CadPlan {
   const lower = prompt.toLowerCase();
   const contextText = JSON.stringify(context).toLowerCase();
@@ -543,6 +567,56 @@ export class AiService {
         lastUsedAt: item._max.createdAt?.toISOString() ?? null,
       })).sort((a, b) => b.totalTokens - a.totalTokens),
     };
+  }
+
+  async listStarterTemplates(query?: string) {
+    const search = query?.trim();
+    const needle = search ? normalizeStarterKey(search) : '';
+    const where = search
+      ? { OR: [{ key: { contains: needle, mode: 'insensitive' as const } }, { title: { contains: search, mode: 'insensitive' as const } }, { objectType: { contains: search, mode: 'insensitive' as const } }] }
+      : {};
+    const templates = await this.prisma.aiStarterTemplate.findMany({
+      where,
+      orderBy: [{ uses: 'desc' }, { updatedAt: 'desc' }],
+      take: 25,
+    });
+    return { templates };
+  }
+
+  async saveStarterTemplate(userId: string, input: {
+    key: string;
+    title: string;
+    objectType: string;
+    promptHint?: string;
+    components: unknown;
+  }) {
+    if (!nonEmptyString(input.key) || !nonEmptyString(input.title) || !nonEmptyString(input.objectType)) {
+      throw new BadRequestException('Starter template key, title, and object type are required.');
+    }
+    if (!validStarterComponents(input.components)) {
+      throw new BadRequestException('Starter template components are invalid.');
+    }
+    const key = normalizeStarterKey(input.key);
+    const components = input.components as Prisma.InputJsonValue;
+    const saved = await this.prisma.aiStarterTemplate.upsert({
+      where: { key },
+      update: {
+        title: input.title.trim().slice(0, 120),
+        objectType: input.objectType.trim().slice(0, 120),
+        promptHint: input.promptHint?.trim().slice(0, 500),
+        components,
+        uses: { increment: 1 },
+      },
+      create: {
+        key,
+        title: input.title.trim().slice(0, 120),
+        objectType: input.objectType.trim().slice(0, 120),
+        promptHint: input.promptHint?.trim().slice(0, 500),
+        components,
+        createdById: userId,
+      },
+    });
+    return { template: saved };
   }
 
   async generatePlan(userId: string, prompt: string, context: object, projectId?: string) {

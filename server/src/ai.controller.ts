@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
-import { IsObject, IsOptional, IsString, IsUUID, Length } from 'class-validator';
+import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { IsArray, IsObject, IsOptional, IsString, IsUUID, Length } from 'class-validator';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AccessTokenGuard, AuthenticatedRequest } from './auth.guard';
 import { AiService } from './ai.service';
@@ -14,6 +14,13 @@ class GenerateCommandFromPlanDto extends GenerateCadCommandDto {
   @IsObject() plan!: object;
   @IsString() selectedOptionId!: string;
   @IsObject() @IsOptional() answers: object = {};
+}
+class SaveStarterTemplateDto {
+  @IsString() @Length(1, 80) key!: string;
+  @IsString() @Length(1, 120) title!: string;
+  @IsString() @Length(1, 120) objectType!: string;
+  @IsString() @Length(0, 500) @IsOptional() promptHint?: string;
+  @IsArray() components!: unknown[];
 }
 
 @Controller('ai')
@@ -40,5 +47,15 @@ export class AiController {
   @Get('usage')
   usage(@Req() request: AuthenticatedRequest) {
     return this.ai.usageSummary(request.user.id);
+  }
+
+  @Get('starter-templates')
+  starterTemplates(@Query('q') query?: string) {
+    return this.ai.listStarterTemplates(query);
+  }
+
+  @Post('starter-templates')
+  saveStarterTemplate(@Req() request: AuthenticatedRequest, @Body() dto: SaveStarterTemplateDto) {
+    return this.ai.saveStarterTemplate(request.user.id, dto);
   }
 }

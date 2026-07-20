@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'models.dart';
 import 'ai_planning.dart';
+import 'ai_starter_templates.dart';
 
 const maxAiCommandRequestBytes = 64 * 1024;
 
@@ -387,38 +388,120 @@ class CloudApi {
     );
   }
 
-  Future<AiPlanResponse> generateAiPlan({required String prompt, required CadProject project, required String token}) async {
-    final requestBody = jsonEncode({'prompt': prompt, 'projectId': project.id, 'context': {'sketch': project.sketch.toJson(), 'model': project.model.toJson()}});
-    if (utf8.encode(requestBody).length > maxAiCommandRequestBytes) throw const CloudApiException('This project is too large for AI planning.', 413);
-    final response = await client.post(Uri.parse('$baseUrl/ai/plans'), headers: {'content-type': 'application/json', 'authorization': 'Bearer $token'}, body: requestBody);
-    if (response.statusCode < 200 || response.statusCode >= 300) throw CloudApiException(response.statusCode == 503 ? 'AI planning is temporarily unavailable.' : 'AI planning failed.', response.statusCode);
+  Future<AiPlanResponse> generateAiPlan(
+      {required String prompt,
+      required CadProject project,
+      required String token}) async {
+    final requestBody = jsonEncode({
+      'prompt': prompt,
+      'projectId': project.id,
+      'context': {
+        'sketch': project.sketch.toJson(),
+        'model': project.model.toJson()
+      }
+    });
+    if (utf8.encode(requestBody).length > maxAiCommandRequestBytes) {
+      throw const CloudApiException(
+          'This project is too large for AI planning.', 413);
+    }
+    final response = await client.post(Uri.parse('$baseUrl/ai/plans'),
+        headers: {
+          'content-type': 'application/json',
+          'authorization': 'Bearer $token'
+        },
+        body: requestBody);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CloudApiException(
+          response.statusCode == 503
+              ? 'AI planning is temporarily unavailable.'
+              : 'AI planning failed.',
+          response.statusCode);
+    }
     try {
       final body = Map<String, Object?>.from(jsonDecode(response.body) as Map);
       final usage = Map<String, Object?>.from(body['usage']! as Map);
-      return AiPlanResponse(AiDesignPlan.fromMap(Map<String, Object?>.from(body['plan']! as Map)), usage['totalTokens']! as int);
-    } catch (_) { throw const CloudApiException('The AI plan response was invalid.'); }
+      return AiPlanResponse(
+          AiDesignPlan.fromMap(Map<String, Object?>.from(body['plan']! as Map)),
+          usage['totalTokens']! as int);
+    } catch (_) {
+      throw const CloudApiException('The AI plan response was invalid.');
+    }
   }
 
-  Future<AiCommandResponse> generateAiCommandFromPlan({required String prompt, required AiDesignPlan plan, required AiPlanOption option, required Map<String, String> answers, required CadProject project, required String token}) async {
-    final response = await client.post(Uri.parse('$baseUrl/ai/plans/command'), headers: {'content-type': 'application/json', 'authorization': 'Bearer $token'}, body: jsonEncode({'prompt': prompt, 'projectId': project.id, 'plan': plan.raw, 'selectedOptionId': option.id, 'answers': answers, 'context': {'sketch': project.sketch.toJson(), 'model': project.model.toJson()}}));
+  Future<AiCommandResponse> generateAiCommandFromPlan(
+      {required String prompt,
+      required AiDesignPlan plan,
+      required AiPlanOption option,
+      required Map<String, String> answers,
+      required CadProject project,
+      required String token}) async {
+    final response = await client.post(Uri.parse('$baseUrl/ai/plans/command'),
+        headers: {
+          'content-type': 'application/json',
+          'authorization': 'Bearer $token'
+        },
+        body: jsonEncode({
+          'prompt': prompt,
+          'projectId': project.id,
+          'plan': plan.raw,
+          'selectedOptionId': option.id,
+          'answers': answers,
+          'context': {
+            'sketch': project.sketch.toJson(),
+            'model': project.model.toJson()
+          }
+        }));
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      String message = response.statusCode == 400 ? 'This plan needs the listed preparation before CAD generation.' : 'AI command generation failed.';
-      try { final body = jsonDecode(response.body) as Map; if (body['message'] is String) message = body['message'] as String; } catch (_) {}
+      String message = response.statusCode == 400
+          ? 'This plan needs the listed preparation before CAD generation.'
+          : 'AI command generation failed.';
+      try {
+        final body = jsonDecode(response.body) as Map;
+        if (body['message'] is String) message = body['message'] as String;
+      } catch (_) {}
       throw CloudApiException(message, response.statusCode);
     }
-    final body = Map<String, Object?>.from(jsonDecode(response.body) as Map); final usage = Map<String, Object?>.from(body['usage']! as Map);
-    return AiCommandResponse(command: Map<String, Object?>.from(body['command']! as Map), totalTokens: usage['totalTokens']! as int);
+    final body = Map<String, Object?>.from(jsonDecode(response.body) as Map);
+    final usage = Map<String, Object?>.from(body['usage']! as Map);
+    return AiCommandResponse(
+        command: Map<String, Object?>.from(body['command']! as Map),
+        totalTokens: usage['totalTokens']! as int);
   }
 
   Future<AiUsageSummary> getAiUsage(String token) async {
-    final response = await client.get(Uri.parse('$baseUrl/ai/usage'), headers: {'authorization': 'Bearer $token'});
+    final response = await client.get(Uri.parse('$baseUrl/ai/usage'),
+        headers: {'authorization': 'Bearer $token'});
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw CloudApiException('Could not load AI usage.', response.statusCode);
     }
     try {
-      return AiUsageSummary.fromMap(Map<String, Object?>.from(jsonDecode(response.body) as Map));
+      return AiUsageSummary.fromMap(
+          Map<String, Object?>.from(jsonDecode(response.body) as Map));
     } catch (_) {
       throw const CloudApiException('AI usage response is invalid.');
+    }
+  }
+
+  Future<void> saveAiStarterTemplate(
+      LearnedStarterTemplate template, String token) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/ai/starter-templates'),
+      headers: {
+        'content-type': 'application/json',
+        'authorization': 'Bearer $token'
+      },
+      body: jsonEncode({
+        'key': template.key,
+        'title': template.title,
+        'objectType': template.title,
+        'promptHint': template.key,
+        'components':
+            template.components.map((component) => component.toJson()).toList(),
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CloudApiException(
+          'Could not save the AI starter template.', response.statusCode);
     }
   }
 
@@ -539,8 +622,8 @@ class CloudApi {
       headers: {'authorization': 'Bearer $token'},
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw CloudApiException('Could not load project collaborators.',
-          response.statusCode);
+      throw CloudApiException(
+          'Could not load project collaborators.', response.statusCode);
     }
     try {
       final values = jsonDecode(response.body) as List<Object?>;
@@ -557,7 +640,10 @@ class CloudApi {
       String projectId, String email, String role, String token) async {
     final response = await client.post(
       Uri.parse('$baseUrl/projects/$projectId/members'),
-      headers: {'content-type': 'application/json', 'authorization': 'Bearer $token'},
+      headers: {
+        'content-type': 'application/json',
+        'authorization': 'Bearer $token'
+      },
       body: jsonEncode({'email': email.trim().toLowerCase(), 'role': role}),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {

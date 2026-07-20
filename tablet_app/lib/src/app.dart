@@ -537,16 +537,14 @@ class _DashboardState extends ConsumerState<Dashboard> {
                       const SizedBox(width: 8),
                       if (widget.session.kind == SessionKind.guest)
                         OutlinedButton.icon(
-                          onPressed:
-                              ref.read(sessionProvider.notifier).signOut,
+                          onPressed: ref.read(sessionProvider.notifier).signOut,
                           icon: const Icon(Icons.person_outline),
                           label: const Text('Sign in or create account'),
                         )
                       else
                         IconButton(
                           tooltip: 'Sign out',
-                          onPressed:
-                              ref.read(sessionProvider.notifier).signOut,
+                          onPressed: ref.read(sessionProvider.notifier).signOut,
                           icon: const Icon(Icons.logout),
                         ),
                     ],
@@ -641,7 +639,8 @@ class _AiUsagePanelState extends ConsumerState<AiUsagePanel> {
     if (widget.session.kind != SessionKind.signedIn) {
       return const Center(child: Text('Sign in to view AI token usage.'));
     }
-    final localProjects = ref.watch(projectsProvider).valueOrNull ?? const <CadProject>[];
+    final localProjects =
+        ref.watch(projectsProvider).valueOrNull ?? const <CadProject>[];
     return FutureBuilder<AiUsageSummary>(
       future: usage,
       builder: (context, snapshot) {
@@ -683,14 +682,17 @@ class _AiUsagePanelState extends ConsumerState<AiUsagePanel> {
                           Text(_tokens(month.totalTokens),
                               style: const TextStyle(
                                   fontSize: 34, fontWeight: FontWeight.bold)),
-                          Text('${month.requestCount} AI request${month.requestCount == 1 ? '' : 's'}'),
+                          Text(
+                              '${month.requestCount} AI request${month.requestCount == 1 ? '' : 's'}'),
                           const SizedBox(height: 12),
                           if (ratio != null) ...[
                             LinearProgressIndicator(value: ratio),
                             const SizedBox(height: 8),
-                            Text('${_tokens(month.remainingTokens ?? 0)} remaining out of ${_tokens(limit!)}'),
+                            Text(
+                                '${_tokens(month.remainingTokens ?? 0)} remaining out of ${_tokens(limit!)}'),
                           ] else
-                            const Text('Monthly allowance is not set on the server.'),
+                            const Text(
+                                'Monthly allowance is not set on the server.'),
                         ],
                       ),
                     ),
@@ -713,7 +715,8 @@ class _AiUsagePanelState extends ConsumerState<AiUsagePanel> {
                           const SizedBox(height: 8),
                           Text('Output: ${_tokens(month.outputTokens)}'),
                           const SizedBox(height: 8),
-                          Text('Window: ${month.start.toLocal().month}/${month.start.toLocal().year}'),
+                          Text(
+                              'Window: ${month.start.toLocal().month}/${month.start.toLocal().year}'),
                         ],
                       ),
                     ),
@@ -766,7 +769,9 @@ class _AiUsagePanelState extends ConsumerState<AiUsagePanel> {
 }
 
 String _tokens(int value) {
-  if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(2)}M tokens';
+  if (value >= 1000000) {
+    return '${(value / 1000000).toStringAsFixed(2)}M tokens';
+  }
   if (value >= 1000) return '${(value / 1000).toStringAsFixed(1)}K tokens';
   return '$value tokens';
 }
@@ -1640,8 +1645,10 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                     shrinkWrap: true,
                     itemCount: changes.length,
                     itemBuilder: (_, index) {
-                  final change = changes[index];
-                      final actor = change.actorName ?? change.actorEmail ?? 'Unknown user';
+                      final change = changes[index];
+                      final actor = change.actorName ??
+                          change.actorEmail ??
+                          'Unknown user';
                       return ListTile(
                         leading: const Icon(Icons.history),
                         title: Text(
@@ -1677,7 +1684,9 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
     var message = '';
     var loading = true;
     try {
-      members = await ref.read(cloudApiProvider).listProjectMembers(project.id, token);
+      members = await ref
+          .read(cloudApiProvider)
+          .listProjectMembers(project.id, token);
       loading = false;
     } catch (error) {
       loading = false;
@@ -1696,11 +1705,14 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
               message = '';
             });
             try {
-              members = await ref.read(cloudApiProvider).addProjectMember(project.id, value, role, token);
+              members = await ref
+                  .read(cloudApiProvider)
+                  .addProjectMember(project.id, value, role, token);
               email.clear();
               message = 'Collaborator updated.';
             } catch (error) {
-              message = error is CloudApiException ? error.message : error.toString();
+              message =
+                  error is CloudApiException ? error.message : error.toString();
             } finally {
               setDialogState(() => loading = false);
             }
@@ -1715,7 +1727,9 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (members.isEmpty)
-                    Text(loading ? 'Loading collaborators...' : 'No collaborators yet.')
+                    Text(loading
+                        ? 'Loading collaborators...'
+                        : 'No collaborators yet.')
                   else
                     ...members.map((member) => ListTile(
                           contentPadding: EdgeInsets.zero,
@@ -1736,12 +1750,14 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
                     decoration: const InputDecoration(labelText: 'Role'),
                     items: const [
                       DropdownMenuItem(value: 'EDITOR', child: Text('Editor')),
-                      DropdownMenuItem(value: 'COMMENTER', child: Text('Commenter')),
+                      DropdownMenuItem(
+                          value: 'COMMENTER', child: Text('Commenter')),
                       DropdownMenuItem(value: 'VIEWER', child: Text('Viewer')),
                     ],
                     onChanged: loading || role == 'OWNER'
                         ? null
-                        : (value) => setDialogState(() => role = value ?? 'EDITOR'),
+                        : (value) =>
+                            setDialogState(() => role = value ?? 'EDITOR'),
                   ),
                   if (message.isNotEmpty) ...[
                     const SizedBox(height: 10),
@@ -1751,11 +1767,15 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+              TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close')),
               FilledButton.icon(
                 onPressed: loading ? null : addMember,
                 icon: loading
-                    ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.person_add_alt),
                 label: const Text('Add collaborator'),
               ),
@@ -1775,24 +1795,40 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
         model: project.model,
         planGenerator: token == null
             ? null
-            : (prompt) => ref.read(cloudApiProvider).generateAiPlan(
-                prompt: prompt, project: project, token: token),
+            : (prompt) => ref
+                .read(cloudApiProvider)
+                .generateAiPlan(prompt: prompt, project: project, token: token),
         planCommandGenerator: token == null
             ? null
             : (prompt, plan, option, answers, sketch) async {
                 final projectForAi = project.copyWith(sketch: sketch);
                 if (!option.executableNow) {
-                  final response = await ref.read(cloudApiProvider).generateAiCommand(
-                      prompt: '$prompt\nSelected plan: ${option.title}\nAnswers: $answers\nGenerate the first executable CAD stage from the starter sketch profiles.',
-                      project: projectForAi,
-                      token: token);
-                  return AiGeneratedDraft(response.command, response.totalTokens);
+                  final response = await ref
+                      .read(cloudApiProvider)
+                      .generateAiCommand(
+                          prompt:
+                              '$prompt\nSelected plan: ${option.title}\nAnswers: $answers\nGenerate the first executable CAD stage from the starter sketch profiles.',
+                          project: projectForAi,
+                          token: token);
+                  return AiGeneratedDraft(
+                      response.command, response.totalTokens);
                 }
-                final response = await ref.read(cloudApiProvider).generateAiCommandFromPlan(
-                    prompt: prompt, plan: plan, option: option, answers: answers,
-                    project: project, token: token);
+                final response = await ref
+                    .read(cloudApiProvider)
+                    .generateAiCommandFromPlan(
+                        prompt: prompt,
+                        plan: plan,
+                        option: option,
+                        answers: answers,
+                        project: project,
+                        token: token);
                 return AiGeneratedDraft(response.command, response.totalTokens);
               },
+        starterTemplatePublisher: token == null
+            ? null
+            : (template) => ref
+                .read(cloudApiProvider)
+                .saveAiStarterTemplate(template, token),
         generator: token == null
             ? null
             : (prompt) async {
