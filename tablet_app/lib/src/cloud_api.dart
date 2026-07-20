@@ -505,6 +505,30 @@ class CloudApi {
     }
   }
 
+  Future<List<LearnedStarterTemplate>> listAiStarterTemplates(
+      String query, String token) async {
+    final uri = Uri.parse('$baseUrl/ai/starter-templates')
+        .replace(queryParameters: {'q': query});
+    final response =
+        await client.get(uri, headers: {'authorization': 'Bearer $token'});
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CloudApiException(
+          'Could not load shared AI starter templates.', response.statusCode);
+    }
+    try {
+      final body = Map<String, Object?>.from(jsonDecode(response.body) as Map);
+      final values = body['templates'] as List<Object?>? ?? const [];
+      return values
+          .map((value) => LearnedStarterTemplate.fromJson(
+              Map<String, Object?>.from(value! as Map)))
+          .where((template) => template.components.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      throw const CloudApiException(
+          'Shared AI starter template response is invalid.');
+    }
+  }
+
   Future<void> archiveProject(String projectId, String token) async {
     final response = await client.delete(
       Uri.parse('$baseUrl/projects/$projectId'),

@@ -22,4 +22,6 @@ export class AdminController {
   @Post('ai/providers') addProviderKeys(@Req() request: AuthenticatedRequest, @Body() dto: AddProviderKeysDto) { return this.admin.addProviderKeys(request.user.id, dto.provider, dto.keys, dto.label, dto.priority); }
   @Patch('ai/providers/:id') updateProviderKey(@Param('id') id: string, @Body() dto: UpdateProviderKeyDto) { return this.admin.updateProviderKey(id, dto); }
   @Delete('ai/providers/:id') removeProviderKey(@Param('id') id: string) { return this.admin.removeProviderKey(id); }
+  @Get('ai/starter-templates') starterTemplates() { return this.admin.starterTemplates(); }
+  @Delete('ai/starter-templates/:id') removeStarterTemplate(@Param('id') id: string) { return this.admin.removeStarterTemplate(id); }
 }

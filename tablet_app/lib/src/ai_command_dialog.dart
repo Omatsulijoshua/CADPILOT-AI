@@ -26,6 +26,8 @@ typedef AiPlanCommandGenerator = Future<AiGeneratedDraft> Function(
     SketchDocument sketch);
 typedef AiStarterTemplatePublisher = Future<void> Function(
     LearnedStarterTemplate template);
+typedef AiStarterTemplateFinder = Future<List<LearnedStarterTemplate>> Function(
+    String prompt, String objectType);
 
 const maxAiPromptCharacters = 2000;
 
@@ -56,7 +58,8 @@ Future<AiCommandDecision?> showAiCommandDialog(BuildContext context,
     AiCommandGenerator? generator,
     AiPlanGenerator? planGenerator,
     AiPlanCommandGenerator? planCommandGenerator,
-    AiStarterTemplatePublisher? starterTemplatePublisher}) {
+    AiStarterTemplatePublisher? starterTemplatePublisher,
+    AiStarterTemplateFinder? starterTemplateFinder}) {
   return showDialog<AiCommandDecision>(
       context: context,
       barrierDismissible: false,
@@ -66,7 +69,8 @@ Future<AiCommandDecision?> showAiCommandDialog(BuildContext context,
           generator: generator,
           planGenerator: planGenerator,
           planCommandGenerator: planCommandGenerator,
-          starterTemplatePublisher: starterTemplatePublisher));
+          starterTemplatePublisher: starterTemplatePublisher,
+          starterTemplateFinder: starterTemplateFinder));
 }
 
 class AiCommandDialog extends StatefulWidget {
@@ -77,6 +81,7 @@ class AiCommandDialog extends StatefulWidget {
       this.planGenerator,
       this.planCommandGenerator,
       this.starterTemplatePublisher,
+      this.starterTemplateFinder,
       super.key});
   final SketchDocument sketch;
   final ModelDocument model;
@@ -84,6 +89,7 @@ class AiCommandDialog extends StatefulWidget {
   final AiPlanGenerator? planGenerator;
   final AiPlanCommandGenerator? planCommandGenerator;
   final AiStarterTemplatePublisher? starterTemplatePublisher;
+  final AiStarterTemplateFinder? starterTemplateFinder;
 
   @override
   State<AiCommandDialog> createState() => _AiCommandDialogState();
@@ -325,8 +331,19 @@ class _AiCommandDialogState extends State<AiCommandDialog> {
         !needsRound;
     if (shouldLearnStarter) {
       final store = AiStarterTemplateStore();
+      var sharedTemplates = const <LearnedStarterTemplate>[];
+      try {
+        sharedTemplates = await (widget.starterTemplateFinder
+                ?.call(prompt.text.trim(), current.objectType) ??
+            Future<List<LearnedStarterTemplate>>.value(const []));
+      } catch (_) {
+        sharedTemplates = const [];
+      }
       final template = await store.findOrCreate(
-          prompt: prompt.text.trim(), plan: current, option: option);
+          prompt: prompt.text.trim(),
+          plan: current,
+          option: option,
+          sharedTemplates: sharedTemplates);
       unawaited(widget.starterTemplatePublisher?.call(template) ??
           Future<void>.value());
       final prepared = store.createSketch(

@@ -99,10 +99,27 @@ class AiStarterTemplateStore {
     required String prompt,
     required AiDesignPlan plan,
     required AiPlanOption option,
+    List<LearnedStarterTemplate> sharedTemplates = const [],
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final templates = _readTemplates(prefs);
     final key = normalizeKey(prompt, plan.objectType);
+    final sharedExact = sharedTemplates
+        .where((template) => template.key == key && template.components.isNotEmpty)
+        .firstOrNull;
+    if (sharedExact != null) {
+      templates[key] = sharedExact.copyWith(uses: sharedExact.uses + 1);
+      await _writeTemplates(prefs, templates);
+      return templates[key]!;
+    }
+    final sharedSimilar = _findSimilar({
+      for (final template in sharedTemplates) template.key: template
+    }, key);
+    if (sharedSimilar != null && sharedSimilar.components.isNotEmpty) {
+      templates[key] = sharedSimilar.copyWith(uses: sharedSimilar.uses + 1);
+      await _writeTemplates(prefs, templates);
+      return templates[key]!;
+    }
     final exact = templates[key];
     if (exact != null && exact.components.isNotEmpty) {
       templates[key] = exact.copyWith(uses: exact.uses + 1);
@@ -121,6 +138,13 @@ class AiStarterTemplateStore {
     templates[key] = created;
     await _writeTemplates(prefs, templates);
     return created;
+  }
+
+  Future<void> remember(LearnedStarterTemplate template) async {
+    final prefs = await SharedPreferences.getInstance();
+    final templates = _readTemplates(prefs);
+    templates[template.key] = template;
+    await _writeTemplates(prefs, templates);
   }
 
   static String normalizeKey(String prompt, String objectType) {
@@ -242,7 +266,16 @@ class AiStarterTemplateStore {
     final title = _titleFrom(plan.objectType, option.title, prompt);
     final nouns = _keywords('$prompt ${plan.objectType} ${option.title}');
     final base = nouns.isEmpty ? title : nouns.take(3).join(' ');
-    final components = <StarterTemplateComponent>[
+    final components = _domainComponents('$prompt ${plan.objectType} ${option.title}');
+    if (components.isNotEmpty) {
+      return LearnedStarterTemplate(
+        key: normalizeKey(prompt, plan.objectType),
+        title: title,
+        components: components,
+        createdAt: DateTime.now(),
+      );
+    }
+    final genericComponents = <StarterTemplateComponent>[
       StarterTemplateComponent(
           label: '$base main body / frame',
           widthRatio: 0.5,
@@ -273,9 +306,75 @@ class AiStarterTemplateStore {
     return LearnedStarterTemplate(
       key: normalizeKey(prompt, plan.objectType),
       title: title,
-      components: components,
+      components: genericComponents,
       createdAt: DateTime.now(),
     );
+  }
+
+  static List<StarterTemplateComponent> _domainComponents(String text) {
+    final lower = text.toLowerCase();
+    if (lower.contains('gearbox') ||
+        lower.contains('transmission') ||
+        lower.contains('gear train')) {
+      return const [
+        StarterTemplateComponent(label: 'gearbox housing starter', widthRatio: 0.52, depthRatio: 0.42, extrudeDepth: 110),
+        StarterTemplateComponent(label: 'input shaft starter', widthRatio: 0.18, depthRatio: 0.14, extrudeDepth: 70, revolved: true),
+        StarterTemplateComponent(label: 'output shaft starter', widthRatio: 0.22, depthRatio: 0.16, extrudeDepth: 80, revolved: true),
+        StarterTemplateComponent(label: 'primary gear starter', widthRatio: 0.28, depthRatio: 0.28, extrudeDepth: 32, revolved: true),
+        StarterTemplateComponent(label: 'secondary gear starter', widthRatio: 0.36, depthRatio: 0.36, extrudeDepth: 36, revolved: true),
+        StarterTemplateComponent(label: 'mounting flange starter', widthRatio: 0.34, depthRatio: 0.18, extrudeDepth: 30),
+      ];
+    }
+    if (lower.contains('pump') || lower.contains('compressor')) {
+      return const [
+        StarterTemplateComponent(label: 'pump/compressor base starter', widthRatio: 0.58, depthRatio: 0.28, extrudeDepth: 45),
+        StarterTemplateComponent(label: 'casing / volute starter', widthRatio: 0.34, depthRatio: 0.34, extrudeDepth: 120, revolved: true),
+        StarterTemplateComponent(label: 'impeller / rotor starter', widthRatio: 0.24, depthRatio: 0.24, extrudeDepth: 45, revolved: true),
+        StarterTemplateComponent(label: 'inlet port starter', widthRatio: 0.18, depthRatio: 0.16, extrudeDepth: 55, revolved: true),
+        StarterTemplateComponent(label: 'outlet port starter', widthRatio: 0.18, depthRatio: 0.16, extrudeDepth: 55, revolved: true),
+        StarterTemplateComponent(label: 'motor mount starter', widthRatio: 0.28, depthRatio: 0.22, extrudeDepth: 50),
+      ];
+    }
+    if (lower.contains('drone') || lower.contains('quadcopter')) {
+      return const [
+        StarterTemplateComponent(label: 'central electronics body starter', widthRatio: 0.32, depthRatio: 0.28, extrudeDepth: 55),
+        StarterTemplateComponent(label: 'front arm starter', widthRatio: 0.46, depthRatio: 0.08, extrudeDepth: 22),
+        StarterTemplateComponent(label: 'rear arm starter', widthRatio: 0.46, depthRatio: 0.08, extrudeDepth: 22),
+        StarterTemplateComponent(label: 'motor pod starter', widthRatio: 0.14, depthRatio: 0.14, extrudeDepth: 35, revolved: true),
+        StarterTemplateComponent(label: 'propeller disc starter', widthRatio: 0.28, depthRatio: 0.28, extrudeDepth: 8, revolved: true),
+      ];
+    }
+    if (lower.contains('robot') || lower.contains('arm')) {
+      return const [
+        StarterTemplateComponent(label: 'robot base pedestal starter', widthRatio: 0.3, depthRatio: 0.3, extrudeDepth: 70, revolved: true),
+        StarterTemplateComponent(label: 'shoulder joint starter', widthRatio: 0.22, depthRatio: 0.22, extrudeDepth: 55, revolved: true),
+        StarterTemplateComponent(label: 'upper arm link starter', widthRatio: 0.42, depthRatio: 0.12, extrudeDepth: 38),
+        StarterTemplateComponent(label: 'elbow joint starter', widthRatio: 0.2, depthRatio: 0.2, extrudeDepth: 50, revolved: true),
+        StarterTemplateComponent(label: 'forearm link starter', widthRatio: 0.36, depthRatio: 0.1, extrudeDepth: 32),
+        StarterTemplateComponent(label: 'end effector mount starter', widthRatio: 0.18, depthRatio: 0.16, extrudeDepth: 28),
+      ];
+    }
+    if (lower.contains('conveyor') || lower.contains('belt')) {
+      return const [
+        StarterTemplateComponent(label: 'conveyor frame starter', widthRatio: 0.72, depthRatio: 0.24, extrudeDepth: 42),
+        StarterTemplateComponent(label: 'drive roller starter', widthRatio: 0.18, depthRatio: 0.18, extrudeDepth: 95, revolved: true),
+        StarterTemplateComponent(label: 'idler roller starter', widthRatio: 0.16, depthRatio: 0.16, extrudeDepth: 85, revolved: true),
+        StarterTemplateComponent(label: 'belt path starter', widthRatio: 0.68, depthRatio: 0.08, extrudeDepth: 12),
+        StarterTemplateComponent(label: 'motor gearbox mount starter', widthRatio: 0.22, depthRatio: 0.2, extrudeDepth: 45),
+      ];
+    }
+    if (lower.contains('vehicle') ||
+        lower.contains('cart') ||
+        lower.contains('rover')) {
+      return const [
+        StarterTemplateComponent(label: 'vehicle chassis starter', widthRatio: 0.62, depthRatio: 0.36, extrudeDepth: 55),
+        StarterTemplateComponent(label: 'front axle starter', widthRatio: 0.5, depthRatio: 0.08, extrudeDepth: 35, revolved: true),
+        StarterTemplateComponent(label: 'rear axle starter', widthRatio: 0.5, depthRatio: 0.08, extrudeDepth: 35, revolved: true),
+        StarterTemplateComponent(label: 'wheel starter', widthRatio: 0.2, depthRatio: 0.2, extrudeDepth: 42, revolved: true),
+        StarterTemplateComponent(label: 'battery / payload bay starter', widthRatio: 0.32, depthRatio: 0.24, extrudeDepth: 45),
+      ];
+    }
+    return const [];
   }
 
   static String _titleFrom(

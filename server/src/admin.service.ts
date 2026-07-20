@@ -33,6 +33,23 @@ export class AdminService {
 
   async removeProviderKey(id: string) { await this.prisma.aiProviderKey.delete({ where: { id } }); return this.providerKeys(); }
 
+  starterTemplates() {
+    return this.prisma.aiStarterTemplate.findMany({
+      select: {
+        id: true, key: true, title: true, objectType: true, promptHint: true,
+        components: true, uses: true, createdAt: true, updatedAt: true,
+        createdBy: { select: { email: true, displayName: true } },
+      },
+      orderBy: [{ uses: 'desc' }, { updatedAt: 'desc' }],
+      take: 100,
+    });
+  }
+
+  async removeStarterTemplate(id: string) {
+    await this.prisma.aiStarterTemplate.delete({ where: { id } });
+    return this.starterTemplates();
+  }
+
   async overview() {
     const [users, activeProjects, archivedProjects, mutations, aiUsage] = await Promise.all([
       this.prisma.user.count(),

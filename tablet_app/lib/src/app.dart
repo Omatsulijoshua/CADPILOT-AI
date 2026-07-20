@@ -1829,6 +1829,11 @@ class _ProjectWorkspaceState extends ConsumerState<ProjectWorkspace> {
             : (template) => ref
                 .read(cloudApiProvider)
                 .saveAiStarterTemplate(template, token),
+        starterTemplateFinder: token == null
+            ? null
+            : (prompt, objectType) => ref
+                .read(cloudApiProvider)
+                .listAiStarterTemplates('$prompt $objectType', token),
         generator: token == null
             ? null
             : (prompt) async {
