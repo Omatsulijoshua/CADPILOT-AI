@@ -28,6 +28,27 @@ void main() {
     expect(capabilities.depthCaptureReady, isFalse);
   });
 
+  test('spatial capabilities preserve native LiDAR diagnostics', () {
+    final capabilities = SpatialCapabilities.fromMap(const {
+      'platform': 'ios',
+      'cameraSupported': true,
+      'arSupported': true,
+      'arRuntimeInstalled': true,
+      'lidarSupported': true,
+      'sceneDepthSupported': true,
+      'meshReconstructionSupported': true,
+      'planeDetectionSupported': true,
+      'motionTrackingSupported': true,
+      'captureMethod': 'lidar',
+      'nativeDepthCaptureAvailable': true,
+      'diagnostic':
+          'ios_arkit ar=true lidar=true cameraPermission=granted capture=lidar',
+    });
+
+    expect(capabilities.depthCaptureReady, isTrue);
+    expect(capabilities.diagnostic, contains('cameraPermission=granted'));
+  });
+
   testWidgets('spatial workspace remains scrollable with many placements',
       (tester) async {
     const channel = MethodChannel('cadpilot/spatial-panel-test');

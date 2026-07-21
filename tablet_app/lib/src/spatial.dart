@@ -20,6 +20,7 @@ class SpatialCapabilities {
     this.nativeArRendererAvailable = false,
     this.nativeDepthCaptureAvailable = false,
     this.arRuntimeInstalled = false,
+    this.diagnostic = '',
   });
 
   final String platform;
@@ -34,6 +35,7 @@ class SpatialCapabilities {
   final bool nativeArRendererAvailable;
   final bool nativeDepthCaptureAvailable;
   final bool arRuntimeInstalled;
+  final String diagnostic;
 
   factory SpatialCapabilities.fromMap(Map<Object?, Object?> value) =>
       SpatialCapabilities(
@@ -54,6 +56,7 @@ class SpatialCapabilities {
         nativeDepthCaptureAvailable:
             value['nativeDepthCaptureAvailable'] as bool? ?? false,
         arRuntimeInstalled: value['arRuntimeInstalled'] as bool? ?? false,
+        diagnostic: value['diagnostic'] as String? ?? '',
       );
 
   static const unsupported = SpatialCapabilities(
@@ -66,6 +69,7 @@ class SpatialCapabilities {
     planeDetectionSupported: false,
     motionTrackingSupported: false,
     captureMethod: 'manual',
+    diagnostic: 'web_or_missing_native_spatial_plugin',
   );
 
   bool get depthCaptureReady =>
@@ -646,6 +650,13 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
           ]),
           const SizedBox(height: 8),
           Text(message),
+          if (capabilities.diagnostic.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Diagnostic: ${capabilities.diagnostic}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
           const SizedBox(height: 10),
           Wrap(spacing: 8, runSpacing: 8, children: [
             if (!isWebRuntime && capabilities.cameraSupported)

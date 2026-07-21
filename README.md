@@ -52,7 +52,7 @@ The product connects four workflows:
 3. **Assist** — natural language converted into structured, reviewable operations.
 4. **Place** — digital models connected to physical space on supported devices.
 
-Open the browser build at **[cadpilot.vercel.app](https://cadpilot.vercel.app)**. The web app supports general workflows; LiDAR, ARCore, ARKit, and native sensors require compatible mobile hardware.
+Open the browser build at **[cadpilot.vercel.app](https://cadpilot.vercel.app)**. The web app supports general workflows; LiDAR, ARCore, ARKit, and native sensors require compatible mobile hardware and a native app build. For iPad LiDAR testing, use the [native iPad LiDAR test guide](docs/ipad-lidar-native-test-guide.md).
 
 ## Principles
 
@@ -385,7 +385,7 @@ flutter devices
 flutter run -d <device-id>
 ```
 
-Use compatible physical hardware for ARCore. On macOS/iOS, run `open ios/Runner.xcworkspace`, configure signing and permissions, then use `flutter run`. LiDAR requires supported Apple hardware.
+Use compatible physical hardware for ARCore. On macOS/iOS, run `open ios/Runner.xcworkspace`, configure signing and permissions, then use `flutter run`. LiDAR requires supported Apple hardware and the native iPad app, not Safari. See [docs/ipad-lidar-native-test-guide.md](docs/ipad-lidar-native-test-guide.md).
 
 ## Testing
 

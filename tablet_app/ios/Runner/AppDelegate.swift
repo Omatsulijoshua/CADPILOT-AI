@@ -173,7 +173,9 @@ import ARKit
       sceneDepthSupported = ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth)
     }
     let lidarSupported = meshSupported && sceneDepthSupported
-    let nativeDepthCaptureAvailable = lidarSupported && cameraPermission() == "granted"
+    let permission = cameraPermission()
+    let nativeDepthCaptureAvailable = lidarSupported && permission == "granted"
+    let captureDiagnostic = nativeDepthCaptureAvailable ? "lidar" : "not_ready"
     return [
       "platform": "ios", "cameraSupported": true, "arSupported": arSupported,
       "lidarSupported": lidarSupported, "sceneDepthSupported": sceneDepthSupported,
@@ -181,7 +183,8 @@ import ARKit
       "meshReconstructionSupported": meshSupported, "planeDetectionSupported": arSupported,
       "motionTrackingSupported": arSupported,
       "captureMethod": nativeDepthCaptureAvailable ? "lidar" : (arSupported ? "camera_ar" : "manual"),
-      "nativeArRendererAvailable": false, "nativeDepthCaptureAvailable": nativeDepthCaptureAvailable
+      "nativeArRendererAvailable": false, "nativeDepthCaptureAvailable": nativeDepthCaptureAvailable,
+      "diagnostic": "ios_arkit ar=\(arSupported) lidar=\(lidarSupported) sceneDepth=\(sceneDepthSupported) mesh=\(meshSupported) cameraPermission=\(permission) capture=\(captureDiagnostic) maxPoints=\(maxDepthPointsPerFrame)"
     ]
     #else
     return [
@@ -190,7 +193,8 @@ import ARKit
       "arRuntimeInstalled": false,
       "meshReconstructionSupported": false, "planeDetectionSupported": false,
       "motionTrackingSupported": false, "captureMethod": "manual",
-      "nativeArRendererAvailable": false, "nativeDepthCaptureAvailable": false
+      "nativeArRendererAvailable": false, "nativeDepthCaptureAvailable": false,
+      "diagnostic": "ios_without_arkit_compile_support"
     ]
     #endif
   }
