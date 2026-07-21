@@ -8,6 +8,26 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('LiDAR capability label points users to camera/native readiness', () {
+    const capabilities = SpatialCapabilities(
+      platform: 'ios',
+      cameraSupported: true,
+      arSupported: true,
+      arRuntimeInstalled: true,
+      lidarSupported: true,
+      sceneDepthSupported: true,
+      meshReconstructionSupported: true,
+      planeDetectionSupported: true,
+      motionTrackingSupported: true,
+      captureMethod: 'camera_ar',
+      nativeDepthCaptureAvailable: false,
+    );
+
+    expect(capabilities.methodLabel,
+        'Depth hardware detected; grant camera access to scan');
+    expect(capabilities.depthCaptureReady, isFalse);
+  });
+
   testWidgets('spatial workspace remains scrollable with many placements',
       (tester) async {
     const channel = MethodChannel('cadpilot/spatial-panel-test');

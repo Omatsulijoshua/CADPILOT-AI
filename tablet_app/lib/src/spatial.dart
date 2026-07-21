@@ -76,7 +76,7 @@ class SpatialCapabilities {
   String get methodLabel {
     if ((lidarSupported || sceneDepthSupported) &&
         !nativeDepthCaptureAvailable) {
-      return 'Depth hardware detected; native capture unavailable';
+      return 'Depth hardware detected; grant camera access to scan';
     }
     return switch (captureMethod) {
       'lidar' => 'LiDAR depth scanning',
@@ -310,11 +310,12 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
                     subtitle: Text(value.depthCaptureReady
                         ? 'Native depth capture is ready for advisory scan processing.'
                         : (value.lidarSupported || value.sceneDepthSupported)
-                            ? 'Depth hardware is detected, but CadPilot native capture is not available in this build.'
+                            ? 'Depth hardware is detected. Camera permission and a native iPad build are required for LiDAR capture.'
                             : value.arSupported
                                 ? 'LiDAR is not reported; camera tracking is labeled separately.'
                                 : 'AR is unavailable. CAD and manual measurements remain available.'),
                   ),
+                  _lidarReadinessCard(context, value),
                   const Divider(),
                   Wrap(spacing: 12, runSpacing: 8, children: [
                     _status('Camera', value.cameraSupported),
@@ -602,6 +603,65 @@ class _SpatialCapabilityPanelState extends State<SpatialCapabilityPanel> {
               onPressed: () => Navigator.pop(context),
               child: const Text('Close')),
         ],
+      ),
+    );
+    if (!mounted) return;
+    setState(() => capabilities = widget.service.detect());
+  }
+
+  Widget _lidarReadinessCard(
+      BuildContext context, SpatialCapabilities capabilities) {
+    const isWebRuntime = kIsWeb;
+    final title = isWebRuntime
+        ? 'LiDAR needs the native iPad app'
+        : capabilities.depthCaptureReady
+            ? 'iPad LiDAR scan capture is ready'
+            : capabilities.lidarSupported || capabilities.sceneDepthSupported
+                ? 'LiDAR hardware detected'
+                : capabilities.platform == 'ios'
+                    ? 'This iPad build does not report LiDAR depth'
+                    : 'LiDAR is only available on supported native iPad builds';
+    final message = isWebRuntime
+        ? 'The Vercel web app can run CAD and AI, but Safari does not expose ARKit LiDAR depth frames to Flutter web. Install/run the native iPad build to capture LiDAR scans.'
+        : capabilities.depthCaptureReady
+            ? 'Use "Capture advisory depth scan" below. CadPilot will capture bounded ARKit depth frames and save advisory scan dimensions.'
+            : capabilities.lidarSupported || capabilities.sceneDepthSupported
+                ? 'Camera permission or native capture readiness is missing. Tap the button below, grant camera access, then CadPilot will recheck LiDAR.'
+                : capabilities.arSupported
+                    ? 'AR tracking is available, but ARKit scene depth / LiDAR is not being reported. Use camera AR/manual placement or test on a LiDAR iPad native build.'
+                    : 'No native ARKit/ARCore depth runtime is available here. Manual placement remains available.';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(capabilities.depthCaptureReady
+                ? Icons.sensors
+                : Icons.info_outline),
+            const SizedBox(width: 10),
+            Expanded(
+                child:
+                    Text(title, style: Theme.of(context).textTheme.titleSmall)),
+          ]),
+          const SizedBox(height: 8),
+          Text(message),
+          const SizedBox(height: 10),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            if (!isWebRuntime && capabilities.cameraSupported)
+              OutlinedButton.icon(
+                onPressed: () => _requestCameraAccess(context),
+                icon: const Icon(Icons.camera_alt_outlined),
+                label: const Text('Enable camera + recheck LiDAR'),
+              ),
+            OutlinedButton.icon(
+              onPressed: () =>
+                  setState(() => this.capabilities = widget.service.detect()),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Recheck capabilities'),
+            ),
+          ]),
+        ]),
       ),
     );
   }
