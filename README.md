@@ -17,6 +17,7 @@ CadPilot is an actively developed local-first CAD platform built with Flutter, D
 ## Contents
 
 - [Overview](#overview)
+- [Emerald Coding Studios ecosystem vision](#emerald-coding-studios-ecosystem-vision)
 - [Principles](#principles)
 - [Feature status](#feature-status)
 - [Architecture](#architecture)
@@ -53,6 +54,113 @@ The product connects four workflows:
 4. **Place** — digital models connected to physical space on supported devices.
 
 Open the browser build at **[cadpilot.vercel.app](https://cadpilot.vercel.app)**. The web app supports general workflows; LiDAR, ARCore, ARKit, and native sensors require compatible mobile hardware and a native app build. For iPad LiDAR testing, use the [native iPad LiDAR test guide](docs/ipad-lidar-native-test-guide.md).
+
+## Emerald Coding Studios ecosystem vision
+
+**Emerald Coding Studios** is the developer and publisher. **CADPILOT** is its
+CAD, architecture, engineering, scanning, and manufacturing product family.
+The long-term goal is not to force every professional workflow into one
+oversized application. It is to build focused applications that share an
+account, cloud project library, AI assistant, assets, permissions, version
+history, and a reliable "open in another Emerald app" workflow.
+
+> **Vision, not current product status:** the applications and capabilities in
+> this section describe the intended ecosystem. Only capabilities explicitly
+> marked as implemented in [Feature status](#feature-status) should be treated
+> as available today.
+
+### Planned product families
+
+| Application | Major responsibility | Work that belongs there |
+|---|---|---|
+| **CADPILOT Design** | CAD and engineering design | Sketching, 2D drafting, parametric solids, surfaces, mechanical parts, assemblies, products, furniture, technical drawings, electronics enclosures, and basic simulation |
+| **CADPILOT Build** | Architecture, BIM, and construction | Architectural concepts, floor plans, interiors, building systems, structures, landscapes, civil/site work, construction documents, and quantity schedules |
+| **CADPILOT Scan** | Reality capture and reverse engineering | LiDAR, photogrammetry, room/object scanning, point clouds, measurements, mesh reconstruction, scan-to-CAD, surveys, inspection, and AR measurement |
+| **CADPILOT Forge** | Manufacturing and fabrication | 3D-print preparation, slicing, CNC, milling, turning, laser cutting, sheet metal, nesting, machine simulation, material estimates, and production output |
+| **Emerald Draw** | 2D art and visual design | Cartoons, comics, manga, painting, character concepts, storyboards, backgrounds, logos, branding, posters, packaging, social graphics, and UI/UX mockups |
+| **Emerald Studio** | 3D art, characters, animation, and VFX | Sculpting, character and creature creation, retopology, UVs, materials, clothing, hair, rigging, 2D/3D animation, motion capture, rendering, and visual effects |
+| **Emerald Video** | Video and short-form content | Funny shorts, social video, long-form editing, films, documentaries, music videos, advertising, captions, transitions, color grading, motion graphics, and compositing |
+| **Emerald Play** | Games and interactive experiences | 2D/3D games, levels, gameplay, playable characters, physics, game AI, multiplayer, cinematics, AR, VR, interactive training, and real-time experiences |
+| **Emerald Sound** | Music, voice, and sound production | Music, voice acting, podcasts, sound effects, game/film audio, cleanup, mixing, mastering, Foley, and spatial audio |
+
+This creates **nine major creation applications** instead of a separate app for
+every small tool. A shared **Emerald Hub / Cloud** connects them; it may begin
+as common infrastructure inside each app and later become a user-facing app.
+
+### What belongs under CADPILOT
+
+All computer-aided design and engineering workflows remain under the CADPILOT
+name. That includes CAD, BIM, CAE/simulation, CAM/manufacturing, technical
+documentation, reality capture, reverse engineering, and engineering AR.
+Characters, cartoons, entertainment animation, social video, games, and music
+belong to the broader Emerald creative applications rather than being mixed
+into the CAD interface.
+
+### Cross-application workflow
+
+Projects should move through the ecosystem without manual download/re-upload
+steps whenever possible:
+
+```mermaid
+flowchart LR
+    HUB["Emerald Hub / Cloud"]
+    SCAN["CADPILOT Scan"] --> DESIGN["CADPILOT Design"]
+    DESIGN --> FORGE["CADPILOT Forge"]
+    DESIGN --> STUDIO["Emerald Studio"]
+    DRAW["Emerald Draw"] --> STUDIO
+    STUDIO --> PLAY["Emerald Play"]
+    STUDIO --> VIDEO["Emerald Video"]
+    SOUND["Emerald Sound"] --> PLAY
+    SOUND --> VIDEO
+    BUILD["CADPILOT Build"] --> STUDIO
+    HUB --- SCAN
+    HUB --- DESIGN
+    HUB --- BUILD
+    HUB --- FORGE
+    HUB --- DRAW
+    HUB --- STUDIO
+    HUB --- VIDEO
+    HUB --- PLAY
+    HUB --- SOUND
+```
+
+Examples:
+
+- **Manufactured product:** Scan captures an existing object, Design produces
+  the engineering model, Forge prepares fabrication, Studio renders it, and
+  Video produces the presentation.
+- **Animated cartoon:** Draw produces concepts and storyboards, Studio handles
+  characters and animation, Sound produces voices/music, and Video creates the
+  final edit.
+- **Video game:** Draw creates concept art, Studio creates and animates assets,
+  Sound produces audio, and Play supplies gameplay and publishing.
+
+### Interoperability principle
+
+Emerald applications should share a versioned native project package containing
+only the domain documents and assets a project needs: parametric CAD history,
+drawings, assemblies, meshes, scans, materials, animation, audio, thumbnails,
+and metadata. They must also support deliberate export to third-party tools.
+Candidate interchange formats include STEP/IGES for mechanical CAD, DXF/SVG/PDF
+for drawings, STL/3MF for printing, IFC for BIM, OBJ/glTF/FBX/USDZ for visual and
+interactive content, and common image, video, audio, and point-cloud formats.
+Conversions must clearly warn when editable information—such as parametric
+history—is flattened or lost.
+
+### Delivery order
+
+The ecosystem should grow from a dependable shared foundation rather than nine
+simultaneous products:
+
+1. Complete **CADPILOT Design** as the core product.
+2. Establish the shared Emerald identity, project package, cloud library, and
+   cross-app handoff contract.
+3. Expand reality capture through **CADPILOT Scan**.
+4. Add production workflows through **CADPILOT Forge**.
+5. Develop **Emerald Draw**, followed by **Emerald Studio**.
+6. Add **Emerald Video** and **Emerald Sound**.
+7. Build **Emerald Play** after the asset and animation pipeline is reliable.
+8. Develop **CADPILOT Build** when the platform is ready for full BIM complexity.
 
 ## Principles
 
